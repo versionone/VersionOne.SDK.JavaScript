@@ -1,76 +1,86 @@
+http = require('http')
+et = require('elementtree')
+url = require('url')
 
-http = require 'http'
-elementtree = require 'elementtree'
-
-
-
-
-class V1Server
-  initialize: (address='localhost', instance='VersionOne.Web', username='', password='') ->
-    @address = address
-    @instance = instance
-    @username = username
-    @password = password
-    
-  uses_netloc: ['ftp', 'http', 'gopher', 'nntp', 'telnet', 'imap', 'wais',
-               'file', 'mms', 'https', 'shttp', 'snews', 'prospero', 'rtsp',
-               'rtspu', 'rsync', '', 'svn', 'svn+ssh', 'sftp','nfs','git',
-               'git+ssh']
-                   
-  urlunsplit: (scheme, netloc, url, query, fragment) ->
-    # mostly copied from http://hg.python.org/cpython/file/2.7/Lib/urlparse.py
-    if netloc or (scheme and (scheme in @uses_netloc) and (url.slice(null,2) != '//'))
-      if url and (url.slice(null,1) != '/')
-        url = '/' + url
-    if scheme
-      url = scheme + ':' + url
-    if query
-      url = url + '?' + query
-    if fragment
-      url = url + '#' + fragment
-    return url
-  
-  urlunparse: (scheme, netloc, url, params, query, fragment) ->
-    # mostly copied from http://hg.python.org/cpython/file/2.7/Lib/urlparse.py
-    if params
-      url = url + ';' + params
-    return @urlunsplit(scheme, netloc, url, query, fragment)
-
-    
-  build_url: (path, query='', fragment='', params='', port=80, protocol='http') ->
-    path = @instance + path
-    if (typeof query) != 'string'
-      query = encodeURIComponent(name) + '=' + encodeURIComponent(value) for name,value of query
-    url = @urlunparse(protocol, self.address, path, params, query, fragment)
-    return url
-    
-  fetch: (path, query='', postdata) ->
-    throw "NotImplemented"
-    url = @build_url(path, query=query)
-    try
-      if postdata
-        response = http_post url, @username, @password, postdata
-      else
-        response = http_get url, @username, @password
-      body = response.read()
-      return {error: null, body: body}
-    catch error
-      body = response.read()
-      return {error: error, body: body} 
-      
-  build_url: () ->
-    throw "NotImplemented"
-  get_xml: () ->
-    throw "NotImplemented"
-  get_meta_xml: () ->
-    throw "NotImplemented"
-  get_asset_xml: () ->
-    throw "NotImplemented"
-  get_single_attribute_value: () ->
-    throw "NotImplemented"
-  
-  
+querystring = require('querystring')
 
 
-  
+module.exports = 
+    V1Server: class V1Server
+        constructor: (@hostname='localhost', @instance='VersionOne.Web', @username='admin', @password='admin') ->
+            @port = 80
+                
+        build_url: (path, query=undefined) ->
+            url = '/' + @instance + path
+            if query?
+                url = url + '?' + querystring.stringify(query)
+            return url
+        
+        fetch: (options, callback) ->
+            url = @build_url(options.path, options.query)
+            req_options = {
+                hostname: @hostname,
+                port: @port,
+                method: (if options.postdata? then 'POST' else 'GET'),
+                path: url,
+                auth: @username + ':' + @password,
+                }
+            request_done = (response) ->
+                #console.log(response)
+                alldata = []
+                response.on 'data', (data)->
+                    alldata.push(data)
+                response.on 'end', () ->
+                    body = alldata.join('')
+                    callback(undefined, response, body)
+            request_error = (error) ->
+                #console.log error
+                callback(error)
+            request = http.request(req_options, request_done)
+            request.on('error', request_error)
+            if options.postdata?
+                request.write(options.postdata)
+            request.end()
 
+        get_xml: (options, success,) ->
+            callback = (response, body) ->
+                xmltree = et.parse(body)
+                success(xmltree)        
+            @fetch(options, callback)
+              
+        get_meta_xml: (options, callback) ->
+            path = '/meta.v1/' + options.asset_type_name
+            @get_xml({path:path}, callback)
+            
+        get_asset_xml: (options, callback) ->
+            path = '/rest-1.v1/Data/' + options.asset_type_name + '/' + options.id
+            @get_xml({path: path}, callback)
+           
+        get_query_xml: (options, callback) ->
+            path = '/rest-1.v1/Data/' + options.asset_type_name
+            query = {}
+            if options.where?
+                query['Where'] = name + '=' + value for name,value of options.where
+            if options.select?
+                query['sel'] = options.select.join(',')
+            @get_xml({path: path, query: query}, callback)
+            
+        execute_operation: (options, callback) ->
+            path = '/rest-1.v1/Data/' + options.asset_type_name + '/' + options.id
+            query = {op: options.opname}
+            @get_xml({path: path, query: query, postdata: ''}, callback)
+            
+        create_asset: (options, callback) ->
+            query = undefined
+            if options.context_oid?
+                query = {ctx: options.context_oid}
+            path = '/rest-1.v1/Data/' + options.asset_type_name
+            body = et.tostring(options.xmldata)
+            @get_xml({path:path, query:query, postdata:body}, callback)
+            
+        update_asset: (options, callback) ->
+            newdata = et.tostring(options.xmldata)
+            path = '/rest-1.v1/Data/' + options.asset_type_name + '/' + options.id
+            @get_xml({path:path, postdata:newdata})
+            
+            
