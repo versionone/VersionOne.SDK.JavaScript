@@ -1,7 +1,6 @@
 http = require('http')
 et = require('elementtree')
 url = require('url')
-
 querystring = require('querystring')
 
 
@@ -26,27 +25,25 @@ module.exports =
                 auth: @username + ':' + @password,
                 }
             request_done = (response) ->
-                #console.log(response)
                 alldata = []
                 response.on 'data', (data)->
                     alldata.push(data)
                 response.on 'end', () ->
                     body = alldata.join('')
                     callback(undefined, response, body)
-            request_error = (error) ->
-                #console.log error
-                callback(error)
             request = http.request(req_options, request_done)
-            request.on('error', request_error)
+            request.on('error', callback)
             if options.postdata?
                 request.write(options.postdata)
             request.end()
 
-        get_xml: (options, success,) ->
-            callback = (response, body) ->
-                xmltree = et.parse(body)
-                success(xmltree)        
-            @fetch(options, callback)
+        get_xml: (options, callback) ->
+            mycallback = (error, response, body) ->
+                if error?
+                    callback(error)
+                xmltree = et.parse(body).getroot()
+                callback(undefined, xmltree)        
+            @fetch(options, mycallback)
               
         get_meta_xml: (options, callback) ->
             path = '/meta.v1/' + options.asset_type_name
