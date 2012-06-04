@@ -70,14 +70,16 @@ module.exports =
                 else
                     classes = []
                     xml.iter 'AssetType', (typexml) ->
-                        classes.push(v1meta.build_asset_class_from_xml(typexml))
+                        cls = v1meta.build_asset_class_from_xml(typexml)
+                        consoel.log cls::_v1_asset_type_name
+                        classes.push(cls)
                     console.log classes.length + " Classes read"
                     callback(undefined, classes)
                     
             
         build_asset_class_from_xml: (xml) ->
-            console.log "Asset class"
-            console.log et.tostring(xml)
+            #console.log "Asset class"
+            #console.log et.tostring(xml)
             asset_type_name = xml.get('name')
             cls = class extends AssetClassBase
                     _v1_asset_type_name: asset_type_name
