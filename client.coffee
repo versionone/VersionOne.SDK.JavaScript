@@ -30,6 +30,7 @@ module.exports =
                     alldata.push(data)
                 response.on 'end', () ->
                     body = alldata.join('')
+                    #console.log body
                     callback(undefined, response, body)
             request = http.request(req_options, request_done)
             request.on('error', callback)
@@ -57,7 +58,7 @@ module.exports =
             path = '/rest-1.v1/Data/' + options.asset_type_name
             query = {}
             if options.where?
-                query['Where'] = name + '=' + value for name,value of options.where
+                query['Where'] = (name + '="' + value + '"') for name,value of options.where
             if options.select?
                 query['sel'] = options.select.join(',')
             @get_xml({path: path, query: query}, callback)

@@ -5,7 +5,7 @@ et = require('elementtree')
 
 
 class AssetClassBase
-    constructor: () ->
+    constructor: (@_v1_id) ->
         @_v1_new_data = {}
         @_v1_current_data = {}
         @_v1_needs_refresh = true
@@ -85,7 +85,6 @@ module.exports =
                     _v1_v1meta: @
                     _v1_ops: []
                     _v1_attrs: []
-                    constructor: (@id) ->
             xml.iter 'Operation', (operation) ->
                 opname = operation.get('name')
                 cls::_v1_ops.push(opname)
@@ -106,13 +105,46 @@ module.exports =
                     enumerable: true
             return cls
             
+        build_asset: (cls, assetxml) ->
+            oidtoken = assetxml.get('id')
+            asset = new cls(oidtoken)
+            assetxml.iter 'Attribute', (attrxml) ->
+                attrname = attrxml.get('name').replace(".", "_")
+                asset._v1_current_data[attrname] = attrxml.text
+            assetxml.iter 'Relation', (relxml) ->
+                relname = relxml.get('name')
+                asset._v1_current_data[relname] ?= []
+                for rel in relxml.findall("Asset")
+                    asset._v1_current_data[relname].push rel.get('idref')
+            return asset
+        
+        query: (options, callback) ->
+            v1meta = this
+            @get_asset_class options.asset_type_name, (err, cls) ->
+                if err?
+                    callback(err)
+                else
+                    console.log "Querying 1"
+                    v1meta.server.get_query_xml options, (err, xmlresults) ->
+                        if err?
+                            callback(err)
+                        else
+                           for assetxml in xmlresults.findall('.Asset')
+                               console.log et.tostring(assetxml)
+                               asset = v1meta.build_asset(cls, assetxml)
+                               callback(undefined, asset)
+            
+            
         get_asset_class: (asset_type_name, callback) =>
-            v1meta_instance = this
+            v1meta = this
             @server.get_meta_xml {asset_type_name: asset_type_name}, (error, xml) ->
                 if error?
                     callback(error)
-                cls = @build_asset_class_from_xml(asset_type_name, xml)
+                cls = v1meta.build_asset_class_from_xml(xml)
                 callback(undefined, cls)
+
+                    
+                
                 
 
         
