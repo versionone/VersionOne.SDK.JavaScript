@@ -3,10 +3,6 @@
 client = require('./client')
 et = require('elementtree')
 
-future = require('fibers/future')
-wait = future.wait
-
-
 
 class AssetClassBase
     constructor: () ->
@@ -21,6 +17,8 @@ class AssetClassBase
         return @
     create_in_context: (asste_type, data) ->
         pass
+    getName: () ->
+        return @_v1_asset_type_name
     _v1_get: (attr) ->
         if attr of @v1_new_data
             return @v1_new_data[attr]
@@ -85,13 +83,11 @@ module.exports =
                     _v1_ops: []
                     _v1_attrs: []
                     constructor: (@id) ->
-            
             xml.iter 'Operation', (operation) ->
                 opname = operation.get('name')
                 cls::_v1_ops.push(opname)
                 cls.prototype[opname] = () ->
                     @_v1_execute_operation(opname)
-            
             xml.iter 'AttributeDefinition', (attribute) ->
                 attr = attribute.get('name')
                 cls::_v1_attrs.push(attr)
@@ -115,28 +111,5 @@ module.exports =
                 cls = @build_asset_class_from_xml(asset_type_name, xml)
                 callback(undefined, cls)
                 
-        #query: (asset_types, where_terms, select_list, callback) ->
-        #    fiber = Fiber () ->
-        #        classes = {}
-        #        for asset_type in asset_types.split(" ")
-        #            classes[asset_type] = @sync_get_asset_type(asset_type)
-        #        query = @prepare_query(where_terms, select_list)
-        #        @run_query(query, callback)
-        #
-        #    return fiber.run()
-               
-        #sync_run_query: (asset_type, where_terms, select_list) ->
-        #    f = future.wrap(@run_query)
-        #    return f(where_terms, select_list).wait()
-                
-        #sync_get_asset_class: (asset_type_name) ->
-        #    self = this
-        #    getit = future.wrap((name, cb) -> self.get_asset_class(name,cb))
-        #    return getit(asset_type_name).wait()
-            
-        #asset_from_oid: (oidtoken) ->
-        #    sync_get_asset_class = future.wrap(@get_asset_class)
-        #    [asset_type, id] = oidtoken.split(':', 2)
-        #    AssetClass = sync_get_asset_class(asset_type).wait()
-        #    return new AssetClass(id)
+
         
