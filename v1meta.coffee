@@ -71,7 +71,6 @@ module.exports =
                     classes = []
                     xml.iter 'AssetType', (typexml) ->
                         cls = v1meta.build_asset_class_from_xml(typexml)
-                        consoel.log cls::_v1_asset_type_name
                         classes.push(cls)
                     console.log classes.length + " Classes read"
                     callback(undefined, classes)
