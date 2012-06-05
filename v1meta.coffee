@@ -58,89 +58,81 @@ module.exports =
             @server = new client.V1Server(address, instance, username, password)
             @global_cache = {}
             @dirtylist = []
-            
-        #execute:  (user_func) ->
-        #    return Fiber(()->user_func(this)).run()
                     
         for_all_types: (callback) ->
-            v1meta = this
-            @server.get_meta_xml {asset_type_name: ''}, (err, xml) ->
-                if err?
-                    callback(err)
-                else
-                    classes = []
-                    xml.iter 'AssetType', (typexml) ->
-                        cls = v1meta.build_asset_class_from_xml(typexml)
-                        classes.push(cls)
-                    console.log classes.length + " Classes read"
-                    callback(undefined, classes)
-                    
-            
+            @server.get_meta_xml {asset_type_name: ''}, (err, meta_xml) =>
+                console.log('meta_xml')
+                if not err?
+                    meta_xml.iter 'AssetType', (asset_xml) =>
+                        callback(@build_asset_class_from_xml(asset_xml))
+        
         build_asset_class_from_xml: (xml) ->
-            #console.log "Asset class"
-            #console.log et.tostring(xml)
             asset_type_name = xml.get('name')
+            
             cls = class extends AssetClassBase
                     _v1_asset_type_name: asset_type_name
                     _v1_v1meta: @
                     _v1_ops: []
                     _v1_attrs: []
-            xml.iter 'Operation', (operation) ->
+                    
+            xml.iter 'Operation', (operation) =>
                 opname = operation.get('name')
                 cls::_v1_ops.push(opname)
-                cls.prototype[opname] = () ->
+                cls.prototype[opname] = () =>
                     @_v1_execute_operation(opname)
-            xml.iter 'AttributeDefinition', (attribute) ->
+                    
+            xml.iter 'AttributeDefinition', (attribute) =>
                 attr = attribute.get('name')
                 cls::_v1_attrs.push(attr)
+                
                 if attribute.get('attributetype') == 'Relation'
-                    setter = (value) -> @_v1_set(attr, value)
-                    getter = () -> @_v1_get(attr)
+                    setter = (value) =>
+                        @_v1_set(attr, value)
+                    getter = () =>
+                        @_v1_get(attr)
+                    
                 if attribute.get('ismultivalue') != 'True'
-                    setter = (value) -> @_v1_set(attr, value)
-                    getter = () -> @_v1_get(attr)
+                    setter = (value) =>
+                        @_v1_set(attr, value)
+                    getter = () =>
+                        @_v1_get(attr)
+                    
                 Object.defineProperty cls.prototype, attr, 
                     get: getter
                     set: setter
                     enumerable: true
+                    
             return cls
             
-        build_asset: (cls, assetxml) ->
+        build_asset: (AssetClass, assetxml) ->
             oidtoken = assetxml.get('id')
-            asset = new cls(oidtoken)
-            assetxml.iter 'Attribute', (attrxml) ->
+            asset = new AssetClass(oidtoken)
+            
+            for attrxml in assetxml.findall('Attribute')
                 attrname = attrxml.get('name').replace(".", "_")
                 asset._v1_current_data[attrname] = attrxml.text
-            assetxml.iter 'Relation', (relxml) ->
-                relname = relxml.get('name')
+                
+            for relxml in assetxml.findall('Relation')
+                relname = relxml.get('name').replace(".", "_")
                 asset._v1_current_data[relname] ?= []
                 for rel in relxml.findall("Asset")
                     asset._v1_current_data[relname].push rel.get('idref')
+            
             return asset
         
         query: (options, callback) ->
-            v1meta = this
-            @get_asset_class options.asset_type_name, (err, cls) ->
-                if err?
-                    callback(err)
-                else
-                    console.log "Querying 1"
-                    v1meta.server.get_query_xml options, (err, xmlresults) ->
-                        if err?
-                            callback(err)
-                        else
-                           for assetxml in xmlresults.findall('.Asset')
-                               console.log et.tostring(assetxml)
-                               asset = v1meta.build_asset(cls, assetxml)
-                               callback(undefined, asset)
-            
+            @get_asset_class options.asset_type_name, (err, cls) =>
+                callback(err) if err?
+                @server.get_query_xml options, (err, xmlresults) =>
+                    callback(err) if err?
+                    for assetxml in xmlresults.findall('.Asset')
+                        asset = @build_asset(cls, assetxml)
+                        callback(undefined, asset)
             
         get_asset_class: (asset_type_name, callback) =>
-            v1meta = this
-            @server.get_meta_xml {asset_type_name: asset_type_name}, (error, xml) ->
-                if error?
-                    callback(error)
-                cls = v1meta.build_asset_class_from_xml(xml)
+            @server.get_meta_xml {asset_type_name: asset_type_name}, (error, xml) =>
+                callback(error) if error?
+                cls = @build_asset_class_from_xml(xml)
                 callback(undefined, cls)
 
                     
