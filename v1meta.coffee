@@ -5,10 +5,9 @@ et = require('elementtree')
 
 
 class AssetClassBase
-    constructor: (@_v1_id) ->
+    constructor: (@_v1_id, @_v1_transaction) ->
         @_v1_new_data = {}
         @_v1_current_data = {}
-        @_v1_needs_refresh = true
     with_data: (data) ->
         @_v1_current_data = data
         return @
@@ -17,51 +16,46 @@ class AssetClassBase
         return @
     create_in_context: (asste_type, data) ->
         pass
-    getName: () ->
-        return @_v1_asset_type_name
     _v1_get: (attr) ->
-        if attr of @v1_new_data
-            return @v1_new_data[attr]
-        if @_v1_needs_refresh
-            @_v1_refresh()
-        if attr not of @v1_current_data
-            @_v1_get_single_attr(attr)
-        return @_v1_current_data[attr]
+        return @v1_new_data[attr] ? @_v1_current_data[attr]
     _v1_set: (attr, value) ->
+        if not @_v1_transaction?
+            throw "Properties may only be set on assets having a _v1_transaction"
         @_v1_new_data[attr] = value
-        @_v1_meta.add_to_dirty(@)
-    _v1_refresh: () ->
-        @_v1_
-    _v1_commit: () ->
-        @_v1_meta.update_asset(@_v1_asset_type, @id, @_v1_new_data)
-        @_v1_current_data = {}
-        @_v1_new_data = {}
-        @_v1_needs_refresh = true
-
+        @_v1_transaction.add_to_dirty(@)
+        
 
 class V1Transaction
-    constructor: () ->
-        @pass = 'pass'
+    constructor: (@query_results=[], @v1meta) ->
+        @dirty_assets = []
+        
+    add_to_dirty: (asset) ->
+        if asset not in @dirty_asset
+            @dirty_assets.push asset
+        
     create: (asset_type, data) ->
-        throw 'NotImplemented'
+        @v1meta.get_asset_class asset_type, (err, AssetClass) =>
+            new_asset = new AssetClass(undefined, @)
+            new_asset.pending(data)
+            @add_to_dirty(new_asset)
+        
     iter: (callback) ->
-        throw 'NotImplemented'
         for asset in @query_results
             callback(asset)
+            
     commit: (callback) ->
         for dirty_asset in @dirty_assets
-            dirty_asset._v1_commit(callback)
+            @v1meta.update_asset dirty_asset, (err, update_result) =>
+                callback(err, dirty_asset, update_result)    
         
 module.exports = 
     V1Meta: class V1Meta
         constructor: (address='localhost', instance='VersionOne.Web', username='admin', password='admin') ->
             @server = new client.V1Server(address, instance, username, password)
             @global_cache = {}
-            @dirtylist = []
                     
         for_all_types: (callback) ->
             @server.get_meta_xml {asset_type_name: ''}, (err, meta_xml) =>
-                console.log('meta_xml')
                 if not err?
                     meta_xml.iter 'AssetType', (asset_xml) =>
                         callback(@build_asset_class_from_xml(asset_xml))
@@ -104,9 +98,9 @@ module.exports =
                     
             return cls
             
-        build_asset: (AssetClass, assetxml) ->
+        build_asset: (AssetClass, assetxml, trans) ->
             oidtoken = assetxml.get('id')
-            asset = new AssetClass(oidtoken)
+            asset = new AssetClass(oidtoken, trans)
             
             for attrxml in assetxml.findall('Attribute')
                 attrname = attrxml.get('name').replace(".", "_")
@@ -121,19 +115,33 @@ module.exports =
             return asset
         
         query: (options, callback) ->
-            @get_asset_class options.asset_type_name, (err, cls) =>
-                callback(err) if err?
+            @get_asset_class options.asset_type_name, (err, Cls) =>
+                return callback(err) if err?
                 @server.get_query_xml options, (err, xmlresults) =>
                     callback(err) if err?
                     for assetxml in xmlresults.findall('.Asset')
-                        asset = @build_asset(cls, assetxml)
+                        asset = @build_asset(Cls, assetxml)
                         callback(undefined, asset)
             
-        get_asset_class: (asset_type_name, callback) =>
-            @server.get_meta_xml {asset_type_name: asset_type_name}, (error, xml) =>
-                callback(error) if error?
-                cls = @build_asset_class_from_xml(xml)
-                callback(undefined, cls)
+        trans_query: (options, callback) ->
+            @get_asset_class options.asset_type_name, (err, Cls) =>
+                return callback(err) if err?
+                @server.get_query_xml options, (err, xmlresults) =>
+                    return callback(err) if err?
+                    trans = new V1Transaction([], @)
+                    assets = (@build_asset(Cls, asset, trans) for asset in xmlresults.findall('.Asset'))
+                    trans.query_results = assets
+                    callback(undefined, trans)
+                        
+        get_asset_class: (asset_type_name, callback) =>     
+            if asset_type_name of @global_cache
+                callback(undefined, @global_cache[asset_type_name])
+            else
+                @server.get_meta_xml {asset_type_name: asset_type_name}, (error, xml) =>
+                    return callback(error) if error?
+                    cls = @build_asset_class_from_xml(xml)
+                    @global_cache[asset_type_name] = cls
+                    callback(undefined, cls)
 
                     
                 
