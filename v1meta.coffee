@@ -2,7 +2,15 @@
 
 client = require('./client')
 et = require('elementtree')
-
+util = require('util')
+url = require('url')
+    
+asset_dict_filter = (dict) ->
+    output = {}
+    for k,v of dict
+        if v? and (v?.length > 0) and (v!="")
+            output[k] = v
+    return output
 
 class AssetClassBase
     constructor: (@_v1_id, @_v1_transaction) ->
@@ -16,6 +24,16 @@ class AssetClassBase
         return @
     create_in_context: (asste_type, data) ->
         pass
+        
+    url: () ->
+        v1meta = @_v1_v1meta
+        url.format
+            protocol: v1meta.server.protocol
+            hostname: v1meta.server.hostname
+            port: v1meta.server.port
+            pathname: v1meta.server.instance + '/assetdetail.v1'
+            query: {oid: @_v1_id}
+            
     _v1_get: (attr) ->
         return @v1_new_data[attr] ? @_v1_current_data[attr]
     _v1_set: (attr, value) ->
@@ -23,7 +41,15 @@ class AssetClassBase
             throw "Properties may only be set on assets having a _v1_transaction"
         @_v1_new_data[attr] = value
         @_v1_transaction.add_to_dirty(@)
-        
+    toString: () ->
+        current = asset_dict_filter(@_v1_current_data)
+        newdata = asset_dict_filter(@_v1_new_data)
+        output = "#{@_v1_asset_type_name}('#{@_v1_id}')"
+        if Object.keys(current).length > 0
+            output = output + ".with_data(\n#{util.inspect current}})"
+        if Object.keys(newdata).length > 0
+            output = output + "\n.pending(\n#{util.inspect newdata}})"
+        return output
 
 class V1Transaction
     constructor: (@query_results=[], @v1meta) ->
@@ -46,12 +72,12 @@ class V1Transaction
     commit: (callback) ->
         for dirty_asset in @dirty_assets
             @v1meta.update_asset dirty_asset, (err, update_result) =>
-                callback(err, dirty_asset, update_result)    
+                callback(err, dirty_asset, update_result)
+
         
 module.exports = 
     V1Meta: class V1Meta
-        constructor: (address='localhost', instance='VersionOne.Web', username='admin', password='admin') ->
-            @server = new client.V1Server(address, instance, username, password)
+        constructor: (@server) ->
             @global_cache = {}
                     
         for_all_types: (callback) ->
@@ -63,9 +89,10 @@ module.exports =
         build_asset_class_from_xml: (xml) ->
             asset_type_name = xml.get('name')
             
+            v1meta = @
             cls = class extends AssetClassBase
                     _v1_asset_type_name: asset_type_name
-                    _v1_v1meta: @
+                    _v1_v1meta: v1meta
                     _v1_ops: []
                     _v1_attrs: []
                     

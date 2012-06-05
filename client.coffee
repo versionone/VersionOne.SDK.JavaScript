@@ -1,14 +1,14 @@
 http = require('http')
+https = require('https')
 et = require('elementtree')
 url = require('url')
 querystring = require('querystring')
 
-
 module.exports = 
     V1Server: class V1Server
-        constructor: (@hostname='localhost', @instance='VersionOne.Web', @username='admin', @password='admin') ->
-            @port = 80
-                
+        constructor: (@hostname='localhost', @instance='VersionOne.Web', @username='admin', @password='admin', @port=80, @protocol='http') ->
+            @httplib = {http:http, https:https}[@protocol]
+        
         build_url: (path, query=undefined) ->
             url = '/' + @instance + path
             if query?
@@ -32,7 +32,7 @@ module.exports =
                     body = alldata.join('')
                     #console.log body
                     callback(undefined, response, body)
-            request = http.request(req_options, request_done)
+            request = @httplib.request(req_options, request_done)
             request.on('error', callback)
             if options.postdata?
                 request.write(options.postdata)
