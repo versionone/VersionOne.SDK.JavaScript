@@ -1,11 +1,10 @@
-
 V1Meta = require('./v1meta').V1Meta
 
 v1 = new V1Meta()
 
 now = () -> new Date().toISOString()
 
-log_transaction_callback = (err, updated_asset) ->
+and_log_it = (err, updated_asset) ->
     if err?
         console.log "Error!"
     else
@@ -22,7 +21,7 @@ v1.query "Story",
             transaction.iter (story) ->
                 story.Name = 'Something Else'
                 issue = Story.create_in_context('Issue', {Name: 'New Issue'})
-            transaction.commit log_transaction_callback
+            transaction.commit and_log_it
 
 
 v1.with_poller (poller) ->
@@ -31,6 +30,6 @@ v1.with_poller (poller) ->
         (story) ->
             console.log story
             story.Touched = now()
-    poller.commit log_transaction_callback
+    poller.commit and_log_it
 
     
