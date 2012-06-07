@@ -16,12 +16,11 @@ v1.query "Story",
     select: 'Name CreateDate Owners Estimate'
     callback: (err, transaction) ->
         if err?
-            console.log "Query failed."
-        else
-            transaction.iter (story) ->
-                story.Name = 'Something Else'
-                issue = Story.create_in_context('Issue', {Name: 'New Issue'})
-            transaction.commit and_log_it
+            return console.log("query failed\n" + util.inspect(err)) 
+        transaction.iter (story) ->
+            story.Name = 'Something Else'
+            issue = Story.create_in_context('Issue', {Name: 'New Issue'})
+        transaction.commit and_log_it
 
 
 v1.with_poller (poller) ->
