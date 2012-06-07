@@ -14,7 +14,7 @@ and_log_it = (err, updated_asset) ->
 v1.query "Story",
     where: Name: 'New Story'
     select: 'Name CreateDate Owners Estimate'
-    callback: (err, results) ->
+    callback: (err, transaction) ->
         if err?
             console.log "Query failed."
         else
