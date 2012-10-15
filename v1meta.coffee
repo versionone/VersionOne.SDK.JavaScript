@@ -4,7 +4,7 @@ client = require('./client')
 et = require('elementtree')
 util = require('util')
 url = require('url')
-    
+
 asset_dict_filter = (dict) ->
     output = {}
     for k,v of dict
@@ -54,11 +54,11 @@ class AssetClassBase
 class V1Transaction
     constructor: (@query_results=[], @v1meta) ->
         @dirty_assets = []
-        
+
     add_to_dirty: (asset) ->
         if asset not in @dirty_asset
             @dirty_assets.push asset
-        
+
     create: (asset_type, data) ->
         @v1meta.get_asset_class asset_type, (err, AssetClass) =>
             new_asset = new AssetClass(undefined, @)
@@ -73,19 +73,23 @@ class V1Transaction
         for dirty_asset in @dirty_assets
             @v1meta.update_asset dirty_asset, (err, update_result) =>
                 callback(err, dirty_asset, update_result)
-
+        
         
 module.exports = 
     V1Meta: class V1Meta
         constructor: (@server) ->
             @global_cache = {}
                     
+        query: (asset_type_name, options) ->
+            q = new V1Query(this, asset_type_name, options)
+            q.execute()
+                    
         for_all_types: (callback) ->
             @server.get_meta_xml {asset_type_name: ''}, (err, meta_xml) =>
                 if not err?
                     meta_xml.iter 'AssetType', (asset_xml) =>
                         callback(@build_asset_class_from_xml(asset_xml))
-        
+            
         build_asset_class_from_xml: (xml) ->
             asset_type_name = xml.get('name')
             
@@ -160,7 +164,7 @@ module.exports =
                     trans.query_results = assets
                     callback(undefined, trans)
                         
-        get_asset_class: (asset_type_name, callback) =>     
+        get_asset_class: (asset_type_name, callback) =>
             if asset_type_name of @global_cache
                 callback(undefined, @global_cache[asset_type_name])
             else
@@ -168,10 +172,10 @@ module.exports =
                     return callback(error) if error?
                     cls = @build_asset_class_from_xml(xml)
                     @global_cache[asset_type_name] = cls
-                    callback(undefined, cls)
-
-                    
+                callback(undefined, cls)
                 
+
+        
                 
 
         
