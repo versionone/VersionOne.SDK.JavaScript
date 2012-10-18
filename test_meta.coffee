@@ -1,6 +1,9 @@
 V1Meta = require('./v1meta').V1Meta
+V1Server = require('./client').V1Server
 
-v1 = new V1Meta()
+server = new V1Server()
+
+v1 = new V1Meta(server)
 
 now = () -> new Date().toISOString()
 
@@ -22,7 +25,7 @@ v1.query "Story",
             issue = Story.create_in_context('Issue', {Name: 'New Issue'})
         transaction.commit and_log_callback
 
-
+"""
 v1.with_poller (poller) ->
     poller.on_new_asset 'Story',
         'CreateDate Moment Owners',
@@ -30,5 +33,5 @@ v1.with_poller (poller) ->
             console.log story
             story.Touched = now()
     poller.commit and_log_callback
-
+"""
     

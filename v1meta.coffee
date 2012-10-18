@@ -80,10 +80,6 @@ module.exports =
         constructor: (@server) ->
             @global_cache = {}
                     
-        query: (asset_type_name, options) ->
-            q = new V1Query(this, asset_type_name, options)
-            q.execute()
-                    
         for_all_types: (callback) ->
             @server.get_meta_xml {asset_type_name: ''}, (err, meta_xml) =>
                 if not err?
@@ -172,7 +168,7 @@ module.exports =
                     return callback(error) if error?
                     cls = @build_asset_class_from_xml(xml)
                     @global_cache[asset_type_name] = cls
-                callback(undefined, cls)
+                    callback(undefined, cls)
                 
 
         
