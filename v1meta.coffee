@@ -141,10 +141,12 @@ module.exports =
             
             return asset
         
-        query: (options, callback) ->
+        query: (asset_type_name, options, callback) ->
+            options.asset_type_name = asset_type_name
             @get_asset_class options.asset_type_name, (err, Cls) =>
-                return callback(err) if err?
-                @server.get_query_xml options, (err, xmlresults) =>
+                return callback(err) if err?                
+                @server.get_query_xml options, (err, xmlresults) =>   
+                    console.log xmlresults
                     callback(err) if err?
                     for assetxml in xmlresults.findall('.Asset')
                         asset = @build_asset(Cls, assetxml)
