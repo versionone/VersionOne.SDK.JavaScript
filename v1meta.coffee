@@ -1,5 +1,3 @@
-
-
 client = require('./client')
 et = require('elementtree')
 util = require('util')
@@ -13,15 +11,20 @@ asset_dict_filter = (dict) ->
     return output
 
 class AssetClassBase
-    constructor: (@_v1_id, @_v1_transaction) ->
+    constructor: (@_v1_id, @_v1_transaction) ->    
         @_v1_new_data = {}
         @_v1_current_data = {}
-    with_data: (data) ->
-        @_v1_current_data = data
         return @
+
+    with_data: (data) ->
+        @_v1_new_data = {}
+        @_v1_current_data = data        
+        return @
+
     pending: (data) ->
         @_v1_new_data = data
         return @
+
     create_in_context: (asste_type, data) ->
         pass
         
@@ -34,13 +37,15 @@ class AssetClassBase
             pathname: v1meta.server.instance + '/assetdetail.v1'
             query: {oid: @_v1_id}
             
-    _v1_get: (attr) ->
-        return @v1_new_data[attr] ? @_v1_current_data[attr]
+    _v1_get: (attr) ->        
+        return @_v1_new_data[attr] ? @_v1_current_data[attr]
+
     _v1_set: (attr, value) ->
         if not @_v1_transaction?
             throw "Properties may only be set on assets having a _v1_transaction"
         @_v1_new_data[attr] = value
         @_v1_transaction.add_to_dirty(@)
+
     toString: () ->
         current = asset_dict_filter(@_v1_current_data)
         newdata = asset_dict_filter(@_v1_new_data)
@@ -72,8 +77,7 @@ class V1Transaction
     commit: (callback) ->
         for dirty_asset in @dirty_assets
             @v1meta.update_asset dirty_asset, (err, update_result) =>
-                callback(err, dirty_asset, update_result)
-        
+                callback(err, dirty_asset, update_result)        
         
 module.exports = 
     V1Meta: class V1Meta
@@ -90,7 +94,8 @@ module.exports =
             asset_type_name = xml.get('name')
             
             v1meta = @
-            cls = class extends AssetClassBase
+
+            modelClass = class extends AssetClassBase
                     _v1_asset_type_name: asset_type_name
                     _v1_v1meta: v1meta
                     _v1_ops: []
@@ -98,32 +103,32 @@ module.exports =
                     
             xml.iter 'Operation', (operation) =>
                 opname = operation.get('name')
-                cls::_v1_ops.push(opname)
-                cls.prototype[opname] = () =>
+                modelClass::_v1_ops.push(opname)
+                modelClass.prototype[opname] = () =>
                     @_v1_execute_operation(opname)
                     
             xml.iter 'AttributeDefinition', (attribute) =>
                 attr = attribute.get('name')
-                cls::_v1_attrs.push(attr)
+                modelClass::_v1_attrs.push(attr)
                 
                 if attribute.get('attributetype') == 'Relation'
-                    setter = (value) =>
+                    setter = (value) ->
                         @_v1_set(attr, value)
                     getter = () =>
                         @_v1_get(attr)
                     
-                if attribute.get('ismultivalue') != 'True'
-                    setter = (value) =>
+                if attribute.get('ismultivalue') != 'True'                    
+                    setter = (value) ->
                         @_v1_set(attr, value)
-                    getter = () =>
+                    getter = () ->
                         @_v1_get(attr)
-                    
-                Object.defineProperty cls.prototype, attr, 
+
+                Object.defineProperty modelClass.prototype, attr, 
                     get: getter
                     set: setter
                     enumerable: true
                     
-            return cls
+            return modelClass
             
         build_asset: (AssetClass, assetxml, trans) ->
             oidtoken = assetxml.get('id')
@@ -132,7 +137,7 @@ module.exports =
             for attrxml in assetxml.findall('Attribute')
                 attrname = attrxml.get('name').replace(".", "_")
                 asset._v1_current_data[attrname] = attrxml.text
-                
+
             for relxml in assetxml.findall('Relation')
                 relname = relxml.get('name').replace(".", "_")
                 asset._v1_current_data[relname] ?= []
@@ -141,26 +146,29 @@ module.exports =
             
             return asset
         
-        query: (asset_type_name, options, callback) ->
+        query: (asset_type_name, options) ->
+            @validateOptions options
+            options.asset_type_name = asset_type_name
+
+            @get_asset_class options.asset_type_name, (err, Cls) =>
+                return options.error(err) if err?                
+                @server.get_query_xml options, (err, xmlresults) =>                       
+                    options.error(err) if err?
+                    for assetxml in xmlresults.findall('.Asset')                        
+                        asset = @build_asset(Cls, assetxml)
+                        options.success(asset)
+            
+        trans_query: (asset_type_name, options) ->
+            @validateOptions options
             options.asset_type_name = asset_type_name
             @get_asset_class options.asset_type_name, (err, Cls) =>
-                return callback(err) if err?                
-                @server.get_query_xml options, (err, xmlresults) =>   
-                    console.log xmlresults
-                    callback(err) if err?
-                    for assetxml in xmlresults.findall('.Asset')
-                        asset = @build_asset(Cls, assetxml)
-                        callback(undefined, asset)
-            
-        trans_query: (options, callback) ->
-            @get_asset_class options.asset_type_name, (err, Cls) =>
-                return callback(err) if err?
+                return options.error(err) if err?
                 @server.get_query_xml options, (err, xmlresults) =>
-                    return callback(err) if err?
+                    return options.error(err) if err?
                     trans = new V1Transaction([], @)
                     assets = (@build_asset(Cls, asset, trans) for asset in xmlresults.findall('.Asset'))
                     trans.query_results = assets
-                    callback(undefined, trans)
+                    options.success(trans)
                         
         get_asset_class: (asset_type_name, callback) =>
             if asset_type_name of @global_cache
@@ -171,6 +179,11 @@ module.exports =
                     cls = @build_asset_class_from_xml(xml)
                     @global_cache[asset_type_name] = cls
                     callback(undefined, cls)
+
+        validateOptions: (options) ->
+            throw "Must pass a 'success' function callback which gets called if data retrieval succeeds" if not options.success?
+            throw "Must pass an 'error' function callback which gets called if data retrieval fails" if not options.error?
+
                 
 
         

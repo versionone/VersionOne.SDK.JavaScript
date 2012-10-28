@@ -1,36 +1,83 @@
-http = require('http')
-https = require('https')
 et = require('elementtree')
 url = require('url')
 querystring = require('querystring')
 
+browserAjaxRequest = (method, path, auth, callback) ->
+    if (typeof @XMLHttpRequest == "undefined")  
+        @XMLHttpRequest = ->
+            try
+                return new ActiveXObject("Msxml2.XMLHTTP.6.0")
+            catch error
+            try
+                return new ActiveXObject("Msxml2.XMLHTTP.3.0")
+            catch error
+            try
+                return new ActiveXObject("Microsoft.XMLHTTP")
+            catch error
+                throw new Error("This browser does not support XMLHttpRequest.")
+    req = new @XMLHttpRequest(method, path)
+
+    req.addEventListener 'readystatechange', ->
+        if req.readyState is 4                          # ReadyState Compelte
+            if req.status is 200 or req.status is 304   # Success result codes
+                callback req.responseText
+            else
+                console.log 'Error loading data. Request.readyState = ' + req.readyState         
+    # Return a function that open calling will complete the work
+    return () ->
+        req.open method, path, false
+        req.setRequestHeader "Authorization", "Basic " + btoa(auth)
+        req.send()
+
 module.exports = 
     V1Server: class V1Server
-        constructor: (@hostname='localhost', @instance='VersionOne.Web', @username='admin', @password='admin', @port=80, @protocol='http') ->
-            @httplib = {http:http, https:https}[@protocol]
-        
+        constructor: (@hostname='localhost', @instance='VersionOne.Web', @username='admin', @password='admin', @port=80, @protocol='http', @useBrowserHttpStack=null) ->
+            return @
+
         build_url: (path, query=undefined) ->
             url = '/' + @instance + path
             if query?
                 url = url + '?' + querystring.stringify(query)
             return url
-        
-        fetch: (options, callback) ->
+
+        fetch: (options, callback) ->         
+            if not @useBrowserHttpStack?
+                @useBrowserHttpStack = typeof XMLHttpRequest != "undefined"
+            if @useBrowserHttpStack
+                @fetch_browser options, callback
+            else
+                if not @httplib?
+                    http = require('http')
+                    https = require('https')
+                    @httplib = {http:http, https:https}[@protocol]
+                @fetch_node options, callback
+
+        fetch_browser: (options, callback) ->
             url = @build_url(options.path, options.query)
-            req_options = {
+            req_options =
                 hostname: @hostname,
                 port: @port,
                 method: (if options.postdata? then 'POST' else 'GET'),
                 path: url,
-                auth: @username + ':' + @password,
-                }
+                auth: @username + ':' + @password                        
+            request = browserAjaxRequest req_options.method, @protocol + "://" + req_options.hostname + ":" + req_options.port + "/" + req_options.path, req_options.auth, (data) ->
+                callback(undefined, null, data) # null being the node "response". TODO: should wrap?
+            request()
+
+        fetch_node: (options, callback) ->
+            url = @build_url(options.path, options.query)
+            req_options =
+                hostname: @hostname,
+                port: @port,
+                method: (if options.postdata? then 'POST' else 'GET'),
+                path: url,
+                auth: @username + ':' + @password                            
             request_done = (response) ->
                 alldata = []
                 response.on 'data', (data)->
                     alldata.push(data)
                 response.on 'end', () ->
-                    body = alldata.join('')
-                    #console.log body
+                    body = alldata.join('')                    
                     callback(undefined, response, body)
             request = @httplib.request(req_options, request_done)
             request.on('error', callback)
