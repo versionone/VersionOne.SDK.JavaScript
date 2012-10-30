@@ -747,13 +747,72 @@ require.define("/v1meta.coffee",function(require,module,exports,__dirname,__file
 });
 
 require.define("/client.coffee",function(require,module,exports,__dirname,__filename,process,global){(function() {
-  var V1Server, browserAjaxRequest, et, querystring, url;
+  var V1Server, atob, browserAjaxRequest, btoa, et, querystring, url;
 
   et = require('elementtree');
 
   url = require('url');
 
   querystring = require('querystring');
+
+  if (typeof btoa === "undefined") {
+    btoa = function(str) {
+      var b0, b1, b2, buf, c, chars, encoded, i0, i1, i2, i3;
+      chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+      encoded = [];
+      c = 0;
+      while (c < str.length) {
+        b0 = str.charCodeAt(c++);
+        b1 = str.charCodeAt(c++);
+        b2 = str.charCodeAt(c++);
+        buf = (b0 << 16) + ((b1 || 0) << 8) + (b2 || 0);
+        i0 = (buf & (63 << 18)) >> 18;
+        i1 = (buf & (63 << 12)) >> 12;
+        i2 = (isNaN(b1) ? 64 : (buf & (63 << 6)) >> 6);
+        i3 = (isNaN(b2) ? 64 : buf & 63);
+        encoded[encoded.length] = chars.charAt(i0);
+        encoded[encoded.length] = chars.charAt(i1);
+        encoded[encoded.length] = chars.charAt(i2);
+        encoded[encoded.length] = chars.charAt(i3);
+      }
+      return encoded.join("");
+    };
+  }
+
+  if (typeof atob === "undefined") {
+    atob = function(str) {
+      var b0, b1, b2, buf, c, chars, decoded, i0, i1, i2, i3, invalid;
+      chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+      invalid = {
+        strlen: str.length % 4 !== 0,
+        chars: new RegExp("[^" + chars + "]").test(str),
+        equals: RegExp("=").test(str) && (RegExp("=[^=]").test(str) || RegExp("={3}").test(str))
+      };
+      if (invalid.strlen || invalid.chars || invalid.equals) {
+        throw new Error("Invalid base64 data");
+      }
+      decoded = [];
+      c = 0;
+      while (c < str.length) {
+        i0 = chars.indexOf(str.charAt(c++));
+        i1 = chars.indexOf(str.charAt(c++));
+        i2 = chars.indexOf(str.charAt(c++));
+        i3 = chars.indexOf(str.charAt(c++));
+        buf = (i0 << 18) + (i1 << 12) + ((i2 & 63) << 6) + (i3 & 63);
+        b0 = (buf & (255 << 16)) >> 16;
+        b1 = (i2 === 64 ? -1 : (buf & (255 << 8)) >> 8);
+        b2 = (i3 === 64 ? -1 : buf & 255);
+        decoded[decoded.length] = String.fromCharCode(b0);
+        if (b1 >= 0) {
+          decoded[decoded.length] = String.fromCharCode(b1);
+        }
+        if (b2 >= 0) {
+          decoded[decoded.length] = String.fromCharCode(b2);
+        }
+      }
+      return decoded.join("");
+    };
+  }
 
   browserAjaxRequest = function(method, path, auth, callback) {
     var req;
