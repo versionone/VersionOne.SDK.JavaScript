@@ -1,4 +1,4 @@
-var require = function (file, cwd) {
+(function(){var require = function (file, cwd) {
     var resolved = require.resolve(file, cwd || '/');
     var mod = require.modules[resolved];
     if (!mod) throw new Error(
@@ -9,7 +9,6 @@ var require = function (file, cwd) {
     return res;
 };
 
-(function(){ 
 require.paths = [];
 require.modules = {};
 require.cache = {};
@@ -863,13 +862,13 @@ require.define("/client.coffee",function(require,module,exports,__dirname,__file
   module.exports = {
     V1Server: V1Server = (function() {
 
-      function V1Server(hostname, instance, username, password, port, protocol, useBrowserHttpStack) {
+      function V1Server(protocol, hostname, instance, username, password, port, useBrowserHttpStack) {
+        this.protocol = protocol != null ? protocol : 'http';
         this.hostname = hostname != null ? hostname : 'www14.v1host.com';
         this.instance = instance != null ? instance : 'v1sdktesting';
         this.username = username != null ? username : 'remote';
         this.password = password != null ? password : 'remote';
         this.port = port != null ? port : 80;
-        this.protocol = protocol != null ? protocol : 'http';
         this.useBrowserHttpStack = useBrowserHttpStack != null ? useBrowserHttpStack : null;
         if (this.protocol === "https" && this.port === 80) {
           this.port = 443;
