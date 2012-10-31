@@ -1,4 +1,4 @@
-(function(){var require = function (file, cwd) {
+var require = function (file, cwd) {
     var resolved = require.resolve(file, cwd || '/');
     var mod = require.modules[resolved];
     if (!mod) throw new Error(
@@ -9,6 +9,7 @@
     return res;
 };
 
+(function(){ 
 require.paths = [];
 require.modules = {};
 require.cache = {};
