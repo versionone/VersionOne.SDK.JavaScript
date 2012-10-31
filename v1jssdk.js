@@ -8,16 +8,6 @@ var require = function (file, cwd) {
     var res = cached? cached.exports : mod();
     return res;
 };
-var require = function (file, cwd) {
-    var resolved = require.resolve(file, cwd || '/');
-    var mod = require.modules[resolved];
-    if (!mod) throw new Error(
-        'Failed to resolve module ' + file + ', tried ' + resolved
-    );
-    var cached = require.cache[resolved];
-    var res = cached? cached.exports : mod();
-    return res;
-};
 
 (function(){
 require.paths = [];
