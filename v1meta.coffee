@@ -135,11 +135,11 @@ module.exports =
             asset = new AssetClass(oidtoken, trans)
             
             for attrxml in assetxml.findall('Attribute')
-                attrname = attrxml.get('name').replace(".", "_")
+                attrname = attrxml.get('name')
                 asset._v1_current_data[attrname] = attrxml.text
 
             for relxml in assetxml.findall('Relation')
-                relname = relxml.get('name').replace(".", "_")
+                relname = relxml.get('name')
                 asset._v1_current_data[relname] ?= []
                 for rel in relxml.findall("Asset")
                     asset._v1_current_data[relname].push rel.get('idref')
