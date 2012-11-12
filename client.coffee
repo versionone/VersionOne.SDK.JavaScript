@@ -136,7 +136,10 @@ module.exports =
                     alldata.push(data)
                 response.on 'end', () ->
                     body = alldata.join('')                    
-                    callback(undefined, response, body)
+                    if response.statusCode != 200
+                        callback(response.statusCode, response, body)
+                    else
+                        callback(undefined, response, body)
             request = @httplib.request(req_options, request_done)
             request.on('error', callback)
             if options.postdata?
