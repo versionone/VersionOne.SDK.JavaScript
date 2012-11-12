@@ -93,6 +93,13 @@ module.exports =
                 url = url + '?' + querystring.stringify(query)
             return url
 
+        httplibs: {
+            "http": require('http'),
+            "https": require('https'),
+            "http://": require('http'),
+            "https://": require('https')
+            }
+            
         fetch: (options, callback) ->         
             if not @useBrowserHttpStack?
                 @useBrowserHttpStack = typeof XMLHttpRequest != "undefined"
@@ -100,9 +107,7 @@ module.exports =
                 @fetch_browser options, callback
             else
                 if not @httplib?
-                    http = require('http')
-                    https = require('https')
-                    @httplib = {http:http, https:https}[@protocol]
+                    @httplib = @httplibs[@protocol]
                 @fetch_node options, callback
 
         fetch_browser: (options, callback) ->
