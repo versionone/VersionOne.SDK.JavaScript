@@ -153,7 +153,7 @@ module.exports =
             @get_asset_class options.asset_type_name, (err, Cls) =>
                 return options.error(err) if err?                
                 @server.get_query_xml options, (err, xmlresults) =>                       
-                    options.error(err) if err?
+                    return options.error(err) if err?
                     for assetxml in xmlresults.findall('.Asset')                        
                         asset = @build_asset(Cls, assetxml)
                         options.success(asset)
