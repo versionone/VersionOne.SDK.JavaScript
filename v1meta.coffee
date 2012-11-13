@@ -61,7 +61,7 @@ class V1Transaction
         @dirty_assets = []
 
     add_to_dirty: (asset) ->
-        if asset not in @dirty_asset
+        if asset not in @dirty_assets
             @dirty_assets.push asset
 
     create: (asset_type, data) ->
