@@ -120,7 +120,7 @@ module.exports =
                 wherestrs.push( (name + '="' + value + '"') for name,value of options.where)
             if options.wherestr?
                 wherestrs.push wherestr
-            query['where'] = '&'.join(wherestrs)
+            query['where'] = wherestrs.join('&')
             if options.select?
                 query['sel'] = options.select.join(',')
             @get_xml({path: path, query: query}, callback)
