@@ -115,8 +115,12 @@ module.exports =
         get_query_xml: (options, callback) ->
             path = '/rest-1.v1/Data/' + options.asset_type_name
             query = {}
+            wherestrs = []
             if options.where?
-                query['Where'] = (name + '="' + value + '"') for name,value of options.where
+                wherestrs.append( (name + '="' + value + '"') for name,value of options.where)
+            if options.wherestr?
+                wherestrs.append wherestr
+            query['where'] = '&'.join(wherestrs)
             if options.select?
                 query['sel'] = options.select.join(',')
             @get_xml({path: path, query: query}, callback)
