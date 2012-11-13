@@ -117,9 +117,9 @@ module.exports =
             query = {}
             wherestrs = []
             if options.where?
-                wherestrs.append( (name + '="' + value + '"') for name,value of options.where)
+                wherestrs.push( (name + '="' + value + '"') for name,value of options.where)
             if options.wherestr?
-                wherestrs.append wherestr
+                wherestrs.push wherestr
             query['where'] = '&'.join(wherestrs)
             if options.select?
                 query['sel'] = options.select.join(',')
