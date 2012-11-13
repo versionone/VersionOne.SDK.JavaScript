@@ -119,7 +119,7 @@ module.exports =
             if options.where?
                 wherestrs.push( (name + '="' + value + '"') for name,value of options.where)
             if options.wherestr?
-                wherestrs.push wherestr
+                wherestrs.push options.wherestr
             query['where'] = wherestrs.join('&')
             if options.select?
                 query['sel'] = options.select.join(',')
