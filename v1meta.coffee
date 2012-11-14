@@ -27,6 +27,8 @@ class AssetClassBase
     create_in_context: (asste_type, data) ->
         pass
         
+    idref: () -> throw "Implement This"
+
     url: () ->
         v1meta = @_v1_v1meta
         url.format
@@ -70,7 +72,40 @@ class V1Transaction
         if asset not in @dirty_assets
             @dirty_assets.push asset
 
+
+    generate_update_doc: (newdata) ->
+        update_doc = new elementtree.Element('Asset')
+        for attrname, newvalue of newdata
+            do (attrname) =>
+                do (newvalue) =>
+                    if newvalue._v1_asset_type_name?
+                        node = new Element('Relation')
+                        node.set('name', attrname)
+                        node.set('act', 'set')
+                        ra = new Element('Asset')
+                        ra.set('idref', newvalue.idref())
+                        node.append(ra)
+                    else  if newvalue instanceof Array
+                        node = new Element('Relation')
+                        node.set('name',attrname)
+                        for item in newvalue
+                            child = new Element('Asset')
+                            child.set('idref', item.idref())
+                            child.set('act', 'set')
+                            node.append(child)
+                    else
+                        node = Element('Attribute')
+                        node.set('name', attrname)
+                        node.set('act', 'set')
+                        node.text = str(newvalue)
+                    update_doc.append(node)
+        return update_doc
+
+
     create: (asset_type, data) ->
+        update_doc = @generate_update_doc(data)
+
+
         @v1meta.get_asset_class asset_type, (err, AssetClass) =>
             new_asset = new AssetClass(undefined, @)
             new_asset.pending(data)
