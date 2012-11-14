@@ -196,14 +196,18 @@ module.exports =
             if options.from?
                 options.asset_type_name = options.from
             @validateOptions options
-            @get_asset_class options.asset_type_name, (err, Cls) =>
-                return options.error(err) if err?                
-                @server.get_query_xml options, (err, xmlresults) =>                       
-                    return options.error(err) if err?
-                    for assetxml in xmlresults.findall('.Asset')                        
+
+            @server.get_query_xml options, (err, xmlresults) =>                       
+                return options.error(err) if err?
+                for assetxml in xmlresults.findall('.Asset')
+                    oidtoken = assetxml.get('id')
+                    [found_type, found_id] = oidtoken.split(':')
+                    @get_asset_class found_type, (err, Cls) =>
+                        return options.error(err) if err?                
                         asset = @build_asset(Cls, assetxml)
                         options.success(asset)
-            
+
+
         trans_query: (options) ->
             if options.from?
                 options.asset_type_name = options.from
