@@ -126,11 +126,12 @@ module.exports =
         constructor: (@server) ->
             @global_cache = {}
                     
-        for_all_types: (callback) ->
+        for_all_types: (options) ->
             @server.get_meta_xml {asset_type_name: ''}, (err, meta_xml) =>
-                if not err?
-                    meta_xml.iter 'AssetType', (asset_xml) =>
-                        callback(@build_asset_class_from_xml(asset_xml))
+                return options.error(err) if err?
+                meta_xml.iter 'AssetType', (asset_xml) =>
+                    options.asset_callback(@build_asset_class_from_xml(asset_xml))
+                options.done()
             
         build_asset_class_from_xml: (xml) ->
             asset_type_name = xml.get('name')
