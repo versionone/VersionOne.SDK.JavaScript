@@ -5,14 +5,17 @@ server = new V1Server()
 
 v1 = new V1Meta(server)
 
-v1.query "Member"
+v1.query 
+    select: ['Email', 'Username', 'ID']
+    from: "Member"
     where:
         ID: 'Member:1000'
         Email : 'andre@company.com'
         Username : 'andre'
-    select: ['Email', 'Username', 'ID']
     success: (result) ->
-        message = 'Email: ' + result.Email + "<br/>\n" + 'Username: ' + result.Username + "<br/>\n" + 'ID: ' + result.ID        
+        message = 'Email: ' + result.Email + "<br/>\n" +
+                  'Username: ' + result.Username + "<br/>\n" +
+                  'ID: ' + result.ID
         output = () -> 
             if server.useBrowserHttpStack
                 document.getElementById("query").innerHTML += "<b>Query result:</b><br/><br/>" + message           
@@ -22,7 +25,8 @@ v1.query "Member"
     error: (err) ->
         console.log "Error: " + err
 
-v1.trans_query "Member"
+v1.trans_query 
+    from: "Member"
     where:
         ID: 'Member:1000'
         Email : 'andre@company.com'
