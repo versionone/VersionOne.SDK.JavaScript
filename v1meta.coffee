@@ -48,11 +48,12 @@ class AssetClassBase
         @_v1_transaction.add_to_dirty(@)
 
     _v1_execute_operation: (opname, callback) =>
-        @_v1_v1meta.server.execute_operation 
+        [type, numid] = @_v1_id.split(":")
+        options = 
             asset_type_name: @_v1_asset_type_name
             opname: opname
-            id: @_v1_id
-            callback: callback
+            id: numid
+        @_v1_v1meta.server.execute_operation options, callback
 
     toString: () ->
         current = asset_dict_filter(@_v1_current_data)
@@ -142,11 +143,16 @@ module.exports =
                     _v1_ops: []
                     _v1_attrs: []
                     
-            xml.iter 'Operation', (operation) =>
+            xml.iter 'Operation', (operation) ->
                 opname = operation.get('name')
                 modelClass::_v1_ops.push(opname)
-                modelClass.prototype[opname] = (callback) =>
-                    @_v1_execute_operation(opname, callback)
+                getter = () ->
+                    (callback) =>
+                        @_v1_execute_operation(opname, callback)
+                Object.defineProperty modelClass.prototype, opname, 
+                    get: getter
+                    enumerable: true
+
                     
             xml.iter 'AttributeDefinition', (attribute) =>
                 attr = attribute.get('name')
