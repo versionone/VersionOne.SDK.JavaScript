@@ -152,10 +152,10 @@ module.exports =
             
             return asset
         
-        query: (asset_type_name, options) ->
+        query: (options) ->
+            if options.from?
+                options.asset_type_name = options.from
             @validateOptions options
-            options.asset_type_name = asset_type_name
-
             @get_asset_class options.asset_type_name, (err, Cls) =>
                 return options.error(err) if err?                
                 @server.get_query_xml options, (err, xmlresults) =>                       
@@ -164,9 +164,10 @@ module.exports =
                         asset = @build_asset(Cls, assetxml)
                         options.success(asset)
             
-        trans_query: (asset_type_name, options) ->
+        trans_query: (options) ->
+            if options.from?
+                options.asset_type_name = options.from
             @validateOptions options
-            options.asset_type_name = asset_type_name
             @get_asset_class options.asset_type_name, (err, Cls) =>
                 return options.error(err) if err?
                 @server.get_query_xml options, (err, xmlresults) =>
