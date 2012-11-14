@@ -174,17 +174,15 @@ module.exports =
         build_asset: (AssetClass, assetxml, trans) ->
             oidtoken = assetxml.get('id')
             asset = new AssetClass(oidtoken, trans)
-            
+            data = asset._v1_current_data
             for attrxml in assetxml.findall('Attribute')
                 attrname = attrxml.get('name')
-                asset._v1_current_data[attrname] = attrxml.text
-
+                data[attrname] = attrxml.text
             for relxml in assetxml.findall('Relation')
                 relname = relxml.get('name')
-                asset._v1_current_data[relname] ?= []
+                data[relname] ?= []
                 for rel in relxml.findall("Asset")
-                    asset._v1_current_data[relname].push rel.get('idref')
-            
+                    data[relname].push rel.get('idref')
             return asset
         
         query: (options) ->
