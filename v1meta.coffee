@@ -161,7 +161,7 @@ module.exports =
                 if attribute.get('attributetype') == 'Relation'
                     setter = (value) ->
                         @_v1_set(attr, value)
-                    getter = () =>
+                    getter = () ->
                         @_v1_get(attr)
                     
                 if attribute.get('ismultivalue') != 'True'                    
