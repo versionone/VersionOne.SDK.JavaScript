@@ -17,7 +17,6 @@ class AssetClassBase
         return @
 
     with_data: (data) ->
-        @_v1_new_data = {}
         @_v1_current_data = data        
         return @
 
