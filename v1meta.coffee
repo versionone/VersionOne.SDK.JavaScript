@@ -45,6 +45,13 @@ class AssetClassBase
         @_v1_new_data[attr] = value
         @_v1_transaction.add_to_dirty(@)
 
+    _v1_execute_operation: (opname, callback) =>
+        @_v1_v1meta.server.execute_operation 
+            asset_type_name: @_v1_asset_type_name
+            opname: opname
+            id: @_v1_id
+            callback: callback
+
     toString: () ->
         current = asset_dict_filter(@_v1_current_data)
         newdata = asset_dict_filter(@_v1_new_data)
@@ -103,8 +110,8 @@ module.exports =
             xml.iter 'Operation', (operation) =>
                 opname = operation.get('name')
                 modelClass::_v1_ops.push(opname)
-                modelClass.prototype[opname] = () =>
-                    @_v1_execute_operation(opname)
+                modelClass.prototype[opname] = (callback) =>
+                    @_v1_execute_operation(opname, callback)
                     
             xml.iter 'AttributeDefinition', (attribute) =>
                 attr = attribute.get('name')
