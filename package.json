@@ -1,6 +1,6 @@
 {
 "name":         "v1jssdk",
-"version":      "0.2.1",
+"version":      "0.3.0",
 "description":  "VersionOne API Client for Node",
 "keywords":     ["VersionOne", "V1"],
 "homepage":     "http://github.com/VersionOne/v1jssdk",
