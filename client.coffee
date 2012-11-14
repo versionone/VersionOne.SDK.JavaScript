@@ -99,7 +99,7 @@ module.exports =
         get_xml: (options, callback) ->
             mycallback = (error, response, body) ->
                 if error?
-                    callback(error)
+                    return callback(error)
                 xmltree = et.parse(body).getroot()
                 callback(undefined, xmltree)        
             @fetch(options, mycallback)
