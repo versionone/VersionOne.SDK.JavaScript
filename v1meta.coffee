@@ -74,37 +74,10 @@ class V1Transaction
             @dirty_assets.push asset
 
 
-    generate_update_doc: (newdata) ->
-        update_doc = new elementtree.Element('Asset')
-        for attrname, newvalue of newdata
-            do (attrname) =>
-                do (newvalue) =>
-                    if newvalue._v1_asset_type_name?
-                        node = new Element('Relation')
-                        node.set('name', attrname)
-                        node.set('act', 'set')
-                        ra = new Element('Asset')
-                        ra.set('idref', newvalue.idref())
-                        node.append(ra)
-                    else  if newvalue instanceof Array
-                        node = new Element('Relation')
-                        node.set('name',attrname)
-                        for item in newvalue
-                            child = new Element('Asset')
-                            child.set('idref', item.idref())
-                            child.set('act', 'set')
-                            node.append(child)
-                    else
-                        node = Element('Attribute')
-                        node.set('name', attrname)
-                        node.set('act', 'set')
-                        node.text = str(newvalue)
-                    update_doc.append(node)
-        return update_doc
 
 
-    create: (asset_type, data) ->
-        update_doc = @generate_update_doc(data)
+
+
 
 
         @v1meta.get_asset_class asset_type, (err, AssetClass) =>
@@ -122,6 +95,7 @@ class V1Transaction
                 callback(err, dirty_asset, update_result)        
         
 module.exports = 
+    V1Transaction: V1Transaction
     V1Meta: class V1Meta
         constructor: (@server) ->
             @global_cache = {}
@@ -236,8 +210,53 @@ module.exports =
             throw "Must pass an 'error' function callback which gets called if data retrieval fails" if not options.error?
 
                 
-
+        generate_update_doc: (newdata) ->
+            update_doc = new et.Element('Asset')
+            for attrname, newvalue of newdata
+                do (attrname) =>
+                    do (newvalue) =>
+                        if newvalue._v1_asset_type_name?
+                            node = new et.Element('Relation')
+                            node.set('name', attrname)
+                            node.set('act', 'set')
+                            ra = new et.Element('Asset')
+                            ra.set('idref', newvalue.idref())
+                            node.append(ra)
+                        else  if newvalue instanceof Array
+                            node = new et.Element('Relation')
+                            node.set('name',attrname)
+                            for item in newvalue
+                                child = new et.Element('Asset')
+                                child.set('idref', item.idref())
+                                child.set('act', 'set')
+                                node.append(child)
+                        else
+                            node = new et.Element('Attribute')
+                            node.set('name', attrname)
+                            node.set('act', 'set')
+                            node.text = newvalue.toString()
+                        update_doc.append(node)
+            return update_doc
         
+        create: (asset_type, data, callback) ->
+            update_doc = @generate_update_doc(data)
+            create_opts =
+                asset_type_name: asset_type
+                xmldata: update_doc
+            @server.create_asset create_opts, (err, result) =>
+                return callback(err) if err?
+                [created_type, created_id, created_moment] = result.get('id').split(":")
+                @query 
+                    from: created_type
+                    where:
+                      ID: "#{created_type}:#{created_id}"
+                    select: ['Number', 'Name']
+                    error: (err)=>callback(err)
+                    success: (result) => 
+                        console.log result
+                        callback(undefined, result)
+
+
                 
 
         
