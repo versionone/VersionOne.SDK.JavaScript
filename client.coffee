@@ -87,7 +87,7 @@ module.exports =
                 response.on 'end', () ->
                     body = alldata.join('')                    
                     if response.statusCode != 200
-                        callback(response.statusCode, response, body)
+                        callback(body)
                     else
                         callback(undefined, response, body)
             request = @httplib.request(req_options, request_done)
