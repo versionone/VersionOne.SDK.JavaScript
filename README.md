@@ -20,7 +20,7 @@ Finally, to build, type:
 
 `. ./build.sh`
 
-You can now run the sample against our public test instance now by typing:
+You can now run the sample against our public test instance by typing:
 
 `node sample.js`
 
