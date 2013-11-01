@@ -4,7 +4,7 @@ API client for use with JavaScript or CoffeeScript, either from Node.JS on the s
 
 We're also trying to get it to work from the browser too.
 
-## Getting Started With `sample.js`
+## Getting Started With [`sample.js`](sample.js)
 
 To build the libraries, you'll need Node.js and CoffeeScript installed.
 
@@ -12,15 +12,15 @@ To install CoffeeScript:
 
 `npm install coffee-script -g`
 
-To install the other dependencies, type:
+Next, to install the other dependencies, type:
 
 `npm install`
 
-To build, type:
+Finally, to build, type:
 
 `. ./build.sh`
 
-You can run the sample against our public test instance now by typing:
+You can now run the sample against our public test instance by typing:
 
 `node sample.js`
 
@@ -37,6 +37,8 @@ Need to bootstrap on VersionOne SDK.JavaScript quickly? VersionOne services brin
 
 http://www.versionone.com/training/product_training_services/
 
-Have a question? Get help from the community of VersionOne developers:
+You can also pop into our public HipChat room at: http://www.hipchat.com/grNeYfSGw
+
+Not into the chat thing? Get help from the community of VersionOne developers:
 
 http://groups.google.com/group/versionone-dev/
