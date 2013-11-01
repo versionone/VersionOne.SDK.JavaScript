@@ -12,11 +12,15 @@ To install CoffeeScript:
 
 `npm install coffee-script -g`
 
-To build, type:
+Next,to install the other dependencies, type:
+
+`npm install`
+
+Finally, to build, type:
 
 `. ./build.sh`
 
-You can run the sample against our public test instance now by typing:
+You can now run the sample against our public test instance now by typing:
 
 `node sample.js`
 
@@ -33,6 +37,8 @@ Need to bootstrap on VersionOne SDK.JavaScript quickly? VersionOne services brin
 
 http://www.versionone.com/training/product_training_services/
 
-Have a question? Get help from the community of VersionOne developers:
+You can also pop into our public HipChat room at: http://www.hipchat.com/grNeYfSGw
+
+Not into the chat thing? Get help from the community of VersionOne developers:
 
 http://groups.google.com/group/versionone-dev/
