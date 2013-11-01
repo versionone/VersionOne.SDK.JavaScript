@@ -4,6 +4,7 @@ querystring = require('querystring')
 
 base64 = require('./base64')
 
+SDK_CLIENT_VERSION = "0.3.1"
 
 browserAjaxRequest = (method, path, auth, callback) ->
     if (typeof @XMLHttpRequest == "undefined")  
@@ -50,7 +51,7 @@ module.exports =
             "https://": require('https')
             }
             
-        fetch: (options, callback) ->         
+        fetch: (options, callback) ->
             if not @useBrowserHttpStack?
                 @useBrowserHttpStack = typeof XMLHttpRequest != "undefined"
             if @useBrowserHttpStack
@@ -79,7 +80,10 @@ module.exports =
                 port: @port,
                 method: (if options.postdata? then 'POST' else 'GET'),
                 path: url,
-                auth: @username + ':' + @password                            
+                auth: @username + ':' + @password,
+                headers: {
+                    'user-agent': 'VersionOne JS SDK Client/5.0 ' + SDK_CLIENT_VERSION
+                }
             request_done = (response) ->
                 alldata = []
                 response.on 'data', (data)->
@@ -94,7 +98,7 @@ module.exports =
             request.on('error', callback)
             if options.postdata?
                 request.write(options.postdata)
-            request.end()
+            request.end()                
 
         get_xml: (options, callback) ->
             mycallback = (error, response, body) ->
@@ -141,6 +145,5 @@ module.exports =
         update_asset: (options, callback) ->
             newdata = et.tostring(options.xmldata)
             path = '/rest-1.v1/Data/' + options.asset_type_name + '/' + options.id
-            @get_xml({path:path, postdata:newdata})
-            
+            @get_xml({path:path, postdata:newdata})       
             

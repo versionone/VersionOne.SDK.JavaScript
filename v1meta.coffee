@@ -171,7 +171,7 @@ module.exports =
                 options.asset_type_name = options.from
             @validateOptions options
 
-            @server.get_query_xml options, (err, xmlresults) =>                       
+            @server.get_query_xml options, (err, xmlresults) =>  
                 return options.error(err) if err?
                 for assetxml in xmlresults.findall('.Asset')
                     oidtoken = assetxml.get('id')
@@ -180,7 +180,6 @@ module.exports =
                         return options.error(err) if err?                
                         asset = @build_asset(Cls, assetxml)
                         options.success(asset)
-
 
         trans_query: (options) ->
             if options.from?

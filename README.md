@@ -1,10 +1,26 @@
 # VersionOne.SDK.JavaScript 
 
-API client for use with JavaScript or CoffeeScript, either from Node.JS on the server or within the web browser.
+API client for use with JavaScript or CoffeeScript, either from Node.JS on the server.
 
-## Getting Started With Live Examples
+We're also trying to get it to work from the browser too.
 
-See [this page](http://versionone.github.com/VersionOne.SDK.JavaScript/Getting_Started_Live_Examples.html)
+## Getting Started With `sample.js`
+
+To build the libraries, you'll need Node.js and CoffeeScript installed.
+
+To install CoffeeScript:
+
+`npm install coffee-script -g`
+
+To build, type:
+
+`. ./build.sh`
+
+You can run the sample against our public test instance now by typing:
+
+`node sample.js`
+
+You can modify the info at the top of the script to point to your own VersionOne instance.
 
 ## Other Resources
 
