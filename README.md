@@ -12,6 +12,10 @@ To install CoffeeScript:
 
 `npm install coffee-script -g`
 
+To install the other dependencies, type:
+
+`npm install`
+
 To build, type:
 
 `. ./build.sh`
