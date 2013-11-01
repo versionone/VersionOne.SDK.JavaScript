@@ -4,7 +4,7 @@ API client for use with JavaScript or CoffeeScript, either from Node.JS on the s
 
 We're also trying to get it to work from the browser too.
 
-## Getting Started With `sample.js`
+## Getting Started With [`sample.js`](sample.js)
 
 To build the libraries, you'll need Node.js and CoffeeScript installed.
 
