@@ -2,15 +2,30 @@
 
 API client for use with JavaScript or CoffeeScript, either from Node.JS on the server.
 
-We're also trying to get it to work from the browser too.
+We're also are experimenting with getting this to work from the web browser. Here's a public example that is running:
 
-## Getting Started With [`sample.js`](sample.js)
+http://jsfiddle.net/JoshGough/urq3D/
+
+That uses the `v1browsersdk.js` file that you can find in this repository. In order 
+for the example to run in JSFiddle, it points to the one [deployed to the gh-pages branch](http://versionone.github.io/VersionOne.SDK.JavaScript/v1browsersdk.js).
+
+The other information on the gh-pages branch is currently out of date as of November 2nd, 2013.
+
+The `v1browsersdk.js` file is built by running this command:
+
+`. ./make_browsersdk.sh`
+
+## Getting Started With [`sample.js`](sample.js) on Node.js
 
 To build the libraries, you'll need Node.js and CoffeeScript installed.
 
 To install CoffeeScript:
 
 `npm install coffee-script -g`
+
+To install browserify globally (only needed if you want to built the `v1browsersdk.js` file)
+
+`npm install browserify -g` 
 
 Next, to install the other dependencies, type:
 
