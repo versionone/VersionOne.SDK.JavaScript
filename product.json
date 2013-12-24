@@ -1,0 +1,78 @@
+{
+    "id": "VersionOne.SDK.JavaScript",
+    "titleSection": {
+        "name": "VersionOne SDK.JavaScript",
+        "shortDescription": "A JavaScript/CoffeeScript Node.JS client for accessing VersionOne rest-1.v1 endpoint.",
+        "pricing": "Free",
+        "support": {
+            "text": "VersionOne",
+            "href": "http://support.versionone.com/home"
+        }
+    },
+    "descriptionSection": {
+        "description": "VersionOne SDK.JavaScript is a client for the VersionOne rest-1.v1 API endpoint. It can be used with JavaScript or CoffeeScript, either from Node.JS on the server, or (experimentally) from a web browser."
+    },
+    "linksSection": [
+        {
+            "type": "documentation",
+            "title": "README",
+            "href": "https://github.com/versionone/VersionOne.SDK.JavaScript/blob/master/README.md"
+        },
+        {
+            "type": "source",
+            "title": "GitHub Project for Source Code and Issues",
+            "href": "https://github.com/versionone/VersionOne.SDK.JavaScript"
+        },
+        {
+            "type": "license",
+            "title": "Modified BSD (3 clause) License",
+            "href": "https://github.com/versionone/VersionOne.SDK.JavaScript/blob/master/LICENSE.md"
+        }
+    ],
+    "updatesSection": {
+        "updates": [
+            {
+                "date": "2013-11-02T12:00:00.000Z",
+                "description": "Fall 2013",
+                "version": "0.4",
+                "releaseNotes": "More samples and documentation.",
+                "qualityBand": "seed"
+            },
+            {
+                "date": "2012-11-15T12:00:00.000Z",
+                "description": "Fall 2012",
+                "version": "0.3",
+                "releaseNotes": "Tests and examples.",
+                "qualityBand": "seed"
+            },
+            {
+                "date": "2012-06-06T12:00:00.000Z",
+                "description": "Summer 2012",
+                "version": "0.2",
+                "releaseNotes": "Working code.",
+                "qualityBand": "seed"
+            },
+            {
+                "date": "2012-05-18T12:00:00.000Z",
+                "description": "Spring 2012",
+                "version": "0.1",
+                "releaseNotes": "Initial code.",
+                "qualityBand": "seed"
+            }
+        ],
+        "qualityBands": {
+            "seed": {
+                "shortDescription": "The initial idea of a product. May not be stable code.",
+                "href": "https://github.com/versionone/VersionOne.SDK.JavaScript/blob/master/CONTRIBUTING.md#seed"
+            },
+            "sapling": {
+                "shortDescription": "The product is undergoing rapid growth. The code works but expect major changes.",
+                "href": "https://github.com/versionone/VersionOne.SDK.JavaScript/blob/master/CONTRIBUTING.md#sapling"
+            },
+            "mature": {
+                "shortDescription": "The product is stable. The code will continue to evolve with minimum breaking changes.",
+                "href": "https://github.com/versionone/VersionOne.SDK.JavaScript/blob/master/CONTRIBUTING.md#mature"
+            }
+        }
+    }
+}
