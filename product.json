@@ -62,7 +62,7 @@
         ],
         "qualityBands": {
             "seed": {
-                "shortDescription": "The initial idea of a product. May not be stable code.",
+                "shortDescription": "Early access build. Use with caution.",
                 "href": "https://github.com/versionone/VersionOne.SDK.JavaScript/blob/master/CONTRIBUTING.md#seed"
             },
             "sapling": {
