@@ -50,7 +50,7 @@ The `v1browsersdk.js` file is built by running this command:
 
 ### Configure your own on-premise VersionOne instance to allow CORS requests
 
-The VersionOne application does not currently have an option to enable CORS support. CORS is not supported in our hosted environment; therefore, you will not be able to use this JavaScript library for AJAX requests unless the pages are hosted in your custom directory.
+The VersionOne application does not currently have an option to enable CORS support. As such, CORS is not supported in our hosted environment. You can still use this JavaScript library for server-side applications. For client-side AJAX requests, the web pages must be sent to support to be hosted in your custom directory.
 
 If you have your own on-premise installation, open the VersionOne `Web.config` file and add the three entires 
 after the `<add name="VersionOne" ... />` entry:
