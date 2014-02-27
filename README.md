@@ -78,8 +78,6 @@ Need to bootstrap on VersionOne SDK.JavaScript quickly? VersionOne services brin
 
 http://www.versionone.com/training/product_training_services/
 
-You can also pop into our public HipChat room at: http://www.hipchat.com/grNeYfSGw
-
 Not into the chat thing? Get help from the community of VersionOne developers:
 
 http://groups.google.com/group/versionone-dev/
