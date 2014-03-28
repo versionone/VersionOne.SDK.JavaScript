@@ -1,7 +1,7 @@
-var  V1Meta = require('./v1meta').V1Meta;
-var  V1Server = require('./client').V1Server;
-  
-var hostname = "www14.v1host.com"; 
+var  V1Meta = require('../lib/v1meta').V1Meta;
+var  V1Server = require('../lib/client').V1Server;
+
+var hostname = "www14.v1host.com";
 var instance = "v1sdktesting";
 var username = "api";
 var password = "api";
@@ -22,7 +22,7 @@ v1.query({
         console.log(result.Email);
         console.log(result.Username);
         console.log(result.ID);
-    },    
+    },
     error: function(err) { // NOTE: this is not working correctly yet, not called...
         console.log(err);
     }

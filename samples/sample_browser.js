@@ -1,5 +1,5 @@
-var  v1sdk = require('./v1sdk');
-  
+var  v1sdk = require('../v1sdk');
+
 var hostname = "ec2-54-205-135-234.compute-1.amazonaws.com";
 var instance = "VersionOne";
 var username = "admin";
@@ -16,10 +16,10 @@ v1.query({
         IsSelf: true
     },
     select: ['Email', 'Username', 'ID'], // 'OwnedWorkitems.@Count'],
-    
+
     success: function(result) {
         console.log(result);
-        $('#error').hide();    
+        $('#error').hide();
         $("#Email").text(result.Email);
         $("#ID").text(result.ID);
         $("#Username").text(result.Username);
@@ -28,9 +28,9 @@ v1.query({
             .accordion({collapsible:true})
             .show();
     },
-    
+
     error: function(err) { // NOTE: this is not working correctly yet, not called...
         $('#memberPanel').hide();
-        $('#error').html(err).show();        
+        $('#error').html(err).show();
     }
 });
