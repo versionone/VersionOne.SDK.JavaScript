@@ -1,1 +1,1 @@
-coffee -c *.coffee
+coffee -c --output lib src
