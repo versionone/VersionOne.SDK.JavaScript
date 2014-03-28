@@ -1,15 +1,19 @@
 {
-"name":         "v1jssdk",
-"version":      "0.3.1",
-"description":  "VersionOne API Client for Node",
-"keywords":     ["VersionOne", "V1"],
-"homepage":     "http://github.com/VersionOne/v1jssdk",
-"repository":   {"type": "git", "url": ""},
-"dependencies": {
-  "elementtree": "*",
-  "request" : "*"
+  "name": "v1jssdk",
+  "version": "0.3.1",
+  "description": "VersionOne API Client for Node",
+  "keywords": [
+    "VersionOne",
+    "V1"
+  ],
+  "homepage": "http://github.com/VersionOne/v1jssdk",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "main": "v1sdk.js",
+  "dependencies": {
+    "elementtree": "^0.1.6",
+    "request": "*"
   }
 }
-
-
-
