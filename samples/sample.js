@@ -15,7 +15,8 @@ var v1 = new V1Meta(server);
 v1.query({
     from: "Member",
     where: {
-        IsSelf: 'true'
+        IsSelf: 'true',
+        Username: 'api'
     },
     select: ['Email', 'Username', 'ID'],
     success: function(result) {
