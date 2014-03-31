@@ -84,6 +84,9 @@ module.exports =
                 headers: {
                     'user-agent': 'VersionOne JS SDK Client/5.0 ' + SDK_CLIENT_VERSION
                 }
+
+            req_options.headers['Content-Length'] = options.postdata.length if options.postdata?
+
             request_done = (response) ->
                 alldata = []
                 response.on 'data', (data)->
