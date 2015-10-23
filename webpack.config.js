@@ -5,8 +5,8 @@ module.exports = {
 	entry: "./v1sdk.coffee",
 	output: {
 		path: path.join(__dirname, './dist'),
-		filename: 'v1sdk.js',
-		library: 'v1sdk',
+		filename: 'v1jssdk.js',
+		library: 'v1jssdk',
 		libraryTarget: 'umd'
 	},
 	resolve: {
