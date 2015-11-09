@@ -1,6 +1,6 @@
 {
-  "name": "v1jssdk",
-  "version": "0.3.3",
+  "name": "v1sdk",
+  "version": "0.3.5",
   "description": "VersionOne API Client for JavaScript",
   "keywords": [
     "VersionOne",
@@ -8,7 +8,7 @@
     "SDK"
   ],
   "homepage": "https://github.com/versionone/VersionOne.SDK.JavaScript",
-  "main": "./dist/v1jssdk.js",
+  "main": "./dist/v1sdk.js",
   "repository": {
     "type": "git",
     "url": "git@github.com:versionone/VersionOne.SDK.JavaScript.git"
