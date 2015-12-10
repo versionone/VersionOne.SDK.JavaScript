@@ -148,5 +148,5 @@ module.exports =
         update_asset: (options, callback) ->
             newdata = et.tostring(options.xmldata)
             path = '/rest-1.v1/Data/' + options.asset_type_name + '/' + options.id
-            @get_xml({path:path, postdata:newdata})       
+            @get_xml({path:path, postdata:newdata}, callback)
             
