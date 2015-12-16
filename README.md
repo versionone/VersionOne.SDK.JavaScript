@@ -13,25 +13,18 @@ In general, StackOverflow is your best option for getting support for the Versio
 
 The source code for the VersionOne JavaScript SDK is free and open-source, and we encourage you to improve it by [submitting pull requests](https://help.github.com/articles/using-pull-requests)!
 
+## Installation
+
+`npm install v1jssdk`
+
 ## Getting Started With [`sample.js`](sample.js) on Node.js
 
-To build the libraries, you'll need Node.js and CoffeeScript installed.
+To build the libraries, you'll need Node.js.
 
-To install CoffeeScript:
-
-`npm install coffee-script -g`
-
-To install browserify globally (only needed if you want to build the `v1browsersdk.js` file)
-
-`npm install browserify -g` 
-
-Next, to install the other dependencies, type:
-
-`npm install`
-
-Finally, to build, type:
-
-`. ./build.sh`
+```bash
+npm install # install dependencies
+npm run build # build distributable SDK
+```
 
 You can now run the sample against our public test instance by typing:
 

@@ -1,16 +1,32 @@
 {
-    "name": "v1jssdk",
-    "version": "0.3.1",
-    "description": "VersionOne API Client for Node",
-    "keywords": ["VersionOne", "V1"],
-    "homepage": "http://github.com/VersionOne/v1jssdk",
-    "main": "v1sdk.js",
-    "repository": {
-        "type": "git",
-        "url": ""
-    },
-    "dependencies": {
-        "elementtree": "*",
-        "request": "*"
-    }
+  "name": "v1sdk",
+  "version": "0.3.5",
+  "description": "VersionOne API Client for JavaScript",
+  "keywords": [
+    "VersionOne",
+    "V1",
+    "SDK"
+  ],
+  "homepage": "https://github.com/versionone/VersionOne.SDK.JavaScript",
+  "main": "./dist/v1sdk.js",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:versionone/VersionOne.SDK.JavaScript.git"
+  },
+  "scripts": {
+    "prepublish": "npm run build",
+    "build": "webpack"
+  },
+  "dependencies": {
+    "elementtree": "*",
+    "request": "*"
+  },
+  "devDependencies": {
+    "babel": "5.8.23",
+    "babel-core": "5.8.25",
+    "babel-loader": "5.3.2",
+    "coffee-loader": "0.7.2",
+    "coffee-script": "1.10.0",
+    "webpack": "1.12.2"
+  }
 }
