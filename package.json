@@ -14,9 +14,10 @@
     "url": "git@github.com:versionone/VersionOne.SDK.JavaScript.git"
   },
   "scripts": {
-    "prepublish": "npm run build",
+    "prepublish": "npm run lint && npm test && npm run build",
     "build": "webpack",
-	"lint": "eslint ./src"
+    "lint": "eslint ./src",
+    "test": "webpack --config ./webpack.config.test && mocha ./tmp/specs.js"
   },
   "dependencies": {
     "elementtree": "*",
@@ -27,8 +28,11 @@
     "babel-core": "5.8.25",
     "babel-eslint": "4.1.3",
     "babel-loader": "5.3.2",
+    "babel-runtime": "6.3.19",
+    "chai": "3.4.1",
     "coffee-loader": "0.7.2",
     "coffee-script": "1.10.0",
+    "mocha": "2.3.4",
     "webpack": "1.12.2"
   }
 }
