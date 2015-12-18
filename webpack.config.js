@@ -1,13 +1,13 @@
 var webpack = require('webpack');
 var path = require('path');
+var fs = require('fs');
 
 module.exports = {
 	entry: "./v1sdk.coffee",
+	target: 'node',
 	output: {
 		path: path.join(__dirname, './dist'),
-		filename: 'v1sdk.js',
-		library: 'v1sdk',
-		libraryTarget: 'umd'
+		filename: 'v1sdk.js'
 	},
 	resolve: {
 		extensions: ['', '.js', '.json', '.coffee']
@@ -26,6 +26,7 @@ module.exports = {
 			}
 		]
 	},
+	externals: nodeModules(),
 	plugins: [
 		new webpack.optimize.DedupePlugin(),
 		new webpack.optimize.OccurenceOrderPlugin()
@@ -36,3 +37,14 @@ module.exports = {
 		optional: ['runtime']
 	}
 };
+
+function nodeModules() {
+	return fs.readdirSync(path.join(__dirname, 'node_modules'))
+		.filter(function (x) {
+			return ['.bin'].indexOf(x) === -1;
+		})
+		.reduce(function (output, mod) {
+			output[mod] = 'commonjs ' + mod;
+			return output;
+		}, {});
+}
