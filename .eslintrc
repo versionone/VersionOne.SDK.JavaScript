@@ -5,9 +5,6 @@
 	"mocha": true,
 	"node": true
   },
-  "plugins": [
-	"react"
-  ],
   "ecmaFeatures": {
 	"arrowFunctions": true,
 	"blockBindings": true,
@@ -226,66 +223,6 @@
 		  "!"
 		]
 	  }
-	],
-	"react/display-name": 0,
-	"react/jsx-curly-spacing": [
-	  2,
-	  "never",
-	  {
-		"allowMultiline": false
-	  }
-	],
-	"react/jsx-max-props-per-line": 0,
-	"react/jsx-indent-props": [
-	  0,
-	  "tab"
-	],
-	"react/jsx-no-duplicate-props": [
-	  2,
-	  {
-		"ignoreCase": true
-	  }
-	],
-	"react/jsx-no-literals": 0,
-	"react/jsx-no-undef": 2,
-	"react/jsx-quotes": [
-	  2,
-	  "double",
-	  "avoid-escape"
-	],
-	"react/jsx-sort-prop-types": [
-	  1,
-	  {
-		"ignoreCase": false
-	  }
-	],
-	"react/jsx-sort-props": [
-	  1,
-	  {
-		"ignoreCase": false
-	  }
-	],
-	"react/jsx-uses-react": 2,
-	"react/jsx-uses-vars": 2,
-	"react/no-danger": 1,
-	"react/no-set-state": 0,
-	"react/no-did-mount-set-state": 2,
-	"react/no-did-update-set-state": 2,
-	"react/no-multi-comp": 1,
-	"react/no-unknown-property": 2,
-	"react/prop-types": 2,
-	"react/react-in-jsx-scope": 2,
-	"react/require-extension": [
-	  2,
-	  {
-		"extensions": [
-		  ".js",
-		  ".jsx"
-		]
-	  }
-	],
-	"react/self-closing-comp": 2,
-	"react/sort-comp": 1,
-	"react/wrap-multilines": 2
+	]
   }
 }
