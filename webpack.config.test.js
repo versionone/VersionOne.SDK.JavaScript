@@ -1,17 +1,43 @@
 var webpack = require('webpack');
 var path = require('path');
 var fs = require('fs');
-var config = require('./webpack.config');
 
-config.entry = getEntries();
-config.output = {
-	path: path.join(__dirname, './tmp'),
-	filename: 'specs.js'
+module.exports = {
+	entry: getTestEntries(),
+	target: 'node',
+	output: {
+		path: path.join(__dirname, './tmp'),
+		filename: 'specs.js'
+	},
+	resolve: {
+		extensions: ['', '.js', '.json', '.coffee']
+	},
+	module: {
+		loaders: [
+			{
+				test: /\.(js)$/,
+				exclude: /node_modules/,
+				loader: 'babel-loader?plugins=rewire'
+			},
+			{
+				test: /\.(coffee)$/,
+				exclude: /node_modules/,
+				loader: 'coffee-loader'
+			}
+		]
+	},
+	plugins: [
+		new webpack.optimize.DedupePlugin(),
+		new webpack.optimize.OccurenceOrderPlugin()
+	],
+	babel: {
+		stage: 2,
+		loose: ['all'],
+		optional: ['runtime']
+	}
 };
-config.externals = [];
-module.exports = config;
 
-function getEntries() {
+function getTestEntries() {
 	return [
 		path.join(__dirname, 'specs', 'setup.js')
 	]
