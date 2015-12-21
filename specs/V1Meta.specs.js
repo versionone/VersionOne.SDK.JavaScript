@@ -10,9 +10,7 @@ describe('src/V1Meta', function () {
 				hostname: 'some URL',
 				instance: 'some instance',
 				protocol: 'https',
-				port: '8081',
-				username: 'admin',
-				password: 'password'
+				port: '8081'
 			};
 		});
 

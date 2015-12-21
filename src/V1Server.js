@@ -1,11 +1,11 @@
-export function getUrlsForV1Server({ hostname, instance, protocol, port, username, password }) {
-	const rootUrl = getUrlToV1Server({hostname, instance, protocol, port, username, password});
+export function getUrlsForV1Server({ hostname, instance, protocol, port }) {
+	const rootUrl = getUrlToV1Server({hostname, instance, protocol, port });
 	return {
 		rest: () => restUrl(rootUrl)
 	}
 }
 
-function getUrlToV1Server({ hostname, instance, protocol, port, username, password }) {
+function getUrlToV1Server({ hostname, instance, protocol, port }) {
 	return `${protocol}://${hostname}/${instance}:${port}`;
 }
 

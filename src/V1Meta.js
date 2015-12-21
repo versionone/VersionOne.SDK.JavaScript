@@ -4,7 +4,7 @@ import {getUrlsForV1Server} from './V1Server';
 
 export default class V1Meta {
 	constructor({hostname, instance, protocol, port, username, password, post, get}) {
-		this.urls = getUrlsForV1Server({hostname, instance, protocol, port, username, password});
+		this.urls = getUrlsForV1Server({hostname, instance, protocol, port});
 		this.post = post;
 		this.get = get;
 		const encodedAuthenticationCredentials = btoa(`${username}:${password}`);
