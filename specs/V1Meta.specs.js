@@ -4,7 +4,7 @@ import Sut from './../src/V1Meta';
 describe('src/V1Meta', function () {
 	let assetTransform, getUrlForV1Server;
 	describe('given a V1 instance server url, protocol, port, username, password, AJAX post method, and AJAX get method', () => {
-		let v1ServerInfo, post, get;
+		let v1ServerInfo, post, get, serverData;
 		beforeEach(() => {
 			v1ServerInfo = {
 				url: 'some URL',
@@ -13,7 +13,9 @@ describe('src/V1Meta', function () {
 				username: 'admin',
 				password: 'password'
 			};
-			post = sinon.stub().returns(new Promise(()=> {
+			serverData = {server: 'data'};
+			post = sinon.stub().returns(new Promise((resolve, reject) => {
+				resolve(serverData);
 			}));
 			get = sinon.stub().returns(new Promise(()=> {
 			}));
@@ -53,8 +55,9 @@ describe('src/V1Meta', function () {
 					post.calledWith(url, transformedAssetData).should.be.true;
 				});
 
-				it('it should return a Promise which resolves to the v1Client\'s response upon success', () => {
+				it('it should return a Promise which resolves to the v1Client\'s response upon success', (done) => {
 					actual.should.be.an.instanceof(Promise);
+					actual.should.eventually.equal(serverData).notify(done);
 				});
 			});
 		});
