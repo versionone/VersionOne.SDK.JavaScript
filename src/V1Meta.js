@@ -1,4 +1,4 @@
-import assetTransform from './assetTransform';
+import transformDataToAsset from './transformDataToAsset';
 import {getUrlForV1Server} from './V1Server';
 
 export default class V1Meta {
@@ -9,7 +9,7 @@ export default class V1Meta {
 	}
 
 	create(assetType, assetAttributeData) {
-		const postData = assetTransform(assetType, assetAttributeData);
+		const postData = transformDataToAsset(assetType, assetAttributeData);
 		return this.post(this.url, postData);
 	}
 }
