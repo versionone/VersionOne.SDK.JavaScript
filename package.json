@@ -20,6 +20,7 @@
     "test": "webpack --config ./webpack.config.test && mocha ./tmp/specs.js"
   },
   "dependencies": {
+    "btoa": "^1.1.2",
     "elementtree": "*",
     "request": "*"
   },

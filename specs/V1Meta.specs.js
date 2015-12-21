@@ -2,12 +2,13 @@ import sinon from 'sinon';
 import Sut from './../src/V1Meta';
 
 describe('src/V1Meta', function () {
-	let transformDataToAsset, getUrlForV1Server, actual;
-	describe('given a V1 instance server url, protocol, port, username, password', () => {
+	let transformDataToAsset, getUrlsForV1Server, actual;
+	describe('given a V1 hostname, server instance, protocol, port, username, password', () => {
 		let v1ServerInfo, serverData;
 		beforeEach(() => {
 			v1ServerInfo = {
-				url: 'some URL',
+				hostname: 'some URL',
+				instance: 'some instance',
 				protocol: 'https',
 				port: '8081',
 				username: 'admin',
@@ -37,14 +38,19 @@ describe('src/V1Meta', function () {
 				});
 
 				describe('when creating the asset', () => {
-					let transformedAssetData, url;
+					let transformedAssetData, url, encodedCreds, btoa;
 					beforeEach(() => {
 						transformedAssetData = {Attributes: {Value: 20}};
 						transformDataToAsset = sinon.stub().withArgs(assetType, assetData).returns(transformedAssetData);
 						url = 'my V1 Instance URL';
-						getUrlForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns(url);
+						encodedCreds = 'some encoded stuff';
+						getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
+							rest: sinon.stub().returns(url)
+						});
+						btoa = sinon.stub().withArgs(`${v1ServerInfo.username}:${v1ServerInfo.password}`).returns(encodedCreds);
 						Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
-						Sut.__Rewire__('getUrlForV1Server', getUrlForV1Server);
+						Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
+						Sut.__Rewire__('btoa', btoa);
 						actual = (new Sut({...v1ServerInfo, post, get})).create(assetType, assetData);
 					});
 
@@ -52,12 +58,12 @@ describe('src/V1Meta', function () {
 						transformDataToAsset.calledWith(assetType, assetData).should.be.true;
 					});
 
-					it('it should format the URL to the V1 server instance', () => {
-						getUrlForV1Server.calledWith({...v1ServerInfo}).should.be.true;
+					it('it should get the Rest URL to the V1 server instance', () => {
+						getUrlsForV1Server.calledWith({...v1ServerInfo}).should.be.true;
 					});
 
-					it('it should use the transformed asset data to post to V1 instance URL', () => {
-						post.calledWith(url, transformedAssetData).should.be.true;
+					it('it should use the transformed asset data to post to V1 instance Url with basic auth headers', () => {
+						post.calledWith(url, transformedAssetData, {Authorization: `Basic ${encodedCreds}`}).should.be.true;
 					});
 
 					it('it should return a Promise which resolves to the v1Client\'s response upon success', (done) => {

@@ -1,16 +1,18 @@
-import invariant from 'invariant';
+import btoa from 'btoa';
 import transformDataToAsset from './transformDataToAsset';
-import {getUrlForV1Server} from './V1Server';
+import {getUrlsForV1Server} from './V1Server';
 
 export default class V1Meta {
-	constructor({url, protocol, port, username, password, post, get}) {
-		this.url = getUrlForV1Server({url, protocol, port, username, password});
+	constructor({hostname, instance, protocol, port, username, password, post, get}) {
+		this.urls = getUrlsForV1Server({hostname, instance, protocol, port, username, password});
 		this.post = post;
 		this.get = get;
+		const encodedAuthenticationCredentials = btoa(`${username}:${password}`);
+		this.authHeader = `Basic ${encodedAuthenticationCredentials}`;
 	}
 
 	create(assetType, assetAttributeData) {
 		const postData = transformDataToAsset(assetType, assetAttributeData);
-		return Promise.resolve(this.post(this.url, postData));
+		return Promise.resolve(this.post(this.urls.rest(), postData, {Authorization: this.authHeader}));
 	}
 }
