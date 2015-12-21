@@ -1,3 +1,4 @@
+import invariant from 'invariant';
 import transformDataToAsset from './transformDataToAsset';
 import {getUrlForV1Server} from './V1Server';
 
@@ -10,6 +11,6 @@ export default class V1Meta {
 
 	create(assetType, assetAttributeData) {
 		const postData = transformDataToAsset(assetType, assetAttributeData);
-		return this.post(this.url, postData);
+		return Promise.resolve(this.post(this.url, postData));
 	}
 }
