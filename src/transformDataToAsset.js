@@ -1,4 +1,4 @@
-export default function (assetData) {
+export default function(assetData) {
 	return {
 		Attributes: reduceAssetData(assetData)
 	};
@@ -12,14 +12,12 @@ function reduceAssetData(obj) {
 				name: key,
 				value: attributeData.map(reduceRelationalAttributes)
 			};
-		}
-		else {
+		} else {
 			if (isFunction(attributeData)) {
 				output[key] = {
 					value: obj[key]()
 				};
-			}
-			else {
+			} else {
 				output[key] = {
 					value: obj[key]
 				};
@@ -31,7 +29,7 @@ function reduceAssetData(obj) {
 }
 
 function reduceRelationalAttributes(obj) {
-	if (typeof obj === 'string'){
+	if (typeof obj === 'string') {
 		return {
 			idref: obj,
 			act: 'add'

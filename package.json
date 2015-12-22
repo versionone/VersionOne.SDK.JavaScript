@@ -17,6 +17,7 @@
     "prepublish": "npm run lint && npm test && npm run build",
     "build": "webpack",
     "lint": "eslint ./src",
+	"pretest": "npm run lint",
     "test": "webpack --config ./webpack.config.test && mocha ./tmp/specs.js"
   },
   "dependencies": {
