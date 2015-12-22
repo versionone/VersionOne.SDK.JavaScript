@@ -24,7 +24,7 @@ var v1 = new v1sdk.V1Meta({
 			method: 'POST',
 			data: data,
 			headers: headerObj, // Include provided authorization headers { Authorization: 'Basic: .....' }
-			dataType: 'application/json' // SDK only supports JSON from the V1 Server
+			dataType: 'json' // SDK only supports JSON from the V1 Server
 		});
 	},
 	get: function (url, data) {
@@ -32,7 +32,7 @@ var v1 = new v1sdk.V1Meta({
 			url: url,
 			method: 'GET',
 			data: data,
-			dataType: 'application/json' // SDK only supports JSON from the V1 Server
+			dataType: 'json' // SDK only supports JSON from the V1 Server
 
 		});
 	}
