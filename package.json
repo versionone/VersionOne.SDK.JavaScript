@@ -14,7 +14,7 @@
     "url": "git@github.com:versionone/VersionOne.SDK.JavaScript.git"
   },
   "scripts": {
-    "prepublish": "npm run lint && npm test && npm run build",
+    "preparepublish": "npm run lint && npm test && npm run build",
     "build": "webpack",
     "lint": "eslint ./src",
     "test": "webpack --config ./webpack.config.test && mocha ./tmp/specs.js"
@@ -36,6 +36,7 @@
     "chai-as-promised": "^5.2.0",
     "coffee-loader": "0.7.2",
     "coffee-script": "1.10.0",
+    "eslint": "^1.10.3",
     "mocha": "2.3.4",
     "sinon": "2.0.0-pre",
     "webpack": "1.12.2"
