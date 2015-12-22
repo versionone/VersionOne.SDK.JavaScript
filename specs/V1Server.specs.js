@@ -12,7 +12,7 @@ describe('src/V1Server', function () {
 			v1ServerInfo = {
 				hostname: 'some URL',
 				instance: 'some Instance',
-				protocol: 'https',
+				protocol: 'https:',
 				port: '8081'
 			};
 		});
@@ -33,7 +33,7 @@ describe('src/V1Server', function () {
 			});
 
 			it('it should return the Rest API Url', () => {
-				actual.should.equal('https://some URL/some Instance:8081/rest-v1.v1');
+				actual.should.equal('https://some URL/some Instance:8081/rest-1.v1/Data');
 			});
 		});
 
