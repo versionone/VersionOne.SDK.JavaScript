@@ -205,7 +205,7 @@ describe('src/V1Meta', function () {
 					});
 
 					it('it should call the get method with the transformed asset data', () => {
-						getFn.calledWith(`${url}/${assetType}`, transformedAssetData).should.be.true;
+						getFn.calledWith(`${url}/${assetType}/${oidToken}`, transformedAssetData).should.be.true;
 					});
 
 					it('it should return a Promise which resolves to the v1Client\'s response upon success', (done) => {

@@ -29,7 +29,7 @@ export default class V1Meta {
 
 	update(oidToken, assetType, assetData) {
 		const postData = transformDataToAsset(assetData);
-		const url = `${this.urls.rest()}/${assetType}`;
+		const url = `${this.urls.rest()}/${assetType}/${oidToken}`;
 		return Promise.resolve(this.getFn(url, postData));
 	}
 
