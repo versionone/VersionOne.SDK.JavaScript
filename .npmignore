@@ -8,3 +8,6 @@ node_modules
 /Tests
 /*.*
 /src
+/tmp
+/specs
+/examples
