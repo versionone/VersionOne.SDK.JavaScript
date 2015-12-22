@@ -1,4 +1,5 @@
 import btoa from 'btoa';
+import invariant from 'invariant';
 import transformDataToAsset from './transformDataToAsset';
 import {getUrlsForV1Server} from './V1Server';
 
@@ -21,5 +22,13 @@ export default class V1Meta {
 		const postData = transformDataToAsset(assetData);
 		const url = `${this.urls.rest()}/${assetType}`;
 		return Promise.resolve(this.getFn(url, postData));
+	}
+
+	query(queryObj) {
+		invariant(queryObj.from, `Error: there was no \`from\` property on provided query: ${queryObj}`);
+		invariant(queryObj.select, `Error: there was no \`from\` property on provided query: ${queryObj}`);
+		invariant(Array.isArray(queryObj.select), `Error: there was no \`from\` property on provided query: ${queryObj}`);
+		const url = this.urls.query();
+		return this.getFn(url, queryObj);
 	}
 }

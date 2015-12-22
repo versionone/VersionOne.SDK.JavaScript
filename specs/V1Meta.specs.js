@@ -1,4 +1,5 @@
 import sinon from 'sinon';
+import should from './setup';
 import Sut from './../src/V1Meta';
 
 describe('src/V1Meta', function () {
@@ -111,7 +112,7 @@ describe('src/V1Meta', function () {
 				});
 			});
 
-			describe('given an Oid token and asset type and asset attributes', () => {
+			describe('given an Oid token, asset type and asset attributes', () => {
 				let oidToken, assetData, assetType;
 				beforeEach(() => {
 					assetType = 'Actual';
@@ -142,6 +143,95 @@ describe('src/V1Meta', function () {
 
 					it('it should call the get method with the transformed asset data', () => {
 						getFn.calledWith(`${url}/${assetType}`, transformedAssetData).should.be.true;
+					});
+
+					it('it should return a Promise which resolves to the v1Client\'s response upon success', (done) => {
+						actual.should.be.an.instanceof(Promise);
+						actual.should.eventually.eql(serverData).notify(done);
+					});
+				});
+			});
+
+			describe('given an invalid query object missing a from property', () => {
+				let query;
+				beforeEach(() => {
+					query = {};
+				});
+				describe('when querying V1 with the provided query object', () => {
+					let fn;
+					beforeEach(() => {
+						fn = () => (new Sut({...v1ServerInfo, postFn, getFn})).query(query);
+					});
+
+					it('it should throw an exception stating that a select property was not specified', () => {
+						should.Throw(fn);
+					});
+				});
+			});
+
+			describe('given an invalid query object missing a select property', () => {
+				let query;
+				beforeEach(() => {
+					query = {
+						from: 'Actual'
+					};
+				});
+				describe('when querying V1 with the provided query object', () => {
+					let fn;
+					beforeEach(() => {
+						fn = () => (new Sut({...v1ServerInfo, postFn, getFn})).query(query);
+					});
+
+					it('it should throw an exception stating that a select property was not specified', () => {
+						should.Throw(fn);
+					});
+				});
+			});
+
+			describe('given an invalid query object with a select property that is not an array', () => {
+				let query;
+				beforeEach(() => {
+					query = {
+						from: 'Actual',
+						select: 'Name'
+					};
+				});
+				describe('when querying V1 with the provided query object', () => {
+					let fn;
+					beforeEach(() => {
+						fn = () => (new Sut({...v1ServerInfo, postFn, getFn})).query(query);
+					});
+
+					it('it should throw an exception stating that a select property was not specified', () => {
+						should.Throw(fn);
+					});
+				});
+			});
+
+			describe('given a valid query object', () => {
+				let query, queryV1Url, actual;
+				beforeEach(() => {
+					query = {
+						from: 'Actual',
+						select: ['Name']
+					};
+				});
+				describe('when querying V1 with the provided query object', () => {
+					let fn;
+					beforeEach(() => {
+						getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
+							query: sinon.stub().returns(queryV1Url)
+						});
+						Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
+						actual = (new Sut({...v1ServerInfo, postFn, getFn})).query(query);
+					});
+
+					it('it should use the query Url provided by the getUrlsForV1Server', () => {
+						getUrlsForV1Server.calledWith({...v1ServerInfo}).should.be.true;
+					});
+
+					it('it should use the provided get function and pass url and pass the query as the payload', () => {
+						getFn.calledWith(queryV1Url, query).should.be.true;
 					});
 
 					it('it should return a Promise which resolves to the v1Client\'s response upon success', (done) => {
