@@ -16,7 +16,7 @@ describe('src/transformDataToAsset', function () {
 			beforeEach(() => {
 				actual = Sut(assetData);
 			});
-			it.skip('it should return an object with Attributes property', () => {
+			it('it should return an object with Attributes property', () => {
 				should.exist(actual.Attributes);
 			});
 		});

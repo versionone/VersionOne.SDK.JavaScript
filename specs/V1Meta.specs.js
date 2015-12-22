@@ -226,7 +226,7 @@ describe('src/V1Meta', function () {
 						fn = () => (new Sut({...v1ServerInfo, postFn, getFn})).query(query);
 					});
 
-					it.skip('it should throw an exception stating that a select property was not specified', () => {
+					it('it should throw an exception stating that a select property was not specified', () => {
 						should.Throw(fn);
 					});
 				});
@@ -245,7 +245,7 @@ describe('src/V1Meta', function () {
 						fn = () => (new Sut({...v1ServerInfo, postFn, getFn})).query(query);
 					});
 
-					it.skip('it should throw an exception stating that a select property was not specified', () => {
+					it('it should throw an exception stating that a select property was not specified', () => {
 						should.Throw(fn);
 					});
 				});
@@ -265,7 +265,7 @@ describe('src/V1Meta', function () {
 						fn = () => (new Sut({...v1ServerInfo, postFn, getFn})).query(query);
 					});
 
-					it.skip('it should throw an exception stating that a select property was not specified', () => {
+					it('it should throw an exception stating that a select property was not specified', () => {
 						should.Throw(fn);
 					});
 				});

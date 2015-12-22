@@ -22,7 +22,7 @@ describe('src/V1Server', function () {
 				actual = Sut.getUrlsForV1Server(v1ServerInfo);
 			});
 
-			it.skip('it should return a way to get the Rest API Url', () => {
+			it('it should return a way to get the Rest API Url', () => {
 				should.exist(actual.rest);
 			});
 		});

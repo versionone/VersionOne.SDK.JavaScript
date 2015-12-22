@@ -17,7 +17,7 @@
     "preparepublish": "npm run lint && npm test && npm run build",
     "build": "babel -d dist src",
     "lint": "eslint ./src",
-    "test": "babel -d dist src --plugins rewire && babel  --plugins rewire -d tmp specs && mocha ./tmp/**/*.specs.js"
+    "test": "babel -d dist src --plugins rewire && babel -d tmp specs && mocha ./tmp/**/*.specs.js"
   },
   "dependencies": {
     "btoa": "^1.1.2",
