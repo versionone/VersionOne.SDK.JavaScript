@@ -9,28 +9,37 @@ function reduceAssetData(obj) {
 		const attributeData = obj[key];
 		if (Array.isArray(attributeData)) {
 			output[key] = {
-				_type: 'Relation',
+				name: key,
 				value: attributeData.map(reduceRelationalAttributes)
 			};
 		}
-		else if (isFunction(attributeData)) {
-			output[key] = {
-				value: obj[key]()
-			};
-		}
 		else {
-			console.log(attributeData);
-			output[key] = {
-				value: obj[key]
-			};
+			if (isFunction(attributeData)) {
+				output[key] = {
+					value: obj[key]()
+				};
+			}
+			else {
+				output[key] = {
+					value: obj[key]
+				};
+			}
+			output[key].act = 'set';
 		}
 		return output;
 	}, {});
 }
 
 function reduceRelationalAttributes(obj) {
+	if (typeof obj === 'string'){
+		return {
+			idref: obj,
+			act: 'add'
+		};
+	}
 	return Object.keys(obj).reduce((output, key)=> {
-		output[key] = obj[key];
+		output.idref = obj[key];
+		output.act = obj.act ? obj.act : 'add';
 		return output;
 	}, {});
 }
