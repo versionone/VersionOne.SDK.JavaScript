@@ -7,6 +7,54 @@ import Sut from './../dist/V1Meta';
 
 describe('src/V1Meta', function () {
 	let transformDataToAsset, getUrlsForV1Server, actual;
+
+	describe('given a V1 hostname, server instance, protocol, port, post and get methods and no username or password', () => {
+		let v1ServerInfo, postFn, getFn;
+		beforeEach(() => {
+			v1ServerInfo = {
+				hostname: 'some URL',
+				instance: 'some instance',
+				protocol: 'https',
+				port: '8081'
+			};
+			postFn = sinon.stub().returns({then: () => serverData});
+			getFn = sinon.stub().returns({then: () => serverData});
+		});
+
+		describe('when creating an asset', () => {
+			let transformedAssetData, url, encodedCreds, btoa;
+			beforeEach(() => {
+				let assetType = 'Actual';
+				let assetData = {};
+				transformedAssetData = {Attributes: {Value: 20}};
+				transformDataToAsset = sinon.stub().withArgs(assetType, assetData).returns(transformedAssetData);
+				url = 'my V1 Instance URL';
+				encodedCreds = 'some encoded stuff';
+				getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
+					rest: sinon.stub().returns(url)
+				});
+				btoa = sinon.stub().withArgs(`${v1ServerInfo.username}:${v1ServerInfo.password}`).returns(encodedCreds);
+				Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
+				Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
+				Sut.__Rewire__('btoa', btoa);
+				actual = (new Sut({...v1ServerInfo, postFn, getFn})).create(assetType, assetData);
+			});
+
+			afterEach(() => {
+				sinon.restore(transformDataToAsset);
+				sinon.restore(getUrlsForV1Server);
+				sinon.restore(btoa);
+			});
+
+			it('it should not include authorization headers', () => {
+				postFn.calledWith(`${url}/Actual`, transformedAssetData, {
+					Accept: 'application/json',
+					'Content-Type': 'application/json'
+				}).should.be.true;
+			});
+		});
+	});
+
 	describe('given a V1 hostname, server instance, protocol, port, username, password', () => {
 		let v1ServerInfo, serverData;
 		beforeEach(() => {
@@ -89,7 +137,13 @@ describe('src/V1Meta', function () {
 						Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
 						Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
 						Sut.__Rewire__('btoa', btoa);
-						actual = (new Sut({...v1ServerInfo, postFn, getFn})).create(assetType, assetData);
+						actual = (new Sut({
+							...v1ServerInfo,
+							username: 'username',
+							password: 'password',
+							postFn,
+							getFn
+						})).create(assetType, assetData);
 					});
 
 					afterEach(() => {
@@ -107,7 +161,11 @@ describe('src/V1Meta', function () {
 					});
 
 					it('it should use the transformed asset data to post to V1 instance Url with basic auth headers', () => {
-						postFn.calledWith(`${url}/${assetType}`, transformedAssetData, {Authorization: `Basic ${encodedCreds}`}).should.be.true;
+						postFn.calledWith(`${url}/${assetType}`, transformedAssetData, {
+							Authorization: `Basic ${encodedCreds}`,
+							Accept: 'application/json',
+							'Content-Type': 'application/json'
+						}).should.be.true;
 					});
 
 					it('it should return a Promise which resolves to the v1Client\'s response upon success', (done) => {
