@@ -1,6 +1,6 @@
 # VersionOne JavaScript SDK 
 
-The VersionOne JavaScript SDK is an open-source and community supported client for the VersionOne API that can be used with JavaScript or CoffeeScript, either from Node.JS on the server, or (experimentally) from a web browser.
+The VersionOne JavaScript SDK is an open-source and community supported client for the VersionOne API that can be used with JavaScript or CoffeeScript, either from Node.JS on the server or from a web browser.
 
 As an open-sourced and community supported project, the VersionOne JavaScript SDK is not formally supported by VersionOne.
 
@@ -12,6 +12,11 @@ That said, there are a number of options for getting your questions addressed:
 In general, StackOverflow is your best option for getting support for the VersionOne JavaScript SDK.
 
 The source code for the VersionOne JavaScript SDK is free and open-source, and we encourage you to improve it by [submitting pull requests](https://help.github.com/articles/using-pull-requests)!
+
+## Caveats
+
+* 1.x.x SDK is only supported with a VersionOne instance ~15.3.
+* 1.x.x SDK does not support querying for Meta definitions; please use any 0.x.x version.
 
 ## Installation
 
