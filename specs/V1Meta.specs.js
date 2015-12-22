@@ -14,15 +14,49 @@ describe('src/V1Meta', function () {
 			};
 		});
 
-		describe('given post and get methods', () => {
-			let post, get;
+		describe('given a post method that does not return a ES2105 Promise', () => {
+			let postFn, getFn, serverData;
+			beforeEach(() => {
+				serverData = {some: 'server data'};
+				postFn = sinon.stub().returns({then: () => serverData});
+				getFn = sinon.stub().returns({then: () => serverData});
+			});
+
+			describe('when creating an asset', () => {
+				beforeEach(() => {
+					actual = (new Sut({...v1ServerInfo, postFn, getFn})).create('Actual', {});
+				});
+
+				it('it should return an ES2015 Promise', () => {
+					actual.should.be.an.instanceof(Promise);
+				});
+			});
+
+			describe('when updating an asset', () => {
+				beforeEach(() => {
+					actual = (new Sut({...v1ServerInfo, postFn, getFn})).update('Member:20', 'Member', {});
+				});
+
+				it('it should return an ES2015 Promise', () => {
+					actual.should.be.an.instanceof(Promise);
+				});
+			});
+		});
+
+		describe('given post and get methods which return an ES2015 promise', () => {
+			let postFn, getFn, serverData;
 			beforeEach(() => {
 				serverData = {server: 'data'};
-				post = sinon.stub().returns(new Promise((resolve, reject) => {
+				postFn = sinon.stub().returns(new Promise((resolve) => {
 					resolve(serverData);
 				}));
-				get = sinon.stub().returns(new Promise(()=> {
+				getFn = sinon.stub().returns(new Promise((resolve)=> {
+					resolve(serverData);
 				}));
+			});
+			afterEach(() => {
+				sinon.restore(postFn);
+				sinon.restore(getFn);
 			});
 
 			describe('given an asset type and asset attributes', () => {
@@ -49,11 +83,17 @@ describe('src/V1Meta', function () {
 						Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
 						Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
 						Sut.__Rewire__('btoa', btoa);
-						actual = (new Sut({...v1ServerInfo, post, get})).create(assetType, assetData);
+						actual = (new Sut({...v1ServerInfo, postFn, getFn})).create(assetType, assetData);
+					});
+
+					afterEach(() => {
+						sinon.restore(transformDataToAsset);
+						sinon.restore(getUrlsForV1Server);
+						sinon.restore(btoa);
 					});
 
 					it('it should transform the asset type and asset attributes into a form the V1 API will understand', () => {
-						transformDataToAsset.calledWith(assetType, assetData).should.be.true;
+						transformDataToAsset.calledWith(assetData).should.be.true;
 					});
 
 					it('it should get the Rest URL to the V1 server instance', () => {
@@ -61,7 +101,7 @@ describe('src/V1Meta', function () {
 					});
 
 					it('it should use the transformed asset data to post to V1 instance Url with basic auth headers', () => {
-						post.calledWith(url, transformedAssetData, {Authorization: `Basic ${encodedCreds}`}).should.be.true;
+						postFn.calledWith(`${url}/${assetType}`, transformedAssetData, {Authorization: `Basic ${encodedCreds}`}).should.be.true;
 					});
 
 					it('it should return a Promise which resolves to the v1Client\'s response upon success', (done) => {
@@ -70,30 +110,43 @@ describe('src/V1Meta', function () {
 					});
 				});
 			});
-		});
 
-		describe('given a post method that does not return a ES2105 Promise', () => {
-			let post, get, serverData;
-			beforeEach(() => {
-				serverData = {some: 'server data'};
-				post = sinon.stub().returns({then: () => serverData});
-			});
-			describe('given an asset type and asset attribute', () => {
-				let assetType, assetData;
+			describe('given an Oid token and asset type and asset attributes', () => {
+				let oidToken, assetData, assetType;
 				beforeEach(() => {
 					assetType = 'Actual';
-					assetData = {
-						Value: 20,
-						Member: 'Member:20'
-					};
+					oidToken = 'Member:20';
+					assetData = {};
 				});
-				describe('when creating an asset', () => {
+				afterEach(() => {
+					sinon.restore(transformDataToAsset);
+					sinon.restore(getUrlsForV1Server);
+				});
+
+				let transformedAssetData, url;
+				describe('when updating the asset', () => {
 					beforeEach(() => {
-						actual = (new Sut({...v1ServerInfo, post, get})).create(assetType, assetData);
+						transformedAssetData = {Attributes: {Value: 20}};
+						transformDataToAsset = sinon.stub().withArgs(assetData).returns(transformedAssetData);
+						url = 'my V1 Instance URL';
+						getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
+							rest: sinon.stub().returns(url)
+						});
+						Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
+						Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
+						actual = (new Sut({...v1ServerInfo, postFn, getFn})).update(oidToken, assetType, assetData);
+					});
+					it('it should transform the asset attributes into a form the V1 API will understand', () => {
+						transformDataToAsset.calledWith(assetData).should.be.true;
 					});
 
-					it('it should return an ES2015 Promise', () => {
+					it('it should call the get method with the transformed asset data', () => {
+						getFn.calledWith(`${url}/${assetType}`, transformedAssetData).should.be.true;
+					});
+
+					it('it should return a Promise which resolves to the v1Client\'s response upon success', (done) => {
 						actual.should.be.an.instanceof(Promise);
+						actual.should.eventually.eql(serverData).notify(done);
 					});
 				});
 			});
