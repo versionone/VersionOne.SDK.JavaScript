@@ -7,3 +7,7 @@ node_modules
 *.log
 /Tests
 /*.*
+/tmp
+/src
+/specs
+/examples
