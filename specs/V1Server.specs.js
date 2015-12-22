@@ -33,5 +33,15 @@ describe('src/V1Server', function () {
 				actual.should.equal('https://some URL/some Instance:8081/rest-v1.v1');
 			});
 		});
+
+		describe('when getting the query.v1 Url', () => {
+			beforeEach(() => {
+				actual = Sut.getUrlsForV1Server(v1ServerInfo).query();
+			});
+
+			it('it should return the Rest API Url', () => {
+				actual.should.equal('https://some URL/some Instance:8081/query.v1');
+			});
+		});
 	});
 });
