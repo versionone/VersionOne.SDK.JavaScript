@@ -2,6 +2,7 @@
   "name": "v1sdk",
   "version": "1.0.1",
   "description": "VersionOne API Client for JavaScript",
+  "license": "MIT",
   "keywords": [
     "VersionOne",
     "V1",
