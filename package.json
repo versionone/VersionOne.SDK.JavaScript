@@ -14,10 +14,15 @@
     "url": "git@github.com:versionone/VersionOne.SDK.JavaScript.git"
   },
   "scripts": {
-    "preparepublish": "npm run lint && npm test && npm run build",
-    "build": "babel -d dist src",
-    "lint": "eslint ./src",
-    "test": "babel -d dist src --plugins rewire && babel -d tmp specs && mocha ./tmp/**/*.specs.js"
+	"clean": "rm -rf dist",
+	"clean:specs": "rm -rf dist/*.specs.js dist/**/*.specs.js",
+	"prebuild": "npm run clean && npm run lint && npm run test",
+	"build": "babel src -d dist --ignore *.specs.js",
+	"lint": "eslint ./src",
+	"pretest": "babel src -d dist --ignore *.specs.js --plugins rewire && babel src -d dist --only *.specs.js",
+	"test": "mocha dist/**/*.specs.js",
+	"posttest": "npm run clean:specs",
+	"preparepublish": "npm run build"
   },
   "dependencies": {
     "btoa": "^1.1.2",

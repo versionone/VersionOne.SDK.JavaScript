@@ -5,7 +5,6 @@
 node_modules
 
 *.log
-/dist
 
-# Testing Output
-/tmp
+# Built Output
+/dist

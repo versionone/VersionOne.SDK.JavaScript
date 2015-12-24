@@ -2,7 +2,7 @@ import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 chai.use(chaiAsPromised);
 let should = chai.should();
-import Sut from './../dist/transformDataToAsset';
+import Sut from './transformDataToAsset';
 
 describe('src/transformDataToAsset', function () {
 	describe('given an object of asset data', () => {

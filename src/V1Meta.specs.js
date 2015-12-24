@@ -3,7 +3,7 @@ import chaiAsPromised from 'chai-as-promised';
 chai.use(chaiAsPromised);
 let should = chai.should();
 import sinon from 'sinon';
-import Sut from './../dist/V1Meta';
+import Sut from './V1Meta';
 
 describe('src/V1Meta', function () {
 	let transformDataToAsset, getUrlsForV1Server, actual;
