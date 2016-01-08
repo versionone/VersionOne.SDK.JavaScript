@@ -213,6 +213,29 @@ describe('src/V1Meta', function () {
 						actual.should.eventually.eql(serverData).notify(done);
 					});
 				});
+				describe('given a change comment', ()=> {
+					let changeComment= 'this is a really important change';
+					describe('when updating the asset', () => {
+						beforeEach(() => {
+							transformedAssetData = {Attributes: {Value: 20}};
+							transformDataToAsset = sinon.stub().withArgs(assetData).returns(transformedAssetData);
+							url = 'my V1 Instance URL';
+							getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
+								rest: sinon.stub().returns(url)
+							});
+							Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
+							Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
+							actual = (new Sut({...v1ServerInfo, postFn, getFn})).update(oidToken, assetType, assetData, changeComment);
+						});
+
+						it('it should call the post method with the transformed asset data and the change comment as a query parameter', () => {
+							postFn.calledWith(`${url}/${assetType}/${oidToken}?comment=${encodeURIComponent(changeComment)}`, transformedAssetData).should.be.true;
+						});
+
+					});
+
+				});
+
 			});
 
 			describe('given an invalid query object missing a from property', () => {

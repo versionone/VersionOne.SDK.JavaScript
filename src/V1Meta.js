@@ -27,9 +27,9 @@ export default class V1Meta {
 		return Promise.resolve(this.postFn(url, postData, headers));
 	}
 
-	update(oidToken, assetType, assetData) {
+	update(oidToken, assetType, assetData, changeComment) {
 		const postData = transformDataToAsset(assetData);
-		const url = `${this.urls.rest()}/${assetType}/${oidToken}`;
+		const url = `${this.urls.rest()}/${assetType}/${oidToken}` + (changeComment ? `?comment=${encodeURIComponent(changeComment)}` : '');
 		return Promise.resolve(this.postFn(url, postData));
 	}
 
