@@ -12,7 +12,7 @@ describe('src/V1Server', function() {
 			v1ServerInfo = {
 				hostname: 'some URL',
 				instance: 'some Instance',
-				protocol: 'https:',
+				protocol: 'https',
 				port: '8081'
 			};
 		});
