@@ -17,11 +17,11 @@ export default class V1Meta {
 	create(assetType, assetAttributeData) {
 		const postData = transformDataToAsset(assetAttributeData);
 		const url = `${this.urls.rest()}/${assetType}`;
-		let headers =  {
+		const headers =  {
 			Accept: 'application/json',
 			'Content-Type': 'application/json'
 		};
-		if (this.authHeader){
+		if (this.authHeader) {
 			headers.Authorization = this.authHeader;
 		}
 		return Promise.resolve(this.postFn(url, postData, headers));

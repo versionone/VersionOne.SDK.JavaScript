@@ -7,9 +7,9 @@ export function getUrlsForV1Server({ hostname, instance, protocol, port }) {
 }
 
 function getUrlToV1Server({ hostname, instance, protocol, port }) {
-	let url = `${protocol}//${hostname}/${instance}`;
+	const url = `${protocol}//${hostname}/${instance}`;
 	if (port) {
-		return `${url}:${port}`
+		return `${url}:${port}`;
 	}
 	return url;
 }

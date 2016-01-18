@@ -1,9 +1,9 @@
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 chai.use(chaiAsPromised);
-let should = chai.should();
+chai.should();
 import sinon from 'sinon';
-import Sut from './../dist/V1Meta';
+import Sut from './V1Meta';
 
 describe('src/V1Meta', function () {
 	let transformDataToAsset, getUrlsForV1Server, actual;
@@ -250,7 +250,7 @@ describe('src/V1Meta', function () {
 					});
 
 					it('it should throw an exception stating that a select property was not specified', () => {
-						should.Throw(fn);
+						chai.should().Throw(fn);
 					});
 				});
 			});
@@ -269,7 +269,7 @@ describe('src/V1Meta', function () {
 					});
 
 					it('it should throw an exception stating that a select property was not specified', () => {
-						should.Throw(fn);
+						chai.should().Throw(fn);
 					});
 				});
 			});
@@ -289,7 +289,7 @@ describe('src/V1Meta', function () {
 					});
 
 					it('it should throw an exception stating that a select property was not specified', () => {
-						should.Throw(fn);
+						chai.should().Throw(fn);
 					});
 				});
 			});

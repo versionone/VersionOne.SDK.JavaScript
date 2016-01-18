@@ -5,9 +5,6 @@
 node_modules
 
 *.log
-/Tests
-/*.*
-/tmp
 /src
-/specs
+**/*.specs.js
 /examples

@@ -1,10 +1,10 @@
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 chai.use(chaiAsPromised);
-let should = chai.should();
-import * as Sut from './../dist/V1Server';
+chai.should();
+import * as Sut from './V1Server';
 
-describe('src/V1Server', function () {
+describe('src/V1Server', function() {
 	let actual;
 	describe('given a V1 instance server url, protocol, port, username, password', () => {
 		let v1ServerInfo;
@@ -23,7 +23,7 @@ describe('src/V1Server', function () {
 			});
 
 			it('it should return a way to get the Rest API Url', () => {
-				should.exist(actual.rest);
+				chai.should().exist(actual.rest);
 			});
 		});
 
