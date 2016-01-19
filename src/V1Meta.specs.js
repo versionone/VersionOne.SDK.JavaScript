@@ -70,7 +70,7 @@ describe('src/V1Meta', function () {
 			let postFn, getFn, serverData;
 			beforeEach(() => {
 				serverData = {some: 'server data'};
-				postFn = sinon.stub().returns({then: () => serverData});
+				postFn = sinon.spy();
 				getFn = sinon.stub().returns({then: () => serverData});
 			});
 
@@ -84,6 +84,13 @@ describe('src/V1Meta', function () {
 				it('it should return an ES2015 Promise', () => {
 					actual.should.be.an.instanceof(Promise);
 				});
+
+				it('it should provide the postFn a header object with authorization information', () => {
+					let postCall = postFn.getCall(0);
+					let headerObj = postCall.args[2];
+					headerObj.Accept.should.be.equal('application/json');
+					headerObj['Content-Type'].should.be.equal('application/json');
+				});
 			});
 
 			describe('when updating an asset', () => {
@@ -93,6 +100,13 @@ describe('src/V1Meta', function () {
 
 				it('it should return an ES2015 Promise', () => {
 					actual.should.be.an.instanceof(Promise);
+				});
+
+				it('it should provide the postFn a header object', () => {
+					let postCall = postFn.getCall(0);
+					let headerObj = postCall.args[2];
+					headerObj.Accept.should.be.equal('application/json');
+					headerObj['Content-Type'].should.be.equal('application/json');
 				});
 			});
 		});

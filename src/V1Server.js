@@ -7,11 +7,11 @@ export function getUrlsForV1Server({ hostname, instance, protocol, port }) {
 }
 
 function getUrlToV1Server({ hostname, instance, protocol, port }) {
-	const url = `${protocol}//${hostname}/${instance}`;
+	let url = `${protocol}://${hostname}`;
 	if (port) {
-		return `${url}:${port}`;
+		url = `${url}:${port}`;
 	}
-	return url;
+	return `${url}/${instance}`;
 }
 
 function restUrl(rootUrl) {

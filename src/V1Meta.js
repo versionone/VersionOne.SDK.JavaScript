@@ -3,6 +3,17 @@ import invariant from 'invariant';
 import transformDataToAsset from './transformDataToAsset';
 import {getUrlsForV1Server} from './V1Server';
 
+const createHeaderObj = authentication => {
+	const headerObj = {
+		Accept: 'application/json',
+		'Content-Type': 'application/json'
+	};
+	if (authentication) {
+		headerObj.Authorization = authentication;
+	}
+	return headerObj;
+};
+
 export default class V1Meta {
 	constructor({hostname, instance, protocol, port, username, password, postFn, getFn}) {
 		this.urls = getUrlsForV1Server({hostname, instance, protocol, port});
@@ -17,20 +28,15 @@ export default class V1Meta {
 	create(assetType, assetAttributeData) {
 		const postData = transformDataToAsset(assetAttributeData);
 		const url = `${this.urls.rest()}/${assetType}`;
-		const headers =  {
-			Accept: 'application/json',
-			'Content-Type': 'application/json'
-		};
-		if (this.authHeader) {
-			headers.Authorization = this.authHeader;
-		}
+		const headers = createHeaderObj(this.authHeader);
 		return Promise.resolve(this.postFn(url, postData, headers));
 	}
 
 	update(oidToken, assetType, assetData, changeComment) {
 		const postData = transformDataToAsset(assetData);
 		const url = `${this.urls.rest()}/${assetType}/${oidToken}` + (changeComment ? `?comment=${encodeURIComponent(changeComment)}` : '');
-		return Promise.resolve(this.postFn(url, postData));
+		const headers = createHeaderObj(this.authHeader);
+		return Promise.resolve(this.postFn(url, postData, headers));
 	}
 
 	query(queryObj) {
