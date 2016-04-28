@@ -317,21 +317,37 @@ describe('src/V1Meta', function () {
 					};
 				});
 				describe('when querying V1 with the provided query object', () => {
-					let fn;
+					let expectedHeaders;
 					beforeEach(() => {
 						getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
 							query: sinon.stub().returns(queryV1Url)
 						});
+
+						const encodedCreds = 'some encoded stuff';
+						const btoa = sinon.stub().withArgs(`${v1ServerInfo.username}:${v1ServerInfo.password}`).returns(encodedCreds);
+
+						expectedHeaders = {
+							Authorization: `Basic ${encodedCreds}`,
+							Accept: 'application/json',
+							'Content-Type': 'application/json'
+						};
+
 						Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
-						actual = (new Sut({...v1ServerInfo, postFn, getFn})).query(query);
+						Sut.__Rewire__('btoa', btoa);
+						actual = (new Sut({
+							...v1ServerInfo,
+							username: 'username',
+							password: 'password',
+							postFn, getFn
+						})).query(query);
 					});
 
 					it('it should use the query Url provided by the getUrlsForV1Server', () => {
 						getUrlsForV1Server.calledWith({...v1ServerInfo}).should.be.true;
 					});
 
-					it('it should use the provided get function and pass url and pass the query as the payload', () => {
-						getFn.calledWith(queryV1Url, query).should.be.true;
+					it('it should use the provided post function and pass url, query, and authorization headers', () => {
+						postFn.calledWith(queryV1Url, query, expectedHeaders).should.be.true;
 					});
 
 					it('it should return a Promise which resolves to the v1Client\'s response upon success', (done) => {
