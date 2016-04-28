@@ -41,9 +41,10 @@ export default class V1Meta {
 
 	query(queryObj) {
 		invariant(queryObj.from, `Error: there was no \`from\` property on provided query: ${queryObj}`);
-		invariant(queryObj.select, `Error: there was no \`from\` property on provided query: ${queryObj}`);
-		invariant(Array.isArray(queryObj.select), `Error: there was no \`from\` property on provided query: ${queryObj}`);
+		invariant(queryObj.select, `Error: there was no \`select\` property on provided query: ${queryObj}`);
+		invariant(Array.isArray(queryObj.select), `Error: \`select\` property must be an Array on provided query: ${queryObj}`);
 		const url = this.urls.query();
-		return this.getFn(url, queryObj);
+		const headers = createHeaderObj(this.authHeader);
+		return this.postFn(url, queryObj, headers);
 	}
 }
