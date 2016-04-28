@@ -20,7 +20,7 @@
 	"build": "babel src -d dist --ignore *.specs.js",
 	"lint": "eslint ./src",
 	"test": "mocha src/**/*.specs.js  --compilers js:babel-core/register --recursive",
-	"preparepublish": "npm run build"
+	"prepublish": "npm run build"
   },
   "dependencies": {
     "btoa": "1.1.2",
