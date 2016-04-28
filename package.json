@@ -1,6 +1,6 @@
 {
   "name": "v1sdk",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "VersionOne API Client for JavaScript",
   "license": "MIT",
   "keywords": [
@@ -15,12 +15,12 @@
     "url": "git@github.com:versionone/VersionOne.SDK.JavaScript.git"
   },
   "scripts": {
-	"clean": "rm -rf dist",
-	"prebuild": "npm run clean && npm run lint",
-	"build": "babel src -d dist --ignore *.specs.js",
-	"lint": "eslint ./src",
-	"test": "mocha src/**/*.specs.js  --compilers js:babel-core/register --recursive",
-	"prepublish": "npm run build"
+    "clean": "rm -rf dist",
+    "prebuild": "npm run clean && npm run lint",
+    "build": "babel src -d dist --ignore *.specs.js",
+    "lint": "eslint ./src",
+    "test": "mocha src/**/*.specs.js  --compilers js:babel-core/register --recursive",
+    "prepublish": "npm run build"
   },
   "dependencies": {
     "btoa": "1.1.2",
