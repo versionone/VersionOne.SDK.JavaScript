@@ -1,361 +1,365 @@
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
-chai.use(chaiAsPromised);
-chai.should();
 import sinon from 'sinon';
 import Sut from './V1Meta';
+chai.use(chaiAsPromised);
+chai.should();
 
-describe('src/V1Meta', function () {
-	let transformDataToAsset, getUrlsForV1Server, actual;
+describe('src/V1Meta', function() {
+    let transformDataToAsset, getUrlsForV1Server, actual;
 
-	describe('given a V1 hostname, server instance, protocol, port, post and get methods and no username or password', () => {
-		let v1ServerInfo, postFn, getFn;
-		beforeEach(() => {
-			v1ServerInfo = {
-				hostname: 'some URL',
-				instance: 'some instance',
-				protocol: 'https',
-				port: '8081'
-			};
-			postFn = sinon.stub().returns({then: () => serverData});
-			getFn = sinon.stub().returns({then: () => serverData});
-		});
+    describe('given a V1 hostname, server instance, protocol, port, post and get methods and no username or password', () => {
+        let v1ServerInfo, postFn, getFn;
+        beforeEach(() => {
+            v1ServerInfo = {
+                hostname: 'some URL',
+                instance: 'some instance',
+                protocol: 'https',
+                port: '8081'
+            };
+            postFn = sinon.stub().returns({then: () => serverData});
+            getFn = sinon.stub().returns({then: () => serverData});
+        });
 
-		describe('when creating an asset', () => {
-			let transformedAssetData, url, encodedCreds, btoa;
-			beforeEach(() => {
-				let assetType = 'Actual';
-				let assetData = {};
-				transformedAssetData = {Attributes: {Value: 20}};
-				transformDataToAsset = sinon.stub().withArgs(assetType, assetData).returns(transformedAssetData);
-				url = 'my V1 Instance URL';
-				encodedCreds = 'some encoded stuff';
-				getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
-					rest: sinon.stub().returns(url)
-				});
-				btoa = sinon.stub().withArgs(`${v1ServerInfo.username}:${v1ServerInfo.password}`).returns(encodedCreds);
-				Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
-				Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
-				Sut.__Rewire__('btoa', btoa);
-				actual = (new Sut({...v1ServerInfo, postFn, getFn})).create(assetType, assetData);
-			});
+        describe('when creating an asset', () => {
+            let transformedAssetData, url, encodedCreds, btoa;
+            beforeEach(() => {
+                let assetType = 'Actual';
+                let assetData = {};
+                transformedAssetData = {Attributes: {Value: 20}};
+                transformDataToAsset = sinon.stub().withArgs(assetType, assetData).returns(transformedAssetData);
+                url = 'my V1 Instance URL';
+                encodedCreds = 'some encoded stuff';
+                getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
+                    rest: sinon.stub().returns(url)
+                });
+                btoa = sinon.stub().withArgs(`${v1ServerInfo.username}:${v1ServerInfo.password}`).returns(encodedCreds);
+                Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
+                Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
+                Sut.__Rewire__('btoa', btoa);
+                actual = (new Sut({...v1ServerInfo, postFn, getFn})).create(assetType, assetData);
+            });
 
-			afterEach(() => {
-				sinon.restore(transformDataToAsset);
-				sinon.restore(getUrlsForV1Server);
-				sinon.restore(btoa);
-			});
+            afterEach(() => {
+                sinon.restore(transformDataToAsset);
+                sinon.restore(getUrlsForV1Server);
+                sinon.restore(btoa);
+            });
 
-			it('it should not include authorization headers', () => {
-				postFn.calledWith(`${url}/Actual`, transformedAssetData, {
-					Accept: 'application/json',
-					'Content-Type': 'application/json'
-				}).should.be.true;
-			});
-		});
-	});
+            it('it should not include authorization headers', () => {
+                postFn.calledWith(`${url}/Actual`, transformedAssetData, {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json'
+                }).should.be.true;
+            });
+        });
+    });
 
-	describe('given a V1 hostname, server instance, protocol, port, username, password', () => {
-		let v1ServerInfo, serverData;
-		beforeEach(() => {
-			v1ServerInfo = {
-				hostname: 'some URL',
-				instance: 'some instance',
-				protocol: 'https',
-				port: '8081'
-			};
-		});
+    describe('given a V1 hostname, server instance, protocol, port, username, password', () => {
+        let v1ServerInfo, serverData;
+        beforeEach(() => {
+            v1ServerInfo = {
+                hostname: 'some URL',
+                instance: 'some instance',
+                protocol: 'https',
+                port: '8081'
+            };
+        });
 
-		describe('given a post method that does not return a ES2105 Promise', () => {
-			let postFn, getFn, serverData;
-			beforeEach(() => {
-				serverData = {some: 'server data'};
-				postFn = sinon.spy();
-				getFn = sinon.stub().returns({then: () => serverData});
-			});
+        describe('given a post method that does not return a ES2105 Promise', () => {
+            let postFn, getFn, serverData;
+            beforeEach(() => {
+                serverData = {some: 'server data'};
+                postFn = sinon.spy();
+                getFn = sinon.stub().returns({then: () => serverData});
+            });
 
-			describe('when creating an asset', () => {
-				beforeEach(() => {
-					let data = {...v1ServerInfo, postFn, getFn};
-					let sut = new Sut(data);
-					actual = sut.create('Actual', {});
-				});
+            describe('when creating an asset', () => {
+                beforeEach(() => {
+                    let data = {...v1ServerInfo, postFn, getFn};
+                    let sut = new Sut(data);
+                    actual = sut.create('Actual', {});
+                });
 
-				it('it should return an ES2015 Promise', () => {
-					actual.should.be.an.instanceof(Promise);
-				});
+                it('it should return an ES2015 Promise', () => {
+                    actual.should.be.an.instanceof(Promise);
+                });
 
-				it('it should provide the postFn a header object with authorization information', () => {
-					let postCall = postFn.getCall(0);
-					let headerObj = postCall.args[2];
-					headerObj.Accept.should.be.equal('application/json');
-					headerObj['Content-Type'].should.be.equal('application/json');
-				});
-			});
+                it('it should provide the postFn a header object with authorization information', () => {
+                    let postCall = postFn.getCall(0);
+                    let headerObj = postCall.args[2];
+                    headerObj.Accept.should.be.equal('application/json');
+                    headerObj['Content-Type'].should.be.equal('application/json');
+                });
+            });
 
-			describe('when updating an asset', () => {
-				beforeEach(() => {
-					actual = (new Sut({...v1ServerInfo, postFn, getFn})).update('Member:20', 'Member', {});
-				});
+            describe('when updating an asset', () => {
+                beforeEach(() => {
+                    actual = (new Sut({...v1ServerInfo, postFn, getFn})).update('Member:20', 'Member', {});
+                });
 
-				it('it should return an ES2015 Promise', () => {
-					actual.should.be.an.instanceof(Promise);
-				});
+                it('it should return an ES2015 Promise', () => {
+                    actual.should.be.an.instanceof(Promise);
+                });
 
-				it('it should provide the postFn a header object', () => {
-					let postCall = postFn.getCall(0);
-					let headerObj = postCall.args[2];
-					headerObj.Accept.should.be.equal('application/json');
-					headerObj['Content-Type'].should.be.equal('application/json');
-				});
-			});
-		});
+                it('it should provide the postFn a header object', () => {
+                    let postCall = postFn.getCall(0);
+                    let headerObj = postCall.args[2];
+                    headerObj.Accept.should.be.equal('application/json');
+                    headerObj['Content-Type'].should.be.equal('application/json');
+                });
+            });
+        });
 
-		describe('given post and get methods which return an ES2015 promise', () => {
-			let postFn, getFn, serverData;
-			beforeEach(() => {
-				serverData = {server: 'data'};
-				postFn = sinon.stub().returns(new Promise((resolve) => {
-					resolve(serverData);
-				}));
-				getFn = sinon.stub().returns(new Promise((resolve)=> {
-					resolve(serverData);
-				}));
-			});
-			afterEach(() => {
-				sinon.restore(postFn);
-				sinon.restore(getFn);
-			});
+        describe('given post and get methods which return an ES2015 promise', () => {
+            let postFn, getFn, serverData;
+            beforeEach(() => {
+                serverData = {server: 'data'};
+                postFn = sinon.stub().returns(new Promise((resolve) => {
+                    resolve(serverData);
+                }));
+                getFn = sinon.stub().returns(new Promise((resolve)=> {
+                    resolve(serverData);
+                }));
+            });
+            afterEach(() => {
+                sinon.restore(postFn);
+                sinon.restore(getFn);
+            });
 
-			describe('given an asset type and asset attributes', () => {
-				let assetType, assetData;
-				beforeEach(() => {
-					assetType = 'Actual';
-					assetData = {
-						Value: 20,
-						Member: 'Member:20'
-					};
-				});
+            describe('given an asset type and asset attributes', () => {
+                let assetType, assetData;
+                beforeEach(() => {
+                    assetType = 'Actual';
+                    assetData = {
+                        Value: 20,
+                        Member: 'Member:20'
+                    };
+                });
 
-				describe('when creating the asset', () => {
-					let transformedAssetData, url, encodedCreds, btoa;
-					beforeEach(() => {
-						transformedAssetData = {Attributes: {Value: 20}};
-						transformDataToAsset = sinon.stub().withArgs(assetType, assetData).returns(transformedAssetData);
-						url = 'my V1 Instance URL';
-						encodedCreds = 'some encoded stuff';
-						getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
-							rest: sinon.stub().returns(url)
-						});
-						btoa = sinon.stub().withArgs(`${v1ServerInfo.username}:${v1ServerInfo.password}`).returns(encodedCreds);
-						Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
-						Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
-						Sut.__Rewire__('btoa', btoa);
-						actual = (new Sut({
-							...v1ServerInfo,
-							username: 'username',
-							password: 'password',
-							postFn,
-							getFn
-						})).create(assetType, assetData);
-					});
+                describe('when creating the asset', () => {
+                    let transformedAssetData, url, encodedCreds, btoa;
+                    beforeEach(() => {
+                        transformedAssetData = {Attributes: {Value: 20}};
+                        transformDataToAsset = sinon.stub().withArgs(assetType, assetData).returns(transformedAssetData);
+                        url = 'my V1 Instance URL';
+                        encodedCreds = 'some encoded stuff';
+                        getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
+                            rest: sinon.stub().returns(url)
+                        });
+                        btoa = sinon.stub().withArgs(`${v1ServerInfo.username}:${v1ServerInfo.password}`).returns(encodedCreds);
+                        Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
+                        Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
+                        Sut.__Rewire__('btoa', btoa);
+                        actual = (new Sut({
+                            ...v1ServerInfo,
+                            username: 'username',
+                            password: 'password',
+                            postFn,
+                            getFn
+                        })).create(assetType, assetData);
+                    });
 
-					afterEach(() => {
-						sinon.restore(transformDataToAsset);
-						sinon.restore(getUrlsForV1Server);
-						sinon.restore(btoa);
-					});
+                    afterEach(() => {
+                        sinon.restore(transformDataToAsset);
+                        sinon.restore(getUrlsForV1Server);
+                        sinon.restore(btoa);
+                    });
 
-					it('it should transform the asset type and asset attributes into a form the V1 API will understand', () => {
-						transformDataToAsset.calledWith(assetData).should.be.true;
-					});
+                    it('it should transform the asset type and asset attributes into a form the V1 API will understand', () => {
+                        transformDataToAsset.calledWith(assetData).should.be.true;
+                    });
 
-					it('it should get the Rest URL to the V1 server instance', () => {
-						getUrlsForV1Server.calledWith({...v1ServerInfo}).should.be.true;
-					});
+                    it('it should get the Rest URL to the V1 server instance', () => {
+                        getUrlsForV1Server.calledWith({...v1ServerInfo}).should.be.true;
+                    });
 
-					it('it should use the transformed asset data to post to V1 instance Url with basic auth headers', () => {
-						postFn.calledWith(`${url}/${assetType}`, transformedAssetData, {
-							Authorization: `Basic ${encodedCreds}`,
-							Accept: 'application/json',
-							'Content-Type': 'application/json'
-						}).should.be.true;
-					});
+                    it('it should use the transformed asset data to post to V1 instance Url with basic auth headers', () => {
+                        postFn.calledWith(`${url}/${assetType}`, transformedAssetData, {
+                            Authorization: `Basic ${encodedCreds}`,
+                            Accept: 'application/json',
+                            'Content-Type': 'application/json'
+                        }).should.be.true;
+                    });
 
-					it('it should return a Promise which resolves to the v1Client\'s response upon success', (done) => {
-						actual.should.be.an.instanceof(Promise);
-						actual.should.eventually.equal(serverData).notify(done);
-					});
-				});
-			});
+                    it('it should return a Promise which resolves to the v1Client\'s response upon success', (done) => {
+                        actual.should.be.an.instanceof(Promise);
+                        actual.should.eventually.equal(serverData).notify(done);
+                    });
+                });
+            });
 
-			describe('given an Oid token, asset type and asset attributes', () => {
-				let oidToken, assetData, assetType;
-				beforeEach(() => {
-					assetType = 'Actual';
-					oidToken = 'Member:20';
-					assetData = {};
-				});
-				afterEach(() => {
-					sinon.restore(transformDataToAsset);
-					sinon.restore(getUrlsForV1Server);
-				});
+            describe('given an Oid token, asset type and asset attributes', () => {
+                let oidToken, assetData, assetType;
+                beforeEach(() => {
+                    assetType = 'Actual';
+                    oidToken = 'Member:20';
+                    assetData = {};
+                });
+                afterEach(() => {
+                    sinon.restore(transformDataToAsset);
+                    sinon.restore(getUrlsForV1Server);
+                });
 
-				let transformedAssetData, url;
-				describe('when updating the asset', () => {
-					beforeEach(() => {
-						transformedAssetData = {Attributes: {Value: 20}};
-						transformDataToAsset = sinon.stub().withArgs(assetData).returns(transformedAssetData);
-						url = 'my V1 Instance URL';
-						getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
-							rest: sinon.stub().returns(url)
-						});
-						Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
-						Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
-						actual = (new Sut({...v1ServerInfo, postFn, getFn})).update(oidToken, assetType, assetData);
-					});
-					it('it should transform the asset attributes into a form the V1 API will understand', () => {
-						transformDataToAsset.calledWith(assetData).should.be.true;
-					});
+                let transformedAssetData, url;
+                describe('when updating the asset', () => {
+                    beforeEach(() => {
+                        transformedAssetData = {Attributes: {Value: 20}};
+                        transformDataToAsset = sinon.stub().withArgs(assetData).returns(transformedAssetData);
+                        url = 'my V1 Instance URL';
+                        getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
+                            rest: sinon.stub().returns(url)
+                        });
+                        Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
+                        Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
+                        actual = (new Sut({...v1ServerInfo, postFn, getFn})).update(oidToken, assetType, assetData);
+                    });
+                    it('it should transform the asset attributes into a form the V1 API will understand', () => {
+                        transformDataToAsset.calledWith(assetData).should.be.true;
+                    });
 
-					it('it should call the get method with the transformed asset data', () => {
-						postFn.calledWith(`${url}/${assetType}/${oidToken}`, transformedAssetData).should.be.true;
-					});
+                    it('it should call the get method with the transformed asset data', () => {
+                        postFn.calledWith(`${url}/${assetType}/${oidToken}`, transformedAssetData).should.be.true;
+                    });
 
-					it('it should return a Promise which resolves to the v1Client\'s response upon success', (done) => {
-						actual.should.be.an.instanceof(Promise);
-						actual.should.eventually.eql(serverData).notify(done);
-					});
-				});
-				describe('given a change comment', ()=> {
-					let changeComment= 'this is a really important change';
-					describe('when updating the asset', () => {
-						beforeEach(() => {
-							transformedAssetData = {Attributes: {Value: 20}};
-							transformDataToAsset = sinon.stub().withArgs(assetData).returns(transformedAssetData);
-							url = 'my V1 Instance URL';
-							getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
-								rest: sinon.stub().returns(url)
-							});
-							Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
-							Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
-							actual = (new Sut({...v1ServerInfo, postFn, getFn})).update(oidToken, assetType, assetData, changeComment);
-						});
+                    it('it should return a Promise which resolves to the v1Client\'s response upon success', (done) => {
+                        actual.should.be.an.instanceof(Promise);
+                        actual.should.eventually.eql(serverData).notify(done);
+                    });
+                });
+                describe('given a change comment', ()=> {
+                    let changeComment = 'this is a really important change';
+                    describe('when updating the asset', () => {
+                        beforeEach(() => {
+                            transformedAssetData = {Attributes: {Value: 20}};
+                            transformDataToAsset = sinon.stub().withArgs(assetData).returns(transformedAssetData);
+                            url = 'my V1 Instance URL';
+                            getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
+                                rest: sinon.stub().returns(url)
+                            });
+                            Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
+                            Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
+                            actual = (new Sut({
+                                ...v1ServerInfo,
+                                postFn,
+                                getFn
+                            })).update(oidToken, assetType, assetData, changeComment);
+                        });
 
-						it('it should call the post method with the transformed asset data and the change comment as a query parameter', () => {
-							postFn.calledWith(`${url}/${assetType}/${oidToken}?comment=${encodeURIComponent(changeComment)}`, transformedAssetData).should.be.true;
-						});
+                        it('it should call the post method with the transformed asset data and the change comment as a query parameter', () => {
+                            postFn.calledWith(`${url}/${assetType}/${oidToken}?comment=${encodeURIComponent(changeComment)}`, transformedAssetData).should.be.true;
+                        });
 
-					});
+                    });
 
-				});
+                });
 
-			});
+            });
 
-			describe('given an invalid query object missing a from property', () => {
-				let query;
-				beforeEach(() => {
-					query = {};
-				});
-				describe('when querying V1 with the provided query object', () => {
-					let fn;
-					beforeEach(() => {
-						fn = () => (new Sut({...v1ServerInfo, postFn, getFn})).query(query);
-					});
+            describe('given an invalid query object missing a from property', () => {
+                let query;
+                beforeEach(() => {
+                    query = {};
+                });
+                describe('when querying V1 with the provided query object', () => {
+                    let fn;
+                    beforeEach(() => {
+                        fn = () => (new Sut({...v1ServerInfo, postFn, getFn})).query(query);
+                    });
 
-					it('it should throw an exception stating that a select property was not specified', () => {
-						chai.should().Throw(fn);
-					});
-				});
-			});
+                    it('it should throw an exception stating that a select property was not specified', () => {
+                        chai.should().Throw(fn);
+                    });
+                });
+            });
 
-			describe('given an invalid query object missing a select property', () => {
-				let query;
-				beforeEach(() => {
-					query = {
-						from: 'Actual'
-					};
-				});
-				describe('when querying V1 with the provided query object', () => {
-					let fn;
-					beforeEach(() => {
-						fn = () => (new Sut({...v1ServerInfo, postFn, getFn})).query(query);
-					});
+            describe('given an invalid query object missing a select property', () => {
+                let query;
+                beforeEach(() => {
+                    query = {
+                        from: 'Actual'
+                    };
+                });
+                describe('when querying V1 with the provided query object', () => {
+                    let fn;
+                    beforeEach(() => {
+                        fn = () => (new Sut({...v1ServerInfo, postFn, getFn})).query(query);
+                    });
 
-					it('it should throw an exception stating that a select property was not specified', () => {
-						chai.should().Throw(fn);
-					});
-				});
-			});
+                    it('it should throw an exception stating that a select property was not specified', () => {
+                        chai.should().Throw(fn);
+                    });
+                });
+            });
 
-			describe('given an invalid query object with a select property that is not an array', () => {
-				let query;
-				beforeEach(() => {
-					query = {
-						from: 'Actual',
-						select: 'Name'
-					};
-				});
-				describe('when querying V1 with the provided query object', () => {
-					let fn;
-					beforeEach(() => {
-						fn = () => (new Sut({...v1ServerInfo, postFn, getFn})).query(query);
-					});
+            describe('given an invalid query object with a select property that is not an array', () => {
+                let query;
+                beforeEach(() => {
+                    query = {
+                        from: 'Actual',
+                        select: 'Name'
+                    };
+                });
+                describe('when querying V1 with the provided query object', () => {
+                    let fn;
+                    beforeEach(() => {
+                        fn = () => (new Sut({...v1ServerInfo, postFn, getFn})).query(query);
+                    });
 
-					it('it should throw an exception stating that a select property was not specified', () => {
-						chai.should().Throw(fn);
-					});
-				});
-			});
+                    it('it should throw an exception stating that a select property was not specified', () => {
+                        chai.should().Throw(fn);
+                    });
+                });
+            });
 
-			describe('given a valid query object', () => {
-				let query, queryV1Url, actual;
-				beforeEach(() => {
-					query = {
-						from: 'Actual',
-						select: ['Name']
-					};
-				});
-				describe('when querying V1 with the provided query object', () => {
-					let expectedHeaders;
-					beforeEach(() => {
-						getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
-							query: sinon.stub().returns(queryV1Url)
-						});
+            describe('given a valid query object', () => {
+                let query, queryV1Url, actual;
+                beforeEach(() => {
+                    query = {
+                        from: 'Actual',
+                        select: ['Name']
+                    };
+                });
+                describe('when querying V1 with the provided query object', () => {
+                    let expectedHeaders;
+                    beforeEach(() => {
+                        getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
+                            query: sinon.stub().returns(queryV1Url)
+                        });
 
-						const encodedCreds = 'some encoded stuff';
-						const btoa = sinon.stub().withArgs(`${v1ServerInfo.username}:${v1ServerInfo.password}`).returns(encodedCreds);
+                        const encodedCreds = 'some encoded stuff';
+                        const btoa = sinon.stub().withArgs(`${v1ServerInfo.username}:${v1ServerInfo.password}`).returns(encodedCreds);
 
-						expectedHeaders = {
-							Authorization: `Basic ${encodedCreds}`,
-							Accept: 'application/json',
-							'Content-Type': 'application/json'
-						};
+                        expectedHeaders = {
+                            Authorization: `Basic ${encodedCreds}`,
+                            Accept: 'application/json',
+                            'Content-Type': 'application/json'
+                        };
 
-						Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
-						Sut.__Rewire__('btoa', btoa);
-						actual = (new Sut({
-							...v1ServerInfo,
-							username: 'username',
-							password: 'password',
-							postFn, getFn
-						})).query(query);
-					});
+                        Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
+                        Sut.__Rewire__('btoa', btoa);
+                        actual = (new Sut({
+                            ...v1ServerInfo,
+                            username: 'username',
+                            password: 'password',
+                            postFn, getFn
+                        })).query(query);
+                    });
 
-					it('it should use the query Url provided by the getUrlsForV1Server', () => {
-						getUrlsForV1Server.calledWith({...v1ServerInfo}).should.be.true;
-					});
+                    it('it should use the query Url provided by the getUrlsForV1Server', () => {
+                        getUrlsForV1Server.calledWith({...v1ServerInfo}).should.be.true;
+                    });
 
-					it('it should use the provided post function and pass url, query, and authorization headers', () => {
-						postFn.calledWith(queryV1Url, query, expectedHeaders).should.be.true;
-					});
+                    it('it should use the provided post function and pass url, query, and authorization headers', () => {
+                        postFn.calledWith(queryV1Url, query, expectedHeaders).should.be.true;
+                    });
 
-					it('it should return a Promise which resolves to the v1Client\'s response upon success', (done) => {
-						actual.should.be.an.instanceof(Promise);
-						actual.should.eventually.eql(serverData).notify(done);
-					});
-				});
-			});
-		});
-	});
+                    it('it should return a Promise which resolves to the v1Client\'s response upon success', (done) => {
+                        actual.should.be.an.instanceof(Promise);
+                        actual.should.eventually.eql(serverData).notify(done);
+                    });
+                });
+            });
+        });
+    });
 });

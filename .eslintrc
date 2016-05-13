@@ -116,13 +116,7 @@
 	  "any"
 	],
 	"yoda": 2,
-	"indent": [
-	  2,
-	  "tab",
-	  {
-		"SwitchCase": 1
-	  }
-	],
+	"indent": 2,
 	"brace-style": [
 	  2,
 	  "1tbs",
