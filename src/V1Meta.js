@@ -14,6 +14,8 @@ const createHeaderObj = authentication => {
     return headerObj;
 };
 
+const getAssetType = (oidToken) => oidToken.split(':')[0];
+
 export default class V1Meta {
     constructor({hostname, instance, protocol, port, username, password, postFn, getFn}) {
         this.urls = getUrlsForV1Server({hostname, instance, protocol, port});
@@ -46,5 +48,12 @@ export default class V1Meta {
         const url = this.urls.query();
         const headers = createHeaderObj(this.authHeader);
         return this.postFn(url, queryObj, headers);
+    }
+
+    executeOperation(oidToken, operationName) {
+        const assetType = getAssetType(oidToken);
+        const url = `${this.urls.rest()}/${assetType}/${oidToken}?op=${operationName}`;
+        const headers = createHeaderObj(this.authHeader);
+        return Promise.resolve(this.postFn(url, null, headers));
     }
 }
