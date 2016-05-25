@@ -1,7 +1,7 @@
 export const InvalidOidToken = class extends Error {
     constructor(message) {
+        super(message);
         this.name = 'InvalidOidToken';
-        this.message = message || '';
     }
 };
 
