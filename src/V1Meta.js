@@ -2,6 +2,7 @@ import btoa from 'btoa';
 import invariant from 'invariant';
 import transformDataToAsset from './transformDataToAsset';
 import {getUrlsForV1Server} from './V1Server';
+import Oid from './Oid';
 
 const createHeaderObj = authentication => {
     const headerObj = {
@@ -12,14 +13,6 @@ const createHeaderObj = authentication => {
         headerObj.Authorization = authentication;
     }
     return headerObj;
-};
-
-const getOidTokenElements = (oidToken) => {
-    const elements = oidToken.split(':');
-    return {
-        assetType: elements[0],
-        oid: elements[1]
-    };
 };
 
 export default class V1Meta {
@@ -57,8 +50,8 @@ export default class V1Meta {
     }
 
     executeOperation(oidToken, operationName) {
-        const elements = getOidTokenElements(oidToken);
-        const url = `${this.urls.rest()}/${elements.assetType}/${elements.oid}?op=${operationName}`;
+        const oid = new Oid(oidToken);
+        const url = `${this.urls.rest()}/${oid.assetType}/${oid.number}?op=${operationName}`;
         const headers = createHeaderObj(this.authHeader);
         return Promise.resolve(this.postFn(url, null, headers));
     }
