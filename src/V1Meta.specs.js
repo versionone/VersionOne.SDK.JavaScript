@@ -388,7 +388,7 @@ describe('src/V1Meta', function() {
                     });
 
                     it('it should provide the postFn with the proper API URL for the intended operation', () => {
-                        postFn.calledWith(`${url}/Member/${oidToken}?op=${operationName}`, null, expectedHeaders).should.be.true;
+                        postFn.calledWith(`${url}/Member/20?op=${operationName}`, null, expectedHeaders).should.be.true;
                     });
                 });
             });
