@@ -18,7 +18,6 @@ describe('src/V1Meta', function() {
                 port: '8081'
             };
             postFn = sinon.stub().returns({then: () => serverData});
-            getFn = sinon.stub().returns({then: () => serverData});
         });
 
         describe('when creating an asset', () => {

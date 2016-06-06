@@ -16,10 +16,9 @@ const createHeaderObj = authentication => {
 };
 
 export default class V1Meta {
-    constructor({hostname, instance, protocol, port, username, password, postFn, getFn}) {
+    constructor({hostname, instance, protocol, port, username, password, postFn}) {
         this.urls = getUrlsForV1Server({hostname, instance, protocol, port});
         this.postFn = postFn;
-        this.getFn = getFn;
         if (username && password) {
             const encodedAuthenticationCredentials = btoa(`${username}:${password}`);
             this.authHeader = `Basic ${encodedAuthenticationCredentials}`;
