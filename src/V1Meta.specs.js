@@ -9,7 +9,7 @@ describe('src/V1Meta', function() {
     let transformDataToAsset, getUrlsForV1Server, actual;
 
     describe('given a V1 hostname, server instance, protocol, port, post and get methods and no username or password', () => {
-        let v1ServerInfo, postFn, getFn;
+        let v1ServerInfo, postFn;
         beforeEach(() => {
             v1ServerInfo = {
                 hostname: 'some URL',
@@ -21,22 +21,24 @@ describe('src/V1Meta', function() {
         });
 
         describe('when creating an asset', () => {
-            let transformedAssetData, url, encodedCreds, btoa;
+            let transformedAssetData, url, queryUrl, encodedCreds, btoa;
             beforeEach(() => {
                 let assetType = 'Actual';
                 let assetData = {};
                 transformedAssetData = {Attributes: {Value: 20}};
                 transformDataToAsset = sinon.stub().withArgs(assetType, assetData).returns(transformedAssetData);
                 url = 'my V1 Instance URL';
+                queryUrl = 'my query URL';
                 encodedCreds = 'some encoded stuff';
                 getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
-                    rest: sinon.stub().returns(url)
+                    rest: sinon.stub().returns(url),
+                    query: sinon.stub().returns(queryUrl)
                 });
                 btoa = sinon.stub().withArgs(`${v1ServerInfo.username}:${v1ServerInfo.password}`).returns(encodedCreds);
                 Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
                 Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
                 Sut.__Rewire__('btoa', btoa);
-                actual = (new Sut({...v1ServerInfo, postFn, getFn})).create(assetType, assetData);
+                actual = (new Sut({...v1ServerInfo, postFn})).create(assetType, assetData);
             });
 
             afterEach(() => {
@@ -83,16 +85,15 @@ describe('src/V1Meta', function() {
         });
 
         describe('given a post method that does not return a ES2105 Promise', () => {
-            let postFn, getFn, serverData;
+            let postFn, serverData;
             beforeEach(() => {
                 serverData = {some: 'server data'};
                 postFn = sinon.spy();
-                getFn = sinon.stub().returns({then: () => serverData});
             });
 
             describe('when creating an asset', () => {
                 beforeEach(() => {
-                    let data = {...v1ServerInfowithUsernamePassword, postFn, getFn};
+                    let data = {...v1ServerInfowithUsernamePassword, postFn};
                     let sut = new Sut(data);
                     actual = sut.create('Actual', {});
                 });
@@ -110,7 +111,7 @@ describe('src/V1Meta', function() {
 
             describe('when updating an asset', () => {
                 beforeEach(() => {
-                    actual = (new Sut({...v1ServerInfowithUsernamePassword, postFn, getFn})).update('Member:20', 'Member', {});
+                    actual = (new Sut({...v1ServerInfowithUsernamePassword, postFn})).update('Member:20', 'Member', {});
                 });
 
                 it('it should return an ES2015 Promise', () => {
@@ -131,8 +132,7 @@ describe('src/V1Meta', function() {
                     operationName = 'someOperation';
                     actual = (new Sut({
                         ...v1ServerInfowithUsernamePassword,
-                        postFn,
-                        getFn
+                        postFn
                     })).executeOperation('Member', 'Member:20', operationName);
                 });
 
@@ -140,22 +140,29 @@ describe('src/V1Meta', function() {
                     actual.should.be.an.instanceOf(Promise);
                 });
             });
+
+            describe('when querying for data', () => {
+                beforeEach(() => {
+                    actual = (new Sut({ ...v1ServerInfowithUsernamePassword,
+                        postFn
+                    })).query({from: 'Epic', select: ['Name']})
+                });
+                it('it should return an ES2015 Promise', () => {
+                    actual.should.be.an.instanceOf(Promise);
+                });
+            });
         });
 
         describe('given post and get methods which does return an ES2015 promise', () => {
-            let postFn, getFn, serverData;
+            let postFn, serverData;
             beforeEach(() => {
                 serverData = {server: 'data'};
                 postFn = sinon.stub().returns(new Promise((resolve) => {
                     resolve(serverData);
                 }));
-                getFn = sinon.stub().returns(new Promise((resolve)=> {
-                    resolve(serverData);
-                }));
             });
             afterEach(() => {
                 sinon.restore(postFn);
-                sinon.restore(getFn);
             });
 
             describe('given an asset type and asset attributes', () => {
@@ -181,8 +188,7 @@ describe('src/V1Meta', function() {
                         Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
                         actual = (new Sut({
                             ...v1ServerInfowithUsernamePassword,
-                            postFn,
-                            getFn
+                            postFn
                         })).create(assetType, assetData);
                     });
 
@@ -233,7 +239,7 @@ describe('src/V1Meta', function() {
                         });
                         Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
                         Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
-                        actual = (new Sut({...v1ServerInfowithUsernamePassword, postFn, getFn})).update(oidToken, assetType, assetData);
+                        actual = (new Sut({...v1ServerInfowithUsernamePassword, postFn})).update(oidToken, assetType, assetData);
                     });
                     it('it should transform the asset attributes into a form the V1 API will understand', () => {
                         transformDataToAsset.calledWith(assetData).should.be.true;
@@ -262,8 +268,7 @@ describe('src/V1Meta', function() {
                             Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
                             actual = (new Sut({
                                 ...v1ServerInfowithUsernamePassword,
-                                postFn,
-                                getFn
+                                postFn
                             })).update(oidToken, assetType, assetData, changeComment);
                         });
 
@@ -282,7 +287,7 @@ describe('src/V1Meta', function() {
                 describe('when querying V1 with the provided query object', () => {
                     let fn;
                     beforeEach(() => {
-                        fn = () => (new Sut({...v1ServerInfowithUsernamePassword, postFn, getFn})).query(query);
+                        fn = () => (new Sut({...v1ServerInfowithUsernamePassword, postFn})).query(query);
                     });
 
                     it('it should throw an exception stating that a select property was not specified', () => {
@@ -301,7 +306,7 @@ describe('src/V1Meta', function() {
                 describe('when querying V1 with the provided query object', () => {
                     let fn;
                     beforeEach(() => {
-                        fn = () => (new Sut({...v1ServerInfowithUsernamePassword, postFn, getFn})).query(query);
+                        fn = () => (new Sut({...v1ServerInfowithUsernamePassword, postFn})).query(query);
                     });
 
                     it('it should throw an exception stating that a select property was not specified', () => {
@@ -321,7 +326,7 @@ describe('src/V1Meta', function() {
                 describe('when querying V1 with the provided query object', () => {
                     let fn;
                     beforeEach(() => {
-                        fn = () => (new Sut({...v1ServerInfowithUsernamePassword, postFn, getFn})).query(query);
+                        fn = () => (new Sut({...v1ServerInfowithUsernamePassword, postFn})).query(query);
                     });
 
                     it('it should throw an exception stating that a select property was not specified', () => {
@@ -347,7 +352,7 @@ describe('src/V1Meta', function() {
                         Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
                         actual = (new Sut({
                             ...v1ServerInfowithUsernamePassword,
-                            postFn, getFn
+                            postFn
                         })).query(query);
                     });
 
@@ -381,8 +386,7 @@ describe('src/V1Meta', function() {
                         Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
                         actual = (new Sut({
                             ...v1ServerInfowithUsernamePassword,
-                            postFn,
-                            getFn
+                            postFn
                         })).executeOperation(oidToken, operationName);
                     });
 

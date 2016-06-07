@@ -45,7 +45,7 @@ export default class V1Meta {
         invariant(Array.isArray(queryObj.select), `Error: \`select\` property must be an Array on provided query: ${queryObj}`);
         const url = this.urls.query();
         const headers = createHeaderObj(this.authHeader);
-        return this.postFn(url, queryObj, headers);
+        return Promise.resolve(this.postFn(url, queryObj, headers));
     }
 
     executeOperation(oidToken, operationName) {
