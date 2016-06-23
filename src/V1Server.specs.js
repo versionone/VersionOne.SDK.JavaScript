@@ -46,5 +46,15 @@ describe('src/V1Server', function() {
                 actual.should.equal('https://some URL:8081/some Instance/query.v1');
             });
         });
+
+        describe('when getting the meta.v1 Url', () => {
+            beforeEach(() => {
+                actual = Sut.getUrlsForV1Server(v1ServerInfo).meta();
+            });
+
+            it('it should return the Rest API Url', () => {
+                actual.should.equal('https://some URL:8081/some Instance/meta.v1');
+            });
+        });
     });
 });

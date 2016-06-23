@@ -2,7 +2,8 @@ export function getUrlsForV1Server({hostname, instance, protocol, port}) {
     const rootUrl = getUrlToV1Server({hostname, instance, protocol, port});
     return {
         rest: () => restUrl(rootUrl),
-        query: () => queryUrl(rootUrl)
+        query: () => queryUrl(rootUrl),
+        meta: () => metaUrl(rootUrl)
     };
 }
 
@@ -14,10 +15,8 @@ function getUrlToV1Server({hostname, instance, protocol, port}) {
     return `${url}/${instance}`;
 }
 
-function restUrl(rootUrl) {
-    return `${rootUrl}/rest-1.v1/Data`;
-}
+const restUrl = rootUrl => `${rootUrl}/rest-1.v1/Data`;
 
-function queryUrl(rootUrl) {
-    return `${rootUrl}/query.v1`;
-}
+const queryUrl = rootUrl => `${rootUrl}/query.v1`;
+
+const metaUrl = rootUrl => `${rootUrl}/meta.v1`;
