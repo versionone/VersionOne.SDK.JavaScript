@@ -26,15 +26,6 @@ var v1 = new v1sdk.V1Meta({
 			headers: headerObj, // Include provided authorization headers { Authorization: 'Basic: .....' }
 			dataType: 'json' // SDK only supports JSON from the V1 Server
 		});
-	},
-	get: function (url, data) {
-		return $.ajax({
-			url: url,
-			method: 'GET',
-			data: data,
-			dataType: 'json' // SDK only supports JSON from the V1 Server
-
-		});
 	}
 });
 
