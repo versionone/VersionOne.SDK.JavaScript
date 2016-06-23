@@ -54,4 +54,10 @@ export default class V1Meta {
         const headers = createHeaderObj(this.authHeader);
         return Promise.resolve(this.postFn(url, null, headers));
     }
+
+    queryDefinition(assetType) {
+        const url = `${this.urls.meta()}/${assetType}`;
+        const headers = createHeaderObj(this.authHeader);
+        return Promise.resolve(this.postFn(url, null, headers));
+    }
 }

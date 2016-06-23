@@ -21,7 +21,7 @@ describe('src/V1Meta', function() {
         });
 
         describe('when creating an asset', () => {
-            let transformedAssetData, url, queryUrl, encodedCreds, btoa;
+            let transformedAssetData, url, queryUrl, metaUrl, encodedCreds, btoa;
             beforeEach(() => {
                 let assetType = 'Actual';
                 let assetData = {};
@@ -29,10 +29,12 @@ describe('src/V1Meta', function() {
                 transformDataToAsset = sinon.stub().withArgs(assetType, assetData).returns(transformedAssetData);
                 url = 'my V1 Instance URL';
                 queryUrl = 'my query URL';
+                metaUrl = 'my meta URL';
                 encodedCreds = 'some encoded stuff';
                 getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
                     rest: sinon.stub().returns(url),
-                    query: sinon.stub().returns(queryUrl)
+                    query: sinon.stub().returns(queryUrl),
+                    meta: sinon.stub().returns(metaUrl)
                 });
                 btoa = sinon.stub().withArgs(`${v1ServerInfo.username}:${v1ServerInfo.password}`).returns(encodedCreds);
                 Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
@@ -146,6 +148,17 @@ describe('src/V1Meta', function() {
                     actual = (new Sut({ ...v1ServerInfowithUsernamePassword,
                         postFn
                     })).query({from: 'Epic', select: ['Name']})
+                });
+                it('it should return an ES2015 Promise', () => {
+                    actual.should.be.an.instanceOf(Promise);
+                });
+            });
+
+            describe('when querying for a definition', () => {
+                beforeEach(() => {
+                    actual = (new Sut({ ...v1ServerInfowithUsernamePassword,
+                        postFn
+                    })).queryDefinition("Story")
                 });
                 it('it should return an ES2015 Promise', () => {
                     actual.should.be.an.instanceOf(Promise);
@@ -392,6 +405,30 @@ describe('src/V1Meta', function() {
 
                     it('it should provide the postFn with the proper API URL for the intended operation', () => {
                         postFn.calledWith(`${url}/Member/20?op=${operationName}`, null, expectedHeaders).should.be.true;
+                    });
+                });
+            });
+
+            describe('given an assetType', () => {
+                let assetType, url;
+                beforeEach(() => {
+                    assetType = "Story"
+                });
+                describe('when query for a definition', () => {
+                    beforeEach(() => {
+                        postFn = sinon.stub().returns(Promise.resolve());
+                        getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
+                            meta: sinon.stub().returns(url)
+                        });
+                        Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
+                        actual = (new Sut({
+                            ...v1ServerInfowithUsernamePassword,
+                            postFn
+                        })).queryDefinition(assetType);
+                    });
+
+                    it('it should provide the postFn with the proper API URL for the assetType', () => {
+                        postFn.calledWith(`${url}/${assetType}`, null, expectedHeaders).should.be.true;
                     });
                 });
             });
