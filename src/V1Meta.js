@@ -16,9 +16,10 @@ const createHeaderObj = authentication => {
 };
 
 export default class V1Meta {
-    constructor({hostname, instance, protocol, port, username, password, postFn}) {
+    constructor({hostname, instance, protocol, port, username, password, postFn, getFn}) {
         this.urls = getUrlsForV1Server({hostname, instance, protocol, port});
         this.postFn = postFn;
+        this.getFn = getFn;
         if (username && password) {
             const encodedAuthenticationCredentials = btoa(`${username}:${password}`);
             this.authHeader = `Basic ${encodedAuthenticationCredentials}`;
@@ -53,5 +54,11 @@ export default class V1Meta {
         const url = `${this.urls.rest()}/${oid.assetType}/${oid.number}?op=${operationName}`;
         const headers = createHeaderObj(this.authHeader);
         return Promise.resolve(this.postFn(url, null, headers));
+    }
+
+    queryDefinition(assetType) {
+        const url = `${this.urls.meta()}/${assetType}`;
+        const headers = createHeaderObj(this.authHeader);
+        return Promise.resolve(this.getFn(url, null, headers));
     }
 }

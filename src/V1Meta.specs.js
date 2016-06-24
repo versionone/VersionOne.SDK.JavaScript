@@ -9,7 +9,7 @@ describe('src/V1Meta', function() {
     let transformDataToAsset, getUrlsForV1Server, actual;
 
     describe('given a V1 hostname, server instance, protocol, port, post and get methods and no username or password', () => {
-        let v1ServerInfo, postFn;
+        let v1ServerInfo, postFn, getFn;
         beforeEach(() => {
             v1ServerInfo = {
                 hostname: 'some URL',
@@ -18,10 +18,11 @@ describe('src/V1Meta', function() {
                 port: '8081'
             };
             postFn = sinon.stub().returns({then: () => serverData});
+            getFn = sinon.stub().returns({then: () => serverData});
         });
 
         describe('when creating an asset', () => {
-            let transformedAssetData, url, queryUrl, encodedCreds, btoa;
+            let transformedAssetData, url, queryUrl, metaUrl, encodedCreds, btoa;
             beforeEach(() => {
                 let assetType = 'Actual';
                 let assetData = {};
@@ -29,10 +30,12 @@ describe('src/V1Meta', function() {
                 transformDataToAsset = sinon.stub().withArgs(assetType, assetData).returns(transformedAssetData);
                 url = 'my V1 Instance URL';
                 queryUrl = 'my query URL';
+                metaUrl = 'my meta URL';
                 encodedCreds = 'some encoded stuff';
                 getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
                     rest: sinon.stub().returns(url),
-                    query: sinon.stub().returns(queryUrl)
+                    query: sinon.stub().returns(queryUrl),
+                    meta: sinon.stub().returns(metaUrl)
                 });
                 btoa = sinon.stub().withArgs(`${v1ServerInfo.username}:${v1ServerInfo.password}`).returns(encodedCreds);
                 Sut.__Rewire__('transformDataToAsset', transformDataToAsset);
@@ -85,10 +88,11 @@ describe('src/V1Meta', function() {
         });
 
         describe('given a post method that does not return a ES2105 Promise', () => {
-            let postFn, serverData;
+            let postFn, getFn, serverData;
             beforeEach(() => {
                 serverData = {some: 'server data'};
                 postFn = sinon.spy();
+                getFn = sinon.spy();
             });
 
             describe('when creating an asset', () => {
@@ -151,18 +155,34 @@ describe('src/V1Meta', function() {
                     actual.should.be.an.instanceOf(Promise);
                 });
             });
+
+            describe('when querying for a definition', () => {
+                beforeEach(() => {
+                    actual = (new Sut({ ...v1ServerInfowithUsernamePassword,
+                        postFn,
+                        getFn
+                    })).queryDefinition("Story")
+                });
+                it('it should return an ES2015 Promise', () => {
+                    actual.should.be.an.instanceOf(Promise);
+                });
+            });
         });
 
         describe('given post and get methods which does return an ES2015 promise', () => {
-            let postFn, serverData;
+            let postFn, getFn, serverData;
             beforeEach(() => {
                 serverData = {server: 'data'};
                 postFn = sinon.stub().returns(new Promise((resolve) => {
                     resolve(serverData);
                 }));
+                getFn = sinon.stub().returns(new Promise((resolve) => {
+                    resolve(serverData);
+                }));
             });
             afterEach(() => {
                 sinon.restore(postFn);
+                sinon.restore(getFn);
             });
 
             describe('given an asset type and asset attributes', () => {
@@ -392,6 +412,32 @@ describe('src/V1Meta', function() {
 
                     it('it should provide the postFn with the proper API URL for the intended operation', () => {
                         postFn.calledWith(`${url}/Member/20?op=${operationName}`, null, expectedHeaders).should.be.true;
+                    });
+                });
+            });
+
+            describe('given an assetType', () => {
+                let assetType, url;
+                beforeEach(() => {
+                    assetType = "Story"
+                });
+                describe('when query for a definition', () => {
+                    beforeEach(() => {
+                        postFn = sinon.stub().returns(Promise.resolve());
+                        getFn = sinon.stub().returns(Promise.resolve());
+                        getUrlsForV1Server = sinon.stub().withArgs({...v1ServerInfo}).returns({
+                            meta: sinon.stub().returns(url)
+                        });
+                        Sut.__Rewire__('getUrlsForV1Server', getUrlsForV1Server);
+                        actual = (new Sut({
+                            ...v1ServerInfowithUsernamePassword,
+                            postFn,
+                            getFn
+                        })).queryDefinition(assetType);
+                    });
+
+                    it('it should provide the getFn with the proper API URL for the assetType', () => {
+                        getFn.calledWith(`${url}/${assetType}`, null, expectedHeaders).should.be.true;
                     });
                 });
             });

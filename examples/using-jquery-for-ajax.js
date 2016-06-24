@@ -17,7 +17,7 @@ var v1 = new v1sdk.V1Meta({
 	protocol: protocol,
 	username: username,
 	password: password,
-	post: function (url, data, headerObj) {
+	postFn: function (url, data, headerObj) {
 		// Be sure to return jquery's jqxhr object/the post results
 		return $.ajax({
 			url: url,
@@ -27,15 +27,16 @@ var v1 = new v1sdk.V1Meta({
 			dataType: 'json' // SDK only supports JSON from the V1 Server
 		});
 	},
-	get: function (url, data) {
-		return $.ajax({
-			url: url,
-			method: 'GET',
-			data: data,
-			dataType: 'json' // SDK only supports JSON from the V1 Server
-
-		});
-	}
+    getFn: function (url, data, headerObj) {
+        // Be sure to return jquery's jqxhr object/the post results
+        return $.ajax({
+            url: url,
+            method: 'GET',
+            data: data,
+            headers: headerObj, // Include provided authorization headers { Authorization: 'Basic: .....' }
+            dataType: 'json' // SDK only supports JSON from the V1 Server
+        });
+    }
 });
 
 // Create Asset Actual
@@ -46,3 +47,12 @@ v1.create('Actual', {Value: 5.4, Date: new Date()})
 	.catch(function (error) {
 		console.log(error);
 	});
+
+// Retrieve a description of all the Attributes, Operations for a given AssetType
+v1.queryDefinition('Story')
+    .then(function (result) {
+       console.log(result);
+    })
+    .catch(function(error) {
+        console.log(eror);
+    });
