@@ -17,7 +17,7 @@ var v1 = new v1sdk.V1Meta({
 	protocol: protocol,
 	username: username,
 	password: password,
-	post: function (url, data, headerObj) {
+	postFn: function (url, data, headerObj) {
 		// Be sure to return jquery's jqxhr object/the post results
 		return $.ajax({
 			url: url,
@@ -26,7 +26,17 @@ var v1 = new v1sdk.V1Meta({
 			headers: headerObj, // Include provided authorization headers { Authorization: 'Basic: .....' }
 			dataType: 'json' // SDK only supports JSON from the V1 Server
 		});
-	}
+	},
+    getFn: function (url, data, headerObj) {
+        // Be sure to return jquery's jqxhr object/the post results
+        return $.ajax({
+            url: url,
+            method: 'GET',
+            data: data,
+            headers: headerObj, // Include provided authorization headers { Authorization: 'Basic: .....' }
+            dataType: 'json' // SDK only supports JSON from the V1 Server
+        });
+    }
 });
 
 // Create Asset Actual
