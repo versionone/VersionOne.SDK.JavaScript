@@ -52,7 +52,7 @@ describe('src/V1Server', function() {
                 actual = Sut.getUrlsForV1Server(v1ServerInfo).meta();
             });
 
-            it('it should return the Rest API Url', () => {
+            it('it should return the Meta API Url', () => {
                 actual.should.equal('https://some URL:8081/some Instance/meta.v1');
             });
         });
