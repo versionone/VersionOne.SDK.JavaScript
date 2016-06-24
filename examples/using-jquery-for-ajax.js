@@ -3,12 +3,12 @@
 var jquery = require('jquery');
 var v1sdk = require('./../dist/v1sdk');
 
-var hostname = "ec2-54-205-135-234.compute-1.amazonaws.com";
-var instance = "VersionOne";
+var hostname = "www14.v1host.com";
+var instance = "v1sdktesting";
 var username = "admin";
 var password = "admin";
-var port = "80";
-var protocol = "http";
+var port = "443";
+var protocol = "https";
 
 var v1 = new v1sdk.V1Meta({
 	hostname: hostname,
