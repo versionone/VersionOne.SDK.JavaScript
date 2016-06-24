@@ -37,3 +37,12 @@ v1.create('Actual', {Value: 5.4, Date: new Date()})
 	.catch(function (error) {
 		console.log(error);
 	});
+
+// Retrieve a description of all the Attributes, Operations for a given AssetType
+v1.queryDefinition('Story')
+    .then(function (result) {
+       console.log(result);
+    })
+    .catch(function(error) {
+        console.log(eror);
+    });
