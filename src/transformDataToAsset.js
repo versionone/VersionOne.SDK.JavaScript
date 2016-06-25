@@ -1,34 +1,42 @@
-export default function(assetData) {
-    return {
-        Attributes: reduceAssetData(assetData)
-    };
-}
+import upperCamelCase from 'uppercamelcase';
 
-function reduceAssetData(obj) {
-    return Object.keys(obj).reduce((output, key) => {
+export default (assetData) => ({
+    Attributes: reduceAssetData(assetData)
+});
+
+const reduceAssetData = (obj) => Object.keys(obj)
+    .reduce((output, key) => {
         const attributeData = obj[key];
+        const assetAttributeKey = upperCamelCase(key);
         if (Array.isArray(attributeData)) {
-            output[key] = {
-                name: key,
-                value: attributeData.map(reduceRelationalAttributes)
+            return {
+                ...output,
+                [assetAttributeKey]: {
+                    name: key,
+                    value: attributeData.map(reduceRelationalAttributes),
+                    act: 'set'
+                }
             };
-        } else {
-            if (isFunction(attributeData)) {
-                output[key] = {
-                    value: obj[key]()
-                };
-            } else {
-                output[key] = {
-                    value: obj[key]
-                };
-            }
-            output[key].act = 'set';
         }
-        return output;
+        if (isFunction(attributeData)) {
+            return {
+                ...output,
+                [assetAttributeKey]: {
+                    value: obj[key](),
+                    act: 'set'
+                }
+            };
+        }
+        return {
+            ...output,
+            [assetAttributeKey]: {
+                value: obj[key],
+                act: 'set'
+            }
+        };
     }, {});
-}
 
-function reduceRelationalAttributes(obj) {
+const reduceRelationalAttributes = (obj) => {
     if (typeof obj === 'string') {
         return {
             idref: obj,
@@ -40,8 +48,6 @@ function reduceRelationalAttributes(obj) {
         output.act = obj.act ? obj.act : 'add';
         return output;
     }, {});
-}
+};
 
-function isFunction(obj) {
-    return obj && obj.constructor && obj.call && obj.apply;
-}
+const isFunction = (obj) => obj && obj.constructor && obj.call && obj.apply;

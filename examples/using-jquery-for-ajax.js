@@ -1,58 +1,24 @@
-// **NOTE:** This assumes you have jQuery as a node module.
+import $ from 'jquery';
+import sdk, {jqueryConnector} from 'v1sdk';
 
-var jquery = require('jquery');
-var v1sdk = require('./../dist/v1sdk');
+const jqueryConnectedSdk = jqueryConnector($)(sdk);
+const v1 = jqueryConnectedSdk('www14.v1host.com', 'v1sdktesting', 443, true)
+    .withCreds('admin', 'admin'); // usage with username/password
+//  .withAccessToken('your token'); // usage with access tokens
 
-var hostname = "www14.v1host.com";
-var instance = "v1sdktesting";
-var username = "admin";
-var password = "admin";
-var port = "443";
-var protocol = "https";
-
-var v1 = new v1sdk.V1Meta({
-	hostname: hostname,
-	instance: instance,
-	port: port,
-	protocol: protocol,
-	username: username,
-	password: password,
-	postFn: function (url, data, headerObj) {
-		// Be sure to return jquery's jqxhr object/the post results
-		return $.ajax({
-			url: url,
-			method: 'POST',
-			data: data,
-			headers: headerObj, // Include provided authorization headers { Authorization: 'Basic: .....' }
-			dataType: 'json' // SDK only supports JSON from the V1 Server
-		});
-	},
-    getFn: function (url, data, headerObj) {
-        // Be sure to return jquery's jqxhr object/the post results
-        return $.ajax({
-            url: url,
-            method: 'GET',
-            data: data,
-            headers: headerObj, // Include provided authorization headers { Authorization: 'Basic: .....' }
-            dataType: 'json' // SDK only supports JSON from the V1 Server
-        });
-    }
-});
-
-// Create Asset Actual
-v1.create('Actual', {Value: 5.4, Date: new Date()})
-	.then(function (result) {
-		console.log(result);
-	})
-	.catch(function (error) {
-		console.log(error);
-	});
+v1.create('Story', {estimate: 5, status: 'Not Started'})
+    .then((story) => v1.update(story.oidToken, {estimate: 7}))
+    .then(v1.query({
+        from: 'Story',
+        select: ['Estimate', 'Status'],
+        where: {
+            Status: 'Not Started'
+        }
+    }))
+    .then(console.log)
+    .catch(console.log);
 
 // Retrieve a description of all the Attributes, Operations for a given AssetType
 v1.queryDefinition('Story')
-    .then(function (result) {
-       console.log(result);
-    })
-    .catch(function(error) {
-        console.log(eror);
-    });
+    .then(console.log)
+    .catch(console.log);

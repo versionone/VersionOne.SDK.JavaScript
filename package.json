@@ -38,7 +38,8 @@
   },
   "dependencies": {
     "btoa": "1.1.2",
-    "invariant": "2.2.0"
+    "invariant": "2.2.0",
+    "uppercamelcase": "^1.1.0"
   },
   "devDependencies": {
     "babel": "6.3.13",

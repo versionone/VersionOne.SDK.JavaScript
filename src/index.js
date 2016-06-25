@@ -1,4 +1,30 @@
+import btoa from 'btoa';
 import * as oid from './Oid';
+import createMeta from './createMeta';
 
-export {default as V1Meta} from './V1Meta';
 export const Oid = oid;
+export {default as jqueryConnector} from './connectors/jqueryConnector';
+export {default as axiosConnector} from './connectors/axiosConnector';
+export default (postFn, getFn) => (hostname, instance, port = 80, isHttps = false) => {
+    const protocol = isHttps ? 'https' : 'http';
+    return {
+        withAccessToken: (token) => createMeta(
+            hostname,
+            instance,
+            protocol,
+            port,
+            token,
+            postFn,
+            getFn
+        ),
+        withCreds: (username, password) => createMeta(
+            hostname,
+            instance,
+            protocol,
+            port,
+            btoa(`${username}:${password}`),
+            postFn,
+            getFn
+        )
+    };
+};
