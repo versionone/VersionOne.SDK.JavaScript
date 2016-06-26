@@ -56,5 +56,5 @@ export default (hostname, instance, protocol, port, token, postFn, getFn) => {
 const createHeaderObj = (token) => ({
     Accept: 'application/json',
     'Content-Type': 'application/json',
-    Authorization: `Basic ${token}`
+    Authorization: `Bearer ${token}`
 });

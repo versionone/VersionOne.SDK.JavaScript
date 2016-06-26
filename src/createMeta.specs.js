@@ -72,7 +72,7 @@ describe('src/meta.create', function() {
                 this.headers = {
                     Accept: 'application/json',
                     'Content-Type': 'application/json',
-                    Authorization: `Basic token`
+                    Authorization: `Bearer token`
                 };
                 const getV1Urls = sinon.mock()
                     .withArgs('h', 'i', 'http', 80)
@@ -135,7 +135,7 @@ describe('src/metaupdate', function() {
                 this.headers = {
                     Accept: 'application/json',
                     'Content-Type': 'application/json',
-                    Authorization: `Basic token`
+                    Authorization: `Bearer token`
                 };
                 const getV1Urls = sinon.mock()
                     .withArgs('h', 'i', 'http', 80)
@@ -212,7 +212,7 @@ describe('src/meta.query', function() {
                 this.headers = {
                     Accept: 'application/json',
                     'Content-Type': 'application/json',
-                    Authorization: `Basic token`
+                    Authorization: `Bearer token`
                 };
                 const getV1Urls = sinon.mock()
                     .withArgs('h', 'i', 'http', 80)
@@ -263,7 +263,7 @@ describe('src/meta.executeOperation', function() {
                 this.headers = {
                     Accept: 'application/json',
                     'Content-Type': 'application/json',
-                    Authorization: `Basic token`
+                    Authorization: `Bearer token`
                 };
                 const getV1Urls = sinon.mock()
                     .withArgs('h', 'i', 'http', 80)
@@ -306,7 +306,7 @@ describe('src/meta.queryDefinition', function() {
                 this.headers = {
                     Accept: 'application/json',
                     'Content-Type': 'application/json',
-                    Authorization: `Basic token`
+                    Authorization: `Bearer token`
                 };
                 const getV1Urls = sinon.mock()
                     .withArgs('h', 'i', 'http', 80)
