@@ -295,8 +295,28 @@ describe('src/meta.queryDefinition', function() {
     });
     describe('given no asset type', () => {
         describe('when querying for meta data', () => {
-            it('it should throw an invariant error', () => {
-                (() => this.meta.queryDefinition()).should.throw();
+            beforeEach(() => {
+                this.headers = {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer token`
+                };
+                const getV1Urls = sinon.mock()
+                    .withArgs('h', 'i', 'http', 80)
+                    .returns({
+                        meta: 'meta URL'
+                    });
+                RewireApi.__Rewire__('getV1Urls', getV1Urls);
+                this.getFn = sinon.stub();
+
+                this.meta = createMeta('h', 'i', 'http', 80, 'token', null, this.getFn);
+                this.actual = this.meta.queryDefinition();
+            });
+            afterEach(() => {
+                RewireApi.__ResetDependency__('getV1Urls');
+            });
+            it('it should query for all meta data', () => {
+                this.getFn.calledWith(`meta URL/`, null, this.headers).should.be.true;
             });
         });
     });

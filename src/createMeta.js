@@ -46,7 +46,7 @@ export default (hostname, instance, protocol, port, token, postFn, getFn) => {
         },
 
         queryDefinition(assetType) {
-            invariant(assetType, `Error: there was no \`assetType\` provided to queryDefinition`);
+            assetType = assetType ? assetType : '';
             const url = `${urls.meta}/${assetType}`;
             return getFn(url, null, headers);
         }
