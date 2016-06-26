@@ -42,7 +42,7 @@ describe('when loading the module', function() {
                 describe('when creating the SDK', () => {
                     beforeEach(() => {
                         this.metaStub = sinon.mock()
-                            .withArgs('hostname', 'instance', 'https', 80, this.accessToken, this.postFn, this.getFn)
+                            .withExactArgs('hostname', 'instance', 'https', 80, this.accessToken, this.postFn, this.getFn, false)
                             .returns('meta');
                         RewireApi.__Rewire__('createMeta', this.metaStub);
                         this.meta = this.setSecurity.withAccessToken(this.accessToken);
@@ -62,7 +62,7 @@ describe('when loading the module', function() {
                     beforeEach(() => {
                         this.token = 'username token';
                         this.metaStub = sinon.mock()
-                            .withArgs('hostname', 'instance', 'https', 80, this.token, this.postFn, this.getFn)
+                            .withExactArgs('hostname', 'instance', 'https', 80, this.token, this.postFn, this.getFn, true)
                             .returns('meta1');
                         this.btoa = sinon.mock()
                             .withArgs(`${this.username}:${this.password}`)

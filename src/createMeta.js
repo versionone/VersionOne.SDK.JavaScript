@@ -3,9 +3,9 @@ import transformDataToAsset from './transformDataToAsset';
 import getV1Urls from './getV1Urls';
 import Oid from './Oid';
 
-export default (hostname, instance, protocol, port, token, postFn, getFn) => {
+export default (hostname, instance, protocol, port, token, postFn, getFn, isBasic) => {
     const urls = getV1Urls(hostname, instance, protocol, port);
-    const headers = createHeaderObj(token);
+    const headers = createHeaderObj(token, isBasic);
 
     return {
         create(assetType, assetData) {
@@ -46,15 +46,16 @@ export default (hostname, instance, protocol, port, token, postFn, getFn) => {
         },
 
         queryDefinition(assetType) {
-            assetType = assetType ? assetType : '';
-            const url = `${urls.meta}/${assetType}`;
+            const queryAssetType = assetType ? assetType : '';
+            const url = `${urls.meta}/${queryAssetType}`;
+            console.log(headers)
             return getFn(url, null, headers);
         }
     };
 };
 
-const createHeaderObj = (token) => ({
+const createHeaderObj = (token, isBasic) => ({
     Accept: 'application/json',
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`
+    Authorization: `${isBasic ? 'Basic' : 'Bearer'} ${token}`
 });

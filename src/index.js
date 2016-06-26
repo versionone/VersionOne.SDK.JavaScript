@@ -14,7 +14,8 @@ export default (postFn, getFn) => (hostname, instance, port = 80, isHttps = fals
             port,
             token,
             postFn,
-            getFn
+            getFn,
+            false
         ),
         withCreds: (username, password) => createMeta(
             hostname,
@@ -23,7 +24,8 @@ export default (postFn, getFn) => (hostname, instance, port = 80, isHttps = fals
             port,
             btoa(`${username}:${password}`),
             postFn,
-            getFn
+            getFn,
+            true
         )
     };
 };
