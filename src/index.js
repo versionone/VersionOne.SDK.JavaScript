@@ -1,8 +1,7 @@
 import btoa from 'btoa';
-import * as oid from './Oid';
 import createMeta from './createMeta';
 
-export const Oid = oid;
+export {default as Oid} from './Oid';
 export {default as jqueryConnector} from './connectors/jqueryConnector';
 export {default as axiosConnector} from './connectors/axiosConnector';
 export default (postFn, getFn) => (hostname, instance, port = 80, isHttps = false) => {

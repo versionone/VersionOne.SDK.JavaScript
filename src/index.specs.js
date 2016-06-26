@@ -1,5 +1,5 @@
 import sdk, {Oid, __RewireAPI__ as RewireApi} from './index';
-import * as oid from './Oid';
+import oid from './Oid';
 import sinon from 'sinon';
 
 describe('when loading the module', function() {
