@@ -8,6 +8,7 @@ With this said, there are a number of options for getting your questions address
 
 * [StackOverflow](http://stackoverflow.com/questions/tagged/versionone): For asking questions of the VersionOne Development Community.
 * [GitHub Issues](https://github.com/versionone/VersionOne.SDK.JavaScript/issues): For submitting issues that others may try to address.
+* [![Gitter](https://badges.gitter.im/versionone/VersionOne.SDK.JavaScript.svg)](https://gitter.im/versionone/VersionOne.SDK.JavaScript?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge): For participating in the development of the SDK and chatting with other developers.
 
 In general, StackOverflow is your best option for getting support for the VersionOne JavaScript SDK.
 
