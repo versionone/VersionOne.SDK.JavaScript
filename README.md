@@ -1,3 +1,5 @@
+[![Gitter](https://badges.gitter.im/versionone/VersionOne.SDK.JavaScript.svg)](https://gitter.im/versionone/VersionOne.SDK.JavaScript?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+
 # VersionOne JavaScript SDK 
 
 The VersionOne JavaScript SDK is an open-source and community supported JavaScript client for the VersionOne API. As an open-sourced and community supported project, the VersionOne JavaScript SDK is not formally supported by VersionOne.
