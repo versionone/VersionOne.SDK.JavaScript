@@ -48,7 +48,6 @@ export default (hostname, instance, protocol, port, token, postFn, getFn, isBasi
         queryDefinition(assetType) {
             const queryAssetType = assetType ? assetType : '';
             const url = `${urls.meta}/${queryAssetType}`;
-            console.log(headers)
             return getFn(url, null, headers);
         }
     };
