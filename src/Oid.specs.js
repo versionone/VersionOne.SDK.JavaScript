@@ -12,21 +12,17 @@ describe('src/Oid', function() {
             beforeEach(() => {
                 this.actual = new Sut(this.oidToken);
             });
-
             it('it should return an Oid with an asset type', () => {
                 this.actual.assetType.should.equal('Member');
             });
-
             it('it should return a read-only asset type property', () => {
-                (() => this.actual.assetType = 'Story').should.throw;
+                (() => this.actual.assetType = 'Story').should.throw();
             });
-
             it('it should return an Oid with a ID number', () => {
                 this.actual.number.should.equal(20);
             });
-
             it('it should return a read-only ID number property', () => {
-                (() => this.actual.number = 25).should.throw;
+                (() => this.actual.number = 25).should.throw();
             });
         });
 
@@ -34,7 +30,6 @@ describe('src/Oid', function() {
             beforeEach(() => {
                 this.actual = new Sut(this.oidToken).toString();
             });
-
             it('it should return an Oid Token for the Oid', () => {
                 this.actual.should.equal('Member:20');
             });
@@ -47,7 +42,10 @@ describe('src/Oid', function() {
         });
         describe('when creating an Oid from the Oid token', () => {
             beforeEach(() => {
-                (() => this.actual = new Sut(this.oidToken)).should.throw(InvalidOidToken);
+                this.fn = () => this.actual = new Sut(this.oidToken);
+            });
+            it('it should throw an InvalidOidToken error', () => {
+                this.fn.should.throw(InvalidOidToken);
             });
         });
     });

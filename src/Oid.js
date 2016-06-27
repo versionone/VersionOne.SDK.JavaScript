@@ -1,19 +1,24 @@
-export const InvalidOidToken = class extends Error {
+export const InvalidOidToken = class {
     constructor(message) {
-        super(message);
-        this.name = 'InvalidOidToken';
+        this.name = this.constructor.name;
+        this.message = message;
+        if (typeof Error.captureStackTrace === 'function') {
+            Error.captureStackTrace(this, this.constructor);
+        } else {
+            this.stack = (new Error(message)).stack;
+        }
     }
 };
+InvalidOidToken.prototype = Object.create(Error.prototype);
 
 export default class {
     constructor(oidToken) {
-        try {
-            const oidParts = oidToken.split(':');
-            this.type = oidParts[0];
-            this.idNumber = parseInt(oidParts[1], 10);
-        } catch (error) {
-            throw new InvalidOidToken(error.message);
+        const oidParts = oidToken.split(':');
+        if (/[1-9][0-9]*/.exec(oidParts[1]) === null) {
+            throw new InvalidOidToken(oidToken);
         }
+        this.type = oidParts[0];
+        this.idNumber = parseInt(oidParts[1], 10);
     }
 
     get assetType() {
