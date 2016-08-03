@@ -33,6 +33,9 @@ describe('src/meta', function() {
             it('it should return an object with a query definition function', () => {
                 this.actual.queryDefinition.should.be.a('function');
             });
+            it('it should return an object with a activity stream function', () => {
+                this.actual.getActivityStream.should.be.a('function');
+            });
         });
     });
 });
@@ -515,6 +518,33 @@ describe('src/meta.queryDefinition', function() {
             });
             it('it should post the the operation to the REST URL endpoint', () => {
                 this.getFn.calledWith(`meta URL/Actual`, null, this.headers).should.be.true;
+            });
+        });
+    });
+    describe('given an oidToken', () => {
+        describe('when retreiving an activity stream for the asset', () => {
+            beforeEach(() => {
+                this.headers = {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    Authorization: 'Bearer token'
+                };
+                const getV1Urls = sinon.mock()
+                    .withArgs('h', 'i', 'http', 80)
+                    .returns({
+                        meta: 'meta URL'
+                    });
+                RewireApi.__Rewire__('getV1Urls', getV1Urls);
+                this.getFn = sinon.stub();
+
+                this.meta = createMeta('h', 'i', 'http', 80, 'token', null, this.getFn, false);
+                this.actual = this.meta.getActivityStream('Story:1234');
+            });
+            afterEach(() => {
+                RewireApi.__ResetDependency__('getV1Urls');
+            });
+            it('it should post the the operation to the REST URL endpoint', () => {
+                this.getFn.calledWith(`meta URL/Story/1234`, null, this.headers).should.be.true;
             });
         });
     });

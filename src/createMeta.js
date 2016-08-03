@@ -49,6 +49,13 @@ export default (hostname, instance, protocol, port, token, postFn, getFn, isBasi
             const queryAssetType = assetType ? assetType : '';
             const url = `${urls.meta}/${queryAssetType}`;
             return getFn(url, null, headers);
+        },
+
+        getActivityStream(oidToken) {
+            invariant(oidToken, `Error: there was no \`oidToken\` provided to execute operation`);
+            const oid = new Oid(oidToken);
+            const url = `${urls.activityStream}/${oid.assetType}/${oid.number}`;
+            return getFn(url, null, headers);
         }
     };
 };

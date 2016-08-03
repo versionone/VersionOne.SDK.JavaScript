@@ -3,7 +3,8 @@ export default (hostname, instance, protocol, port) => {
     return Object.freeze({
         rest: `${rootUrl}/rest-1.v1/Data`,
         query: `${rootUrl}/query.v1`,
-        meta: `${rootUrl}/meta.v1`
+        meta: `${rootUrl}/meta.v1`,
+        activityStream: `${rootUrl}/api/ActivityStream`
     });
 };
 
