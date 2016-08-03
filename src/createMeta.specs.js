@@ -544,7 +544,7 @@ describe('src/meta.queryDefinition', function() {
                 RewireApi.__ResetDependency__('getV1Urls');
             });
             it('it should post the the operation to the REST URL endpoint', () => {
-                this.getFn.calledWith(`meta URL/Story/1234`, null, this.headers).should.be.true;
+                this.getFn.calledWith(`meta URL/Story:1234`, null, this.headers).should.be.true;
             });
         });
     });

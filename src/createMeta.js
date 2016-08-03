@@ -53,8 +53,7 @@ export default (hostname, instance, protocol, port, token, postFn, getFn, isBasi
 
         getActivityStream(oidToken) {
             invariant(oidToken, `Error: there was no \`oidToken\` provided to execute operation`);
-            const oid = new Oid(oidToken);
-            const url = `${urls.activityStream}/${oid.assetType}/${oid.number}`;
+            const url = `${urls.activityStream}/${oidToken}`;
             return getFn(url, null, headers);
         }
     };
