@@ -24,7 +24,7 @@ describe('src/getV1Urls', function() {
                 this.actual.meta.should.equal('https://some URL:8081/some Instance/meta.v1');
             });
             it('it should return the Activity Stream API URL', () => {
-                this.actual.activityStream.should.equal('https://some URL:8081/some Instance/api/activityStream');
+                this.actual.activityStream.should.equal('https://some URL:8081/some Instance/api/ActivityStream');
             });
         });
     });
