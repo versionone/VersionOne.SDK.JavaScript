@@ -532,7 +532,7 @@ describe('src/meta.queryDefinition', function() {
                 const getV1Urls = sinon.mock()
                     .withArgs('h', 'i', 'http', 80)
                     .returns({
-                        meta: 'meta URL'
+                        activityStream: 'activityStream URL'
                     });
                 RewireApi.__Rewire__('getV1Urls', getV1Urls);
                 this.getFn = sinon.stub();
@@ -543,8 +543,8 @@ describe('src/meta.queryDefinition', function() {
             afterEach(() => {
                 RewireApi.__ResetDependency__('getV1Urls');
             });
-            it('it should post the the operation to the REST URL endpoint', () => {
-                this.getFn.calledWith(`meta URL/Story:1234`, null, this.headers).should.be.true;
+            it('it should query the ActivityStream endpoint', () => {
+                this.getFn.calledWith(`activityStream URL/Story:1234`, null, this.headers).should.be.true;
             });
         });
     });
