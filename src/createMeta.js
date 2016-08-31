@@ -24,7 +24,7 @@ export default (hostname, instance, protocol, port, token, postFn, getFn, isBasi
             const oid = new Oid(oidToken);
             const postData = transformDataToAsset(assetData);
             const comment = changeComment ? `?comment=${encodeURIComponent(changeComment)}` : '';
-            const url = `${urls.rest}/${oid.assetType}/${oidToken}${comment}`;
+            const url = `${urls.rest}/${oid.assetType}/${oid.number}${comment}`;
             return postFn(url, postData, headers);
         },
 

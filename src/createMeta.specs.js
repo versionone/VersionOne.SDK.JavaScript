@@ -201,7 +201,7 @@ describe('src/meta.update', function() {
                     RewireApi.__ResetDependency__('transformDataToAsset');
                 });
                 it('it should post the asset update to the REST URL endpoint with token based authentication header', () => {
-                    this.postFn.calledWith('rest URL/Actual/Actual:10011', this.assetData, this.headers).should.be.true;
+                    this.postFn.calledWith('rest URL/Actual/10011', this.assetData, this.headers).should.be.true;
                 });
             });
         });
@@ -236,7 +236,7 @@ describe('src/meta.update', function() {
                     RewireApi.__ResetDependency__('transformDataToAsset');
                 });
                 it('it should post the asset update to the REST URL endpoint with token based authentication header', () => {
-                    this.postFn.calledWith('rest URL/Actual/Actual:10011', this.assetData, this.headers).should.be.true;
+                    this.postFn.calledWith('rest URL/Actual/10011', this.assetData, this.headers).should.be.true;
                 });
             });
         });
@@ -270,7 +270,7 @@ describe('src/meta.update', function() {
                 RewireApi.__ResetDependency__('transformDataToAsset');
             });
             it('it should post the asset update to the REST URL endpoint with token based authentication header', () => {
-                this.postFn.calledWith(`rest URL/Actual/Actual:10011?comment=${encodeURIComponent('change comment')}`, this.assetData, this.headers).should.be.true;
+                this.postFn.calledWith(`rest URL/Actual/10011?comment=${encodeURIComponent('change comment')}`, this.assetData, this.headers).should.be.true;
             });
         });
     });
