@@ -25,22 +25,6 @@ describe('src/transformDataToAsset', function() {
             });
         });
     });
-    describe('given an object of asset data that is camel cased', () => {
-        beforeEach(() => {
-            this.assetData = {
-                value: 20
-            };
-        });
-        describe('when transforming the asset data into something acceptable to the V1 Server instance', () => {
-            beforeEach(() => {
-                this.actual = transformDataToAsset(this.assetData);
-            });
-            it('it should return an object with Attributes property', () => {
-                this.actual.Attributes.Value.value.should.equal(20);
-                this.actual.Attributes.Value.act.should.equal('set');
-            });
-        });
-    });
 
     describe('given an object of asset data with single-relational values', () => {
         beforeEach(() => {

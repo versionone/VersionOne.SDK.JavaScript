@@ -1,5 +1,3 @@
-import upperCamelCase from 'uppercamelcase';
-
 export default (assetData) => ({
     Attributes: reduceAssetData(assetData)
 });
@@ -7,11 +5,10 @@ export default (assetData) => ({
 const reduceAssetData = (obj) => Object.keys(obj)
     .reduce((output, key) => {
         const attributeData = obj[key];
-        const assetAttributeKey = upperCamelCase(key);
         if (Array.isArray(attributeData)) {
             return {
                 ...output,
-                [assetAttributeKey]: {
+                [key]: {
                     name: key,
                     value: attributeData.map(reduceRelationalAttributes),
                     act: 'set'
@@ -21,7 +18,7 @@ const reduceAssetData = (obj) => Object.keys(obj)
         if (isFunction(attributeData)) {
             return {
                 ...output,
-                [assetAttributeKey]: {
+                [key]: {
                     value: obj[key](),
                     act: 'set'
                 }
@@ -29,7 +26,7 @@ const reduceAssetData = (obj) => Object.keys(obj)
         }
         return {
             ...output,
-            [assetAttributeKey]: {
+            [key]: {
                 value: obj[key],
                 act: 'set'
             }

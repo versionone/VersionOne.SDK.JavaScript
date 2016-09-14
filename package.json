@@ -1,6 +1,6 @@
 {
   "name": "v1sdk",
-  "version": "2.1.1",
+  "version": "2.2.1",
   "description": "VersionOne API Client for JavaScript",
   "license": "MIT",
   "keywords": [
@@ -38,8 +38,7 @@
   },
   "dependencies": {
     "btoa": "1.1.2",
-    "invariant": "2.2.0",
-    "uppercamelcase": "^1.1.0"
+    "invariant": "2.2.0"
   },
   "devDependencies": {
     "babel": "6.3.13",
