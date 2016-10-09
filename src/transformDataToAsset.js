@@ -10,8 +10,7 @@ const reduceAssetData = (obj) => Object.keys(obj)
                 ...output,
                 [key]: {
                     name: key,
-                    value: attributeData.map(reduceRelationalAttributes),
-                    act: 'set'
+                    value: attributeData.map(reduceRelationalAttributes)
                 }
             };
         }
