@@ -39,8 +39,8 @@ const reduceRelationalAttributes = (obj) => {
             act: 'add'
         };
     }
-    return Object.keys(obj).reduce((output, key)=> {
-        output.idref = obj[key];
+    return Object.keys(obj).reduce((output)=> {
+        output.idref = obj.idref;
         output.act = obj.act ? obj.act : 'add';
         return output;
     }, {});
