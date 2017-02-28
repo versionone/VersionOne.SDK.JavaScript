@@ -1,7 +1,7 @@
 export default ($) => (sdk) => sdk(
     (url, data, headers) => new Promise((resolve, reject) => $.ajax(url, {
         method: 'POST',
-        data,
+        data: JSON.stringify(data),
         dataType: 'json',
         headers,
         success: resolve,
