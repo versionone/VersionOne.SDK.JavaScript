@@ -7,7 +7,15 @@ export {default as axiosConnector} from './connectors/axiosConnector';
 export default (postFn, getFn) => (hostname, instance, port = 80, isHttps = false) => {
     const protocol = isHttps ? 'https' : 'http';
     return {
-        withAccessToken: (token) => createMeta(
+        withImplicitAuth: () => createMeta({
+            hostname,
+            instance,
+            protocol,
+            port,
+            postFn,
+            getFn,
+        }),
+        withAccessToken: (token) => createMeta({
             hostname,
             instance,
             protocol,
@@ -15,17 +23,17 @@ export default (postFn, getFn) => (hostname, instance, port = 80, isHttps = fals
             token,
             postFn,
             getFn,
-            false
-        ),
-        withCreds: (username, password) => createMeta(
+            isBasic: false,
+        }),
+        withCreds: (username, password) => createMeta({
             hostname,
             instance,
             protocol,
             port,
-            btoa(`${username}:${password}`),
+            token: btoa(`${username}:${password}`),
             postFn,
             getFn,
-            true
-        )
+            isBasic: true,
+        })
     };
 };

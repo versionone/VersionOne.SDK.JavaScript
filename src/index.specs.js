@@ -34,6 +34,9 @@ describe('when loading the module', function() {
             it('it should return a meta object with function to authenticate via an access token', () => {
                 this.setSecurity.withAccessToken.should.be.a('function');
             });
+            it('it should return a meta object with function to authenticate implicitly', () => {
+                this.setSecurity.withImplicitAuth.should.be.a('function');
+            });
 
             describe('given an access token', () => {
                 beforeEach(() => {
@@ -42,7 +45,7 @@ describe('when loading the module', function() {
                 describe('when creating the SDK', () => {
                     beforeEach(() => {
                         this.metaStub = sinon.mock()
-                            .withExactArgs('hostname', 'instance', 'https', 80, this.accessToken, this.postFn, this.getFn, false)
+                            .withExactArgs({ hostname: 'hostname', instance: 'instance', protocol: 'https', port: 80, token: this.accessToken, postFn: this.postFn, getFn: this.getFn, isBasic: false })
                             .returns('meta');
                         RewireApi.__Rewire__('createMeta', this.metaStub);
                         this.meta = this.setSecurity.withAccessToken(this.accessToken);
@@ -62,7 +65,7 @@ describe('when loading the module', function() {
                     beforeEach(() => {
                         this.token = 'username token';
                         this.metaStub = sinon.mock()
-                            .withExactArgs('hostname', 'instance', 'https', 80, this.token, this.postFn, this.getFn, true)
+                            .withExactArgs({ hostname: 'hostname', instance: 'instance', protocol: 'https', port: 80, token: this.token, postFn: this.postFn, getFn: this.getFn, isBasic: true })
                             .returns('meta1');
                         this.btoa = sinon.mock()
                             .withArgs(`${this.username}:${this.password}`)
@@ -72,6 +75,21 @@ describe('when loading the module', function() {
                         this.meta = this.setSecurity.withCreds(this.username, this.password);
                     });
                     it('it should return a Meta object with the username/password encoded token, hostname, instance, port, protocol, post and get functions', () => {
+                        this.meta.should.equal('meta1');
+                    });
+                });
+            });
+
+            describe('given no explicit credentials', () => {
+                describe('when creating the SDK', () => {
+                    beforeEach(() => {
+                        this.metaStub = sinon.mock()
+                            .withExactArgs({ hostname: 'hostname', instance: 'instance', protocol: 'https', port: 80, postFn: this.postFn, getFn: this.getFn })
+                            .returns('meta1');
+                        RewireApi.__Rewire__('createMeta', this.metaStub);
+                        this.meta = this.setSecurity.withImplicitAuth();
+                    });
+                    it('it should return a Meta object with hostname, instance, port, protocol, post and get functions', () => {
                         this.meta.should.equal('meta1');
                     });
                 });

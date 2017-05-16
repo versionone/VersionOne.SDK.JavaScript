@@ -16,7 +16,7 @@ describe('src/meta', function() {
         });
         describe('when creating a meta object', () => {
             beforeEach(() => {
-                this.actual = createMeta('h', 'i', 'http', 80, 'token', this.postFn, this.getFn, false);
+                this.actual = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80, token: 'token', postFn: this.postFn, getFn: this.getFn, isBasic: false });
             });
             it('it should return an object with a create asset function', () => {
                 this.actual.create.should.be.a('function');
@@ -46,7 +46,7 @@ describe('src/meta.create', function() {
     });
     describe('given no asset type', () => {
         beforeEach(() => {
-            this.meta = createMeta('h', 'i', 'http', 80, 'token', () => {
+            this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80 }, () => {
             }, () => {
             }, false);
         });
@@ -92,7 +92,7 @@ describe('src/meta.create', function() {
                     RewireApi.__Rewire__('transformDataToAsset', transformDataToAsset);
                     this.postFn = sinon.stub();
 
-                    this.meta = createMeta('h', 'i', 'http', 80, 'token', this.postFn, null);
+                    this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80, token: 'token', postFn: this.postFn, isBasic: false });
                     this.actual = this.meta.create('Actual', {Value: 5.5});
                 });
                 afterEach(() => {
@@ -127,7 +127,42 @@ describe('src/meta.create', function() {
                         RewireApi.__Rewire__('transformDataToAsset', transformDataToAsset);
                         this.postFn = sinon.stub();
 
-                        this.meta = createMeta('h', 'i', 'http', 80, 'token', this.postFn, null, true);
+                        this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80, token: 'token', postFn: this.postFn, isBasic: true });
+                        this.actual = this.meta.create('Actual', {Value: 5.5});
+                    });
+                    afterEach(() => {
+                        RewireApi.__ResetDependency__('getV1Urls');
+                        RewireApi.__ResetDependency__('transformDataToAsset');
+                    });
+                    it('it should post the asset creation to the REST URL endpoint with basic authentication headers', () => {
+                        this.postFn.calledWith('rest URL/Actual', this.assetData, this.headers).should.be.true;
+                    });
+                });
+            });
+        });
+
+        describe('given implicit authentication', () => {
+            describe('given an asset type and asset data', () => {
+                describe('when creating an asset', () => {
+                    beforeEach(() => {
+                        this.assetData = {key: 'value'};
+                        this.headers = {
+                            Accept: 'application/json',
+                            'Content-Type': 'application/json',
+                        };
+                        const getV1Urls = sinon.mock()
+                            .withArgs('h', 'i', 'http', 80)
+                            .returns({
+                                rest: 'rest URL'
+                            });
+                        const transformDataToAsset = sinon.mock()
+                            .withArgs({Value: 5.5})
+                            .returns(this.assetData);
+                        RewireApi.__Rewire__('getV1Urls', getV1Urls);
+                        RewireApi.__Rewire__('transformDataToAsset', transformDataToAsset);
+                        this.postFn = sinon.stub();
+
+                        this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80, postFn: this.postFn });
                         this.actual = this.meta.create('Actual', {Value: 5.5});
                     });
                     afterEach(() => {
@@ -146,7 +181,7 @@ describe('src/meta.create', function() {
 describe('src/meta.update', function() {
     beforeEach(() => {
         this.actual = undefined;
-        this.meta = createMeta('h', 'i', 'http', 80, 'token', () => {
+        this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80 }, () => {
         }, () => {
         });
     });
@@ -193,7 +228,7 @@ describe('src/meta.update', function() {
                     RewireApi.__Rewire__('transformDataToAsset', transformDataToAsset);
                     this.postFn = sinon.stub();
 
-                    this.meta = createMeta('h', 'i', 'http', 80, 'token', this.postFn, this.getFn, false);
+                    this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80, token: 'token', postFn: this.postFn, getFn: this.getFn, isBasic: false });
                     this.actual = this.meta.update('Actual:10011', {Value: 5.5});
                 });
                 afterEach(() => {
@@ -228,7 +263,7 @@ describe('src/meta.update', function() {
                     RewireApi.__Rewire__('transformDataToAsset', transformDataToAsset);
                     this.postFn = sinon.stub();
 
-                    this.meta = createMeta('h', 'i', 'http', 80, 'token', this.postFn, this.getFn, true);
+                    this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80, token: 'token', postFn: this.postFn, getFn: this.getFn, isBasic: true });
                     this.actual = this.meta.update('Actual:10011', {Value: 5.5});
                 });
                 afterEach(() => {
@@ -262,7 +297,7 @@ describe('src/meta.update', function() {
                 RewireApi.__Rewire__('transformDataToAsset', transformDataToAsset);
                 this.postFn = sinon.stub();
 
-                this.meta = createMeta('h', 'i', 'http', 80, 'token', this.postFn, this.getFn, true);
+                this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80, token: 'token', postFn: this.postFn, getFn: this.getFn, isBasic: true });
                 this.actual = this.meta.update('Actual:10011', {Value: 5.5}, 'change comment');
             });
             afterEach(() => {
@@ -279,7 +314,7 @@ describe('src/meta.update', function() {
 describe('src/meta.query', function() {
     beforeEach(() => {
         this.actual = undefined;
-        this.meta = createMeta('h', 'i', 'http', 80, 'token', () => {
+        this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80 }, () => {
         }, () => {
         });
     });
@@ -336,7 +371,7 @@ describe('src/meta.query', function() {
                     RewireApi.__Rewire__('getV1Urls', getV1Urls);
                     this.postFn = sinon.stub();
 
-                    this.meta = createMeta('h', 'i', 'http', 80, 'token', this.postFn, this.getFn, false);
+                    this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80, token: 'token', postFn: this.postFn, getFn: this.getFn, isBasic: false });
                     this.actual = this.meta.query(this.query);
                 });
                 afterEach(() => {
@@ -366,7 +401,7 @@ describe('src/meta.query', function() {
                     RewireApi.__Rewire__('getV1Urls', getV1Urls);
                     this.postFn = sinon.stub();
 
-                    this.meta = createMeta('h', 'i', 'http', 80, 'token', this.postFn, this.getFn, true);
+                    this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80, token: 'token', postFn: this.postFn, getFn: this.getFn, isBasic: true });
                     this.actual = this.meta.query(this.query);
                 });
                 afterEach(() => {
@@ -383,7 +418,7 @@ describe('src/meta.query', function() {
 describe('src/meta.executeOperation', function() {
     beforeEach(() => {
         this.actual = undefined;
-        this.meta = createMeta('h', 'i', 'http', 80, 'token', () => {
+        this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80 }, () => {
         }, () => {
         });
     });
@@ -419,7 +454,7 @@ describe('src/meta.executeOperation', function() {
                     RewireApi.__Rewire__('getV1Urls', getV1Urls);
                     this.postFn = sinon.stub();
 
-                    this.meta = createMeta('h', 'i', 'http', 80, 'token', this.postFn, this.getFn, false);
+                    this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80, token: 'token', postFn: this.postFn, getFn: this.getFn, isBasic: false });
                     this.actual = this.meta.executeOperation('Actual:10011', this.operationName);
                 });
                 afterEach(() => {
@@ -449,7 +484,7 @@ describe('src/meta.executeOperation', function() {
                     RewireApi.__Rewire__('getV1Urls', getV1Urls);
                     this.postFn = sinon.stub();
 
-                    this.meta = createMeta('h', 'i', 'http', 80, 'token', this.postFn, this.getFn, true);
+                    this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80, token: 'token', postFn: this.postFn, getFn: this.getFn, isBasic: true });
                     this.actual = this.meta.executeOperation('Actual:10011', this.operationName);
                 });
                 afterEach(() => {
@@ -483,7 +518,7 @@ describe('src/meta.queryDefinition', function() {
                 RewireApi.__Rewire__('getV1Urls', getV1Urls);
                 this.getFn = sinon.stub();
 
-                this.meta = createMeta('h', 'i', 'http', 80, 'token', null, this.getFn, false);
+                this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80, token: 'token', getFn: this.getFn, isBasic: false });
                 this.actual = this.meta.queryDefinition();
             });
             afterEach(() => {
@@ -510,7 +545,7 @@ describe('src/meta.queryDefinition', function() {
                 RewireApi.__Rewire__('getV1Urls', getV1Urls);
                 this.getFn = sinon.stub();
 
-                this.meta = createMeta('h', 'i', 'http', 80, 'token', null, this.getFn, false);
+                this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80, token: 'token', getFn: this.getFn, isBasic: false });
                 this.actual = this.meta.queryDefinition('Actual');
             });
             afterEach(() => {
@@ -537,7 +572,7 @@ describe('src/meta.queryDefinition', function() {
                 RewireApi.__Rewire__('getV1Urls', getV1Urls);
                 this.getFn = sinon.stub();
 
-                this.meta = createMeta('h', 'i', 'http', 80, 'token', null, this.getFn, false);
+                this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80, token: 'token', getFn: this.getFn, isBasic: false });
                 this.actual = this.meta.getActivityStream('Story:1234');
             });
             afterEach(() => {
@@ -564,7 +599,7 @@ describe('src/meta.queryDefinition', function() {
                 RewireApi.__Rewire__('getV1Urls', getV1Urls);
                 this.getFn = sinon.stub();
 
-                this.meta = createMeta('h', 'i', 'http', 80, 'token', null, this.getFn, false);
+                this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80, token: 'token', getFn: this.getFn, isBasic: false });
                 this.actual = this.meta.queryDefinition();
             });
             afterEach(() => {
@@ -591,7 +626,7 @@ describe('src/meta.queryDefinition', function() {
                         RewireApi.__Rewire__('getV1Urls', getV1Urls);
                         this.getFn = sinon.stub();
 
-                        this.meta = createMeta('h', 'i', 'http', 80, 'token', null, this.getFn, true);
+                        this.meta = createMeta({ hostname: 'h', instance: 'i', protocol: 'http', port: 80, token: 'token', getFn: this.getFn, isBasic: true });
                         this.actual = this.meta.queryDefinition();
                     });
                     afterEach(() => {

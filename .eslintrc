@@ -45,10 +45,7 @@
       }
     ],
     "no-use-before-define": 0,
-    "comma-dangle": [
-      2,
-      "never"
-    ],
+    "comma-dangle": 0,
     "no-cond-assign": [
       2,
       "always"

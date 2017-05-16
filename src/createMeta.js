@@ -3,7 +3,7 @@ import transformDataToAsset from './transformDataToAsset';
 import getV1Urls from './getV1Urls';
 import Oid from './Oid';
 
-export default (hostname, instance, protocol, port, token, postFn, getFn, isBasic) => {
+export default ({hostname, instance, protocol, port, token, postFn, getFn, isBasic}) => {
     const urls = getV1Urls(hostname, instance, protocol, port);
     const headers = createHeaderObj(token, isBasic);
 
@@ -59,8 +59,22 @@ export default (hostname, instance, protocol, port, token, postFn, getFn, isBasi
     };
 };
 
-const createHeaderObj = (token, isBasic) => ({
-    Accept: 'application/json',
-    'Content-Type': 'application/json',
-    Authorization: `${isBasic ? 'Basic' : 'Bearer'} ${token}`
-});
+const createHeaderObj = (token, isBasic) => {
+    const headers = {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+    };
+
+
+    const hasToken = Boolean(token);
+    const hasType = typeof isBasic !== 'undefined';
+
+    if (hasToken || hasType) {
+        invariant(hasToken, `Error: there was no \`token\` provided to the SDK`);
+        invariant(hasType, `Error: there was no \`isBasic\` provided to the SDK`);
+
+        headers['Authorization'] = `${isBasic ? 'Basic' : 'Bearer'} ${token}`; // eslint-disable-line dot-notation
+    }
+
+    return headers;
+};
