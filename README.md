@@ -1,6 +1,6 @@
 [![Gitter](https://badges.gitter.im/versionone/VersionOne.SDK.JavaScript.svg)](https://gitter.im/versionone/VersionOne.SDK.JavaScript?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
-# VersionOne JavaScript SDK 
+# VersionOne JavaScript SDK
 
 The VersionOne JavaScript SDK is an open-source and community supported JavaScript client for the VersionOne API. As an open-sourced and community supported project, the VersionOne JavaScript SDK is not formally supported by VersionOne.
 
@@ -17,8 +17,9 @@ The source code for the VersionOne JavaScript SDK is free and open-source, and w
 # Getting Started
 
 Please note:
-* 1.x.x SDK is only supported with a VersionOne instance 15.3 or above.
-* 1.x.x SDK currently does not support querying for Meta definitions; if this is something needed, please use any 0.x.x 
+* 2.x.x SDK is only supported with a VersionOne instance 17.1 or later.
+* 1.x.x SDK is only supported with a VersionOne instance 15.3-17.0
+* 1.x.x SDK currently does not support querying for Meta definitions; if this is something needed, please use any 0.x.x
 version.
 
 **See the repo's Wiki for API usage and additional information.**
@@ -31,7 +32,7 @@ version.
 
 The VersionOne application does not currently have an option to enable CORS support. As such, CORS is not supported in our hosted environment. You can still use this JavaScript library for server-side applications.
 
-If you have your own on-premise installation, open the VersionOne `Web.config` file and add the three entires 
+If you have your own on-premise installation, open the VersionOne `Web.config` file and add the three entires
 after the `<add name="VersionOne" ... />` entry:
 
 ```xml
@@ -58,6 +59,7 @@ const jqueryConnectedSdk = jqueryConnector($)(sdk);
 const v1 = jqueryConnectedSdk('www14.v1host.com', 'v1sdktesting', 443, true)
     .withCreds('admin', 'admin'); // usage with username/password
  // .withAccessToken('your token'); // usage with access tokens
+ // .withImplicitAuth(); // let the browser do its thing
 
 v1.create('Story', {estimate: 5, status: 'Not Started'})
     .then((story) => v1.update(story.oidToken, {estimate: 7}))
