@@ -58,9 +58,7 @@ Additional examples are available in the [examples](/examples) folder.
 ## Client Side Integrations 
 As stated above, the VersionOne JavaScript SDK is intended for server-side integration. By default client-side integration is not possible because browsers only allow scripts to interact with web pages/applications at the same origin.  This restriction, known as the [same-origin policy (SOP)](https://en.wikipedia.org/wiki/Same-origin_policy), is intended to prevent malicious scripts from accessing sensitive data.  
 
-Because the VersionOne server honors the SOP, attempts to access or manipulate data from browser scripts served from a different origin will fail.  This behavior can be overridden by enabling [Cross-origin resource sharing (CORS)](https://en.wikipedia.org/wiki/Cross-origin_resource_sharing). 
-
-Enabling CORS on the server opens a hole in the SOP and permits the browser to view or manipulate data using scripts from another origin.  This defeats the security measures intended to prevent a malicios attack.  
+The SOP can be overridden using a mechanism known as [Cross-origin resource sharing (CORS)](https://en.wikipedia.org/wiki/Cross-origin_resource_sharing). Enabling CORS opens a hole in the SOP and permits scripts to view data from another origin. This defeats the security measures intended to prevent a malicious attack.  
 
 Enabling CORS is not permitted in our hosted environment.
 
