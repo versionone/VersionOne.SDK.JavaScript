@@ -60,9 +60,27 @@ As stated above, the VersionOne JavaScript SDK is intended for server-side integ
 
 The SOP can be overridden using a mechanism known as [Cross-origin resource sharing (CORS)](https://en.wikipedia.org/wiki/Cross-origin_resource_sharing). Enabling CORS opens a hole in the SOP and permits scripts to view data from another origin. This defeats the security measures intended to prevent a malicious attack.  
 
-Enabling CORS is not permitted in our hosted environment.
+Enabling CORS is possible - *but not recommended* - for both hosted and on-premise installations of VersionOne.
 
-Enabling CORS is possible - *but not recommended* - for on-premise installations of VersionOne.  If you are interested in enabling CORS in your on-premise instance, and are willing to accept the risk, please contact <support@versionone.com> for instructions.
+If you are interested in enabling CORS in your on-premise instance you need to include an entry for ```CorsAllowedOrigins``` in your user.confg file.  The value attribute should contain the list of valid domains.  Only domains in this list will be allowed to make cross-origin requets. Separate domains names with a comma.    
+
+Here is an example user.config file with CORS enabled for a single domain
+```xml
+<?xml version="1.0"?>
+<appSettings>
+    <add key="CorsAllowedOrigins" value="http://example.com" />
+</appSettings>
+```
+
+Here is an example user.config file with CORS enabled for two domains
+```xml
+<?xml version="1.0"?>
+<appSettings>
+    <add key="CorsAllowedOrigins" value="http://example.com,http://localhost:8080" />
+</appSettings>
+```
+
+If you are interested in enabling CORS for a hosted instance of VersionOne, please contact your system administrator and ask them to email VersionOne support requesting this change. This email needs to include the list of domains you would like permitted. Because this change has security implications, we cannot accept requests from anyone. 
 
 ## Other Resources
 
