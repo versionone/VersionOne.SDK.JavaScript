@@ -2,9 +2,9 @@
 
 # VersionOne JavaScript SDK
 
-The VersionOne JavaScript SDK is an open-source and community supported JavaScript client for the VersionOne API. As an open-sourced and community supported project, the VersionOne JavaScript SDK is not formally supported by VersionOne.
+The VersionOne JavaScript SDK is an open-source and community supported JavaScript client for the VersionOne API. The SDK simplifies the creation of  server-side JavaScript integrations (i.e. node/express server) with the VersionOne platform.
 
-With this said, there are a number of options for getting your questions addressed:
+As an "open-sourced and community supported" product, the VersionOne JavaScript SDK is not formally supported by VersionOne.  That said, there are a number of options for getting your questions addressed:
 
 * [StackOverflow](http://stackoverflow.com/questions/tagged/versionone): For asking questions of the VersionOne Development Community.
 * [GitHub Issues](https://github.com/versionone/VersionOne.SDK.JavaScript/issues): For submitting issues that others may try to address.
@@ -27,28 +27,6 @@ version.
 ## Installation via NPM
 
 `npm install v1sdk`
-
-## Configure your own on-premise VersionOne instance to allow CORS requests
-
-The VersionOne application does not currently have an option to enable CORS support. As such, CORS is not supported in our hosted environment. You can still use this JavaScript library for server-side applications.
-
-If you have your own on-premise installation, open the VersionOne `Web.config` file and add the three entires
-after the `<add name="VersionOne" ... />` entry:
-
-```xml
-    <httpProtocol>
-      <customHeaders>
-        <clear />
-        <add name="VersionOne" value="Enterprise/13.2.6.73; XP" />
-      	<add name="Access-Control-Allow-Origin" value="*" />
-      	<add name="Access-Control-Allow-Methods" value="GET,PUT,POST,DELETE,OPTIONS" />
-      	<add name="Access-Control-Allow-Headers" value="Content-Type, Authorization" />
-      </customHeaders>
-    </httpProtocol>
-```
-
-## Example snippet
-See more [examples](/examples).
 
 ### jQuery example
 ```javascript
@@ -73,6 +51,36 @@ v1.create('Story', {estimate: 5, status: 'Not Started'})
     .then(console.log)
     .catch(console.log);
 ```
+
+## More Examples
+Additional examples are available in the [examples](/examples) folder.
+
+## Client Side Integrations 
+As stated above, the VersionOne JavaScript SDK is intended for server-side integration. By default client-side integration is not possible because browsers only allow scripts to interact with web pages/applications at the same origin.  This restriction, known as the [same-origin policy (SOP)](https://en.wikipedia.org/wiki/Same-origin_policy), is intended to prevent malicious scripts from accessing sensitive data.  
+
+The SOP can be overridden using a mechanism known as [Cross-origin resource sharing (CORS)](https://en.wikipedia.org/wiki/Cross-origin_resource_sharing). Enabling CORS opens a hole in the SOP and permits scripts to view data from another origin. This defeats the security measures intended to prevent a malicious attack.  
+
+Enabling CORS is possible - *but not recommended* - for both hosted and on-premise installations of VersionOne.
+
+If you are interested in enabling CORS in your on-premise instance you need to include an entry for ```CorsAllowedOrigins``` in your user.confg file.  The value attribute should contain the list of valid domains.  Only domains in this list will be allowed to make cross-origin requets. Separate domains names with a comma.    
+
+Here is an example user.config file with CORS enabled for a single domain
+```xml
+<?xml version="1.0"?>
+<appSettings>
+    <add key="CorsAllowedOrigins" value="http://example.com" />
+</appSettings>
+```
+
+Here is an example user.config file with CORS enabled for two domains
+```xml
+<?xml version="1.0"?>
+<appSettings>
+    <add key="CorsAllowedOrigins" value="http://example.com,http://localhost:8080" />
+</appSettings>
+```
+
+If you are interested in enabling CORS for a hosted instance of VersionOne, please contact your system administrator and ask them to email VersionOne support requesting this change. This email needs to include the list of domains you would like permitted. Because this change has security implications, we cannot accept requests from anyone. 
 
 ## Other Resources
 
