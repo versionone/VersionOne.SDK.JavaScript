@@ -30,6 +30,7 @@
     "dev": "tsup --watch",
     "clean": "rimraf dist",
     "lint": "eslint .",
+    "verify": "npm run lint && npm run build && npm test",
     "test": "vitest run",
     "test:watch": "vitest"
   },

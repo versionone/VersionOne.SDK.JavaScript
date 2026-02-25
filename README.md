@@ -14,6 +14,7 @@ npm test
 
 - `npm run dev` - watch build
 - `npm run build` - build ESM + CJS + declarations
+- `npm run verify` - run lint + build + tests
 - `npm run test` - run unit tests
 - `npm run lint` - run ESLint
 
@@ -30,3 +31,7 @@ npm test
 3. Implement methods using `Transport.request`.
 4. Export from `src/index.ts`.
 5. Add tests under `test/`.
+
+## Before PR
+
+- Run `npm run verify` to validate lint, build, and tests before opening a pull request.
