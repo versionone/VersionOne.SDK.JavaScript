@@ -10,6 +10,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: integration ? ["test/integration/**/*.test.ts"] : ["test/unit/**/*.test.ts"],
-    testTimeout: integration ? 30_000 : 5_000
+    testTimeout: integration ? 30_000 : 5_000,
+    // One live suite at a time: the custom-fields suite recycles the app
+    // domain, which would fail any other suite talking to the instance.
+    fileParallelism: !integration
   }
 });

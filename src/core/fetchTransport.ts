@@ -52,6 +52,8 @@ function encodeBody(body: RequestBody | undefined, contentType: string | undefin
   if (body instanceof Uint8Array || body instanceof ArrayBuffer) {
     return { body: body as BodyInit, contentType: contentType ?? "application/octet-stream" };
   }
+  // A form is handed to fetch as is: it writes the multipart boundary itself.
+  if (typeof FormData !== "undefined" && body instanceof FormData) return { body };
   return { body: JSON.stringify(body), contentType: contentType ?? "application/json" };
 }
 

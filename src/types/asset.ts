@@ -14,10 +14,15 @@ export type Oid = string;
 export type DateString = string;
 
 /**
- * An AssetState as the model carries it. The endpoints spell it two ways
- * (rest-1 numeric, query.v1 by name); the wire layer normalises to the name.
+ * An AssetState as the model carries it: the names of Core's AssetState
+ * enum (VersionOne/AssetState.cs: Future 0, Active 64, Closed 128, Dead 192,
+ * OldBrokenDownStory 208, Deprecated 254, Deleted 255). rest-1 renders the
+ * number and query.v1 the name; the wire layer normalises to the name.
  */
-export type AssetStateValue = "Future" | "Active" | "Closed" | "Template" | "BrokenDown" | "Deleted" | (string & {});
+export type AssetStateValue = "Future" | "Active" | "Closed" | "Dead" | "OldBrokenDownStory" | "Deprecated" | "Deleted";
+
+/** Core's AssetState codes, by name — the rest-1 rendering. */
+export const ASSET_STATE_CODES: Record<AssetStateValue, number> = { Future: 0, Active: 64, Closed: 128, Dead: 192, OldBrokenDownStory: 208, Deprecated: 254, Deleted: 255 };
 
 /**
  * A reference to another asset: always at least its OID, plus whatever a

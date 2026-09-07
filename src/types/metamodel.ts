@@ -69,3 +69,14 @@ export interface Metamodel {
     Version: string;
     AssetTypes: AssetTypeMap;
 }
+
+/**
+ * What a wire module needs in order to translate a row: the definition of
+ * an asset type, synchronously. Three answers: the type; `null` when the
+ * instance is known not to have it; `undefined` when the lookup has not
+ * loaded it yet (a lazy schema says which types it still needs before a
+ * query is sent). A row whose type is unknown is passed through untranslated.
+ */
+export interface AttributeLookup {
+    assetType(token: AssetTypeToken): AssetType | null | undefined;
+}

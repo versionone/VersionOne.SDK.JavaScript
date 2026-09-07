@@ -22,8 +22,8 @@ src/core       transport, errors      imports: nothing above it
   `meta`, `loc2`, `validValues`, `attachment`, …). Each knows exactly two
   things: the envelope its endpoint takes and returns, typed as the server
   spells it, and the translation between that envelope and `types`.
-- **`services`** reason about assets and compose wire modules (`resolve`,
-  `guard`, `batch`, …). They know no envelope.
+- **`services`** reason about assets and compose wire modules (`schema`,
+  `resolve`, `guard`, `batch`, …). They know no envelope.
 - **`core`** is HTTP: `Transport`, `createFetchTransport`, `ApiError`. It
   does not know what an asset is.
 
@@ -48,6 +48,36 @@ Corollaries:
 - If a caller has to convert, the layer is missing a translation. Fix the
   layer.
 - No business rule lives in a type or a wire module.
+
+## 2a. Translation needs the schema
+
+api/asset and query.v1 spell **every scalar as a string** (`"5"`, `"False"`,
+`"-1989738965"`) and a **single relation selected with a sub-select as a
+one-element list** (`[{ _oid }]`, `[]` when unset), while a bare single
+relation is `{ _oid }` (verified on a dev instance, 2026-09-07). Whether
+`"True"` is a boolean or text, and whether `[x]` is one Ref or a list of
+one, is not decidable from the value: it takes the attribute's definition.
+
+So the `assetApi` wire module translates a row against an `AttributeLookup`
+(`src/types/metamodel.ts`): each key is a select path resolved hop by hop
+(`src/wire/select.ts` — dotted paths, `:Downcast`, `[filter]`, `@Count`)
+to the attribute it lands on; Numeric and LongInt become numbers, Boolean
+booleans, a single relation one Ref or null, an aggregate a number, and a
+sub-select's rows are translated by their own type. A key the schema does
+not know is left as sent. Without a lookup the row keeps the endpoint's
+spelling, OIDs normalised — never silently guessed.
+
+The lookup is the `schema` service: the instance's types, loaded from
+meta.v1 one type at a time as queries need them (in-flight requests shared,
+a type the instance lacks remembered as absent), or seeded whole from a
+metamodel document. The client runs `schema.ensureFor(commands)` before
+every api/asset read, so a consumer never sees the untranslated shape.
+rest-1 needs none of this: its JSON carries typed scalars and marks
+relations with `_type: "Relation"`.
+
+Corollary: a fake in a unit test must send what the server sends. The unit
+test that faked `Estimate: 3` passed for a day while the server was
+sending `"5"`; rows in fakes are now copied from live responses.
 
 ## 3. Names are meta.v1's names
 

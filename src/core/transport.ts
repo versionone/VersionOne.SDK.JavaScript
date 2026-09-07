@@ -1,7 +1,7 @@
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-/** A JSON value, a text body (YAML for api/asset, say), or bytes (attachments). */
-export type RequestBody = unknown | string | Uint8Array | ArrayBuffer;
+/** A JSON value, a text body (YAML for api/asset, say), bytes (attachments), or a multipart form. */
+export type RequestBody = unknown | string | Uint8Array | ArrayBuffer | FormData;
 
 /**
  * How to read the response: "auto" parses JSON when the server says JSON and

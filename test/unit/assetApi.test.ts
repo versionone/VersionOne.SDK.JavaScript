@@ -31,9 +31,9 @@ describe("assetApi: translation", () => {
     ]);
   });
 
-  it("reads a query row as the model shape: relations stay Refs, OIDs lose their moment, scalars untouched", () => {
-    const row = fromWireRow<Story>({ _oid: "Story:1:99", Name: "One", Estimate: 3, Owners: [{ _oid: "Member:20:5", Name: "Jim" }], Super: { _oid: "Epic:2" }, Status: null, "Status.Name": "Done" });
-    expect(row).toEqual({ _oid: "Story:1", Name: "One", Estimate: 3, Owners: [{ _oid: "Member:20", Name: "Jim" }], Super: { _oid: "Epic:2" }, Status: null, "Status.Name": "Done" });
+  it("reads a query row without a schema as the endpoint spells it: relations stay Refs, OIDs lose their moment, scalars untouched (strings — see translate.test.ts for the schema-driven shape)", () => {
+    const row = fromWireRow<Story>({ _oid: "Story:1:99", Name: "One", Estimate: "3", Owners: [{ _oid: "Member:20:5", Name: "Jim" }], Super: { _oid: "Epic:2" }, Status: null, "Status.Name": "Done" });
+    expect(row).toEqual({ _oid: "Story:1", Name: "One", Estimate: "3", Owners: [{ _oid: "Member:20", Name: "Jim" }], Super: { _oid: "Epic:2" }, Status: null, "Status.Name": "Done" });
     expect(momentless("Story:1:99")).toBe("Story:1");
   });
 
