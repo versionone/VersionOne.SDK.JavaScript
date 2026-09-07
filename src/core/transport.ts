@@ -1,11 +1,29 @@
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
+/** A JSON value, a text body (YAML for api/asset, say), or bytes (attachments). */
+export type RequestBody = unknown | string | Uint8Array | ArrayBuffer;
+
+/**
+ * How to read the response: "auto" parses JSON when the server says JSON and
+ * returns text otherwise; "json" insists; "text" and "bytes" never parse.
+ */
+export type ResponseType = "auto" | "json" | "text" | "bytes";
+
 export interface RequestOptions {
   method: HttpMethod;
   path: string;
-  query?: Record<string, string | number | boolean | undefined>;
+  query?: Record<string, string | number | boolean | undefined | null>;
   headers?: Record<string, string>;
-  body?: unknown;
+  body?: RequestBody;
+  /** The body's content type when it is not implied: text/yaml, image/png. */
+  contentType?: string;
+  responseType?: ResponseType;
+  /**
+   * May this request be sent again after a network failure or a 5xx? A GET
+   * is, by default; anything else is not. A batch write to api/asset is
+   * never idempotent unless the caller has made it so with a guard.
+   */
+  idempotent?: boolean;
 }
 
 export interface Transport {

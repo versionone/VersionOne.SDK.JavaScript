@@ -17,6 +17,6 @@
     "outDir": "dist",
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src", "test", "vitest.config.ts", "eslint.config.js", "tsup.config.ts"],
+  "include": ["src", "test", "vitest.config.ts", "tsup.config.ts"],
   "exclude": ["dist", "node_modules"]
 }

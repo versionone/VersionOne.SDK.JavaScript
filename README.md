@@ -14,9 +14,10 @@ npm test
 
 - `npm run dev` - watch build
 - `npm run build` - build ESM + CJS + declarations
-- `npm run verify` - run lint + build + tests
+- `npm run typecheck` - run TypeScript type checks
+- `npm run verify` - run typecheck + build + tests
 - `npm run test` - run unit tests
-- `npm run lint` - run ESLint
+- `npm run download:metamodel -- <baseAgilityUrl>` - download meta model for a given Agility instance
 
 ## Public API
 
@@ -34,4 +35,4 @@ npm test
 
 ## Before PR
 
-- Run `npm run verify` to validate lint, build, and tests before opening a pull request.
+- Run `npm run verify` to validate typecheck, build, and tests before opening a pull request.
