@@ -130,30 +130,40 @@ moves.
   `@versionone` scope (or npmjs — decision below). Until then consumers pin a
   git SHA or a tarball from `npm pack`.
 
-## Track B — k6i-agility-slack-bot (fast)
+## Track B — k6i-agility-slack-bot (fast, on `bolt-migration`)
 
-Ride the Bolt migration rather than rewriting the seam twice: Phase 2's
-`services/v1.js` is built *as* a thin adapter over `AgilityApiClient`.
+Target branch: `bolt-migration`, not `main`. There, Bolt Phase 2 has already
+replaced the axios `lib/v1api.js` with `services/v1.js` —
+`createV1Client({ url, accessToken })` on native `fetch`, throwing
+`AuthFailureError` on 401 (caught by `withV1()`, auth Flow 4) — and its
+tests (`test/v1-service.test.js`) stub global `fetch` exactly as gh-v1's do.
+So the SDK swap is internal to `createV1Client`; listeners do not move.
+The 401 mapping is a `catch (e) { if (e.status === 401) throw new
+AuthFailureError(...) }` around SDK calls, so **B does not need A1**.
 
-- **B0 Pin behaviour.** Extend `test/queries.test.js` into contract tests
-  for every `v1api` method with recorded live responses (spec 000 §2a: fakes
-  send what the server sends).
-- **B1 Transport swap.** `new AgilityApiClient({ baseUrl: team.v1_url,
-  accessToken })`, `onUnauthorized → authenticationFailureHandler`. Needs A1.
-  axios leaves the dependency list (already a standing decision).
-- **B2 Reads.** Query bodies move to `client.assets.query`; delete the three
-  string-boolean decodes; positional result handling (`results[0][0]`,
-  `results[2]`) becomes typed rows. Needs A4.
-- **B3 Writes.** `quickClose`/`reactivate` → `assets.send` execute;
-  `create`/`update` → api/asset (or `rest1` writes per gap 6);
-  `transformDataToAsset.js` deleted.
-- **B4 Search and localization.** `findAssets` → `client.data.list` with
-  `find`/`findin`/`page`; `fetchLocalizations` → `loc2`. Needs A3.
-- **B5 Number resolution.** `queryForAssetByNumber` →
-  `resolve` service. Needs A5.
+Calls the client still makes on `bolt-migration`: `query.v1` (most reads,
+bodies in `lib/queries.js`), api/asset (`bulk`, `createWithNumber`,
+`exec`), rest-1 writes (`create`/`update` with `?comment=` through
+`lib/rest1DataTransformer.js`), rest-1 `findAssets`, loc-2.
 
-Gate per step: `npm test`, then a sandbox-workspace smoke (mention an asset,
-`/v1` search, backlog-item status change, webhook notification).
+- **B0 Pre-SDK migrations in the bot's own session** (S1–S4 under
+  *Consumer migrations* below). They shrink what the SDK must support:
+  once S2 moves reads to api/asset, the SDK needs no `queryV1` module and
+  A4 collapses to "verify the bot's query bodies translate".
+- **B1 Client swap.** `createV1Client` keeps its surface; inside, one
+  `AgilityApiClient({ baseUrl: url, accessToken })`. `query`/`bulk`/`exec`
+  → `client.assets.*`; `fetchLocalizations` → `loc2` (A3).
+  `test/v1-service.test.js` stays the parity proof.
+- **B2 Delete the decodes.** Rows arrive translated: `"True"` comparisons,
+  `IsKanban.toLowerCase()`, `toMomentless` and positional
+  `results[0][0]`/`results[2]` handling go.
+- **B3 Writes.** `create`/`update` → api/asset unless gap 6 shows the change
+  comment needs rest-1; then `rest1` writes in the SDK and
+  `rest1DataTransformer.js` is deleted either way.
+- **B4 Number resolution.** `queryForAssetByNumber` → `resolve` (A5).
+
+Gate per step: `npm test`, then a sandbox-workspace smoke (asset mention,
+`/agility find`, backlog-item status change, webhook notification).
 
 ## Track C — gh-v1 (fast, first consumer)
 
@@ -193,6 +203,56 @@ Strangler, starting below the call sites so nothing user-visible moves:
 - **D4 Schema convergence.** Evaluate replacing parts of
   `src/metaAssetStore/` field knowledge with the SDK `schema` service.
 
+## Consumer migrations (run in each repo's own session)
+
+Modernisation the consumers should adopt *independently of* the SDK, run
+from the sessions already focused on those repos, not from this one. Each
+is sized to one PR and has a paste-ready prompt in `plans/handoffs/`. They
+are ordered so that, by the time the SDK swap (Tracks B/C/D) arrives, it is
+a change of one file.
+
+**gh-v1** (`plans/handoffs/gh-v1.md`)
+
+- **G1 CommonJS → ESM.** gh-v1 is the one consumer still on `require`
+  (`"type"` unset, `module.exports` in every `lib/` file, the `gh-v1` bin
+  script). Convert to `"type": "module"`, `import`/`export`, `node:`
+  specifiers, `import.meta`-based paths where `__dirname` is used. Its
+  tests stub global `fetch`, so ESM conversion is provable offline. Do this
+  before C1 so the seam swap is written once, in its final syntax.
+- **G2 Type checking without a build.** `jsconfig.json` with `checkJs`,
+  `module`/`moduleResolution: NodeNext`, `target: ES2022`, and JSDoc on
+  `lib/api.js`'s surface — so SDK types flow into the CLI with no compile
+  step. `tsc --noEmit -p jsconfig.json` as a test-time check.
+- **G3 One page policy.** Lift the scattered `page: { size: 20, start: 0 }`
+  defaults into one constant, matching the SDK's refusal of unpaged reads.
+
+**k6i-agility-slack-bot**, on `bolt-migration` (`plans/handoffs/k6i-agility-slack-bot.md`)
+
+The runtime is already ESM (`"type": "module"`, no `require`), so "move to
+ESM" here means finishing the edges:
+
+- **S1 Finish ESM tooling.** `jsconfig.json` still says `module: commonJS`,
+  `target: es6`; set `NodeNext`/`ES2022` and turn on `checkJs` so editors
+  and `tsc --noEmit` see the real module system (and, later, SDK types).
+- **S2 query.v1 → api/asset reads.** Same query bodies; the endpoint is
+  `api/asset` and results come from `queryResult.results` (positional, one
+  array per query). Add an explicit `page` to every body. Removes the
+  SDK's need for a `queryV1` module.
+- **S3 Close Bolt Phase 2.** Drop `botkit`, `botbuilder-*`,
+  `botkit-plugin-cms` and `axios` from `package.json` once nothing imports
+  them; delete `lib/v1api.js` and the `plugins/` Botkit modules that
+  `listeners/` replaced. (AGENTS.md: "axios is dropped then.")
+- **S4 Record real responses.** Replace hand-written fixtures in
+  `test/v1-service.test.js` and `test/queries.test.js` with responses
+  captured from the local dev instance (spec 000 §2a: fakes send what the
+  server sends — api/asset spells `"True"`, not `true`).
+
+**agility-rooms** (slow; no handoff yet)
+
+- **R1** Narrow the axios surface: route the 67 axios importers through
+  `utils/bulkApiService.tsx` and a small set of helpers, so D1 swaps one
+  module. Start when Track A2 lands; write the handoff then.
+
 ## Operating model for the campaign
 
 - **Home:** this cloud session on `proposed_type_script_api_version`. One
@@ -200,10 +260,16 @@ Strangler, starting below the call sites so nothing user-visible moves:
   and a push. Consumer work happens on a feature branch in each consumer repo
   (proposed: `sdk-adoption`), never on their default branches, PRs only on
   request.
-- **Order:** A2 → A3 → C1 → C2 → A1 → B0/B1 → A5 → C3 → A4 → B2–B5 → A6 →
-  D1 → D2+. gh-v1 goes first because it needs no framework migration and its
-  stubbed-fetch tests prove parity offline; A1 (browser credentials,
-  onUnauthorized) is only needed once the slack bot and rooms start.
+- **Order here:** A2 → A3 → C1 → C2 → B1 → B2 → A5 → C3 → B3/B4 → A6 → A1 →
+  D1 → D2+. gh-v1 first: no framework migration, and stubbed-fetch tests
+  prove parity offline. A1 (browser credentials, onUnauthorized) waits for
+  rooms; the bot maps `ApiError.status === 401` itself.
+- **In parallel, elsewhere:** G1–G3 in the gh-v1 session, S1–S4 in the
+  slack-bot session (on `bolt-migration`). C1 starts after G1 merges; B1
+  after S2 and S3.
+- **Hand-offs:** this session writes the prompt (`plans/handoffs/*.md`);
+  you paste it into the repo's session. Results come back as merged
+  commits that this session reads before starting the dependent milestone.
 - **Status:** this file's checklist below is the source of truth; update it
   in the commit that finishes a milestone.
 
@@ -223,7 +289,9 @@ Strangler, starting below the call sites so nothing user-visible moves:
 - [ ] A4 slack-shaped reads (queryV1 or api/asset)
 - [ ] A5 services port from gh-v1
 - [ ] A6 CI + prerelease publish
-- [ ] B0–B5 slack bot
+- [ ] G1–G3 gh-v1 migrations (gh-v1 session)
+- [ ] S1–S4 slack-bot migrations (slack-bot session, `bolt-migration`)
+- [ ] B1–B4 slack bot SDK swap
 - [x] C0 gh-v1 surveyed (2026-11-04)
 - [ ] C1–C4 gh-v1
 - [ ] D1–D4 agility-rooms
