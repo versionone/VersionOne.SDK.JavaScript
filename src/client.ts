@@ -1,6 +1,7 @@
 import type { ClientConfig } from "./core/clientConfig";
 import { createFetchTransport } from "./core/fetchTransport";
 import type { Transport } from "./core/transport";
+import * as guard from "./services/guard";
 import * as resolve from "./services/resolve";
 import { Schema } from "./services/schema";
 import type { Asset } from "./types/asset";
@@ -26,8 +27,8 @@ export interface ClientOptions {
  * The client: one transport, one schema, and the wire modules bound to
  * them. Every api/asset read goes through the schema so its rows arrive in
  * the model's shape (numbers as numbers, a single relation as one Ref).
- * Services ported from gh-v1 are exposed here the same way: resolve now;
- * guard and batch to come.
+ * Services ported from gh-v1 are exposed here the same way: resolve, the
+ * guard (assets.sendGuarded); batch to come.
  */
 export class AgilityApiClient {
   readonly transport: Transport;
@@ -87,6 +88,16 @@ export class AgilityApiClient {
       return assetApi.send<Row>(this.transport, commands, { ...options, lookup: this.schema });
     },
     preview: (commands: assetApi.Command[]) => assetApi.preview(this.transport, commands),
+    /**
+     * Send as a compare-and-set: each asset is changed only if nobody has
+     * changed it since the preview read it; the rest come back `skipped`.
+     * Throws UnguardableError, before any request, for shapes it cannot
+     * cover.
+     */
+    sendGuarded: async <Row extends Asset = Asset>(commands: assetApi.Command[], options?: Pick<assetApi.SendOptions, "throwOnFailure">) => {
+      await this.schema.ensureFor(commands);
+      return guard.sendGuarded<Row>(this.transport, commands, { ...options, lookup: this.schema });
+    },
     query: async <Row extends Asset = Asset>(q: assetApi.QueryBody) => {
       await this.schema.ensureFor([q]);
       return assetApi.query<Row>(this.transport, q, { lookup: this.schema });

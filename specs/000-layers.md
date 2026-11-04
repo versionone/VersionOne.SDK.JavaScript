@@ -150,3 +150,12 @@ The server drops a failed query's slot from `queryResult.results` (later
 results shift up); `send` restores it as `null` by `sourceCommandIndex`, so
 positions always match the queries sent, and refuses to guess when the
 counts disagree.
+
+The guard (`services/guard`) is what makes a write batch safe to resend:
+each per-asset command of the server's projection is sent scoped to its
+ID and the ChangeDate read just before, so a stale or repeated command
+matches nothing. ChangeDate goes in the filter as a literal — the one
+exception to "values travel as `with` variables", because a ChangeDate
+variable never compares equal — after a strict timestamp check. Moment is
+not a stamp: a filter on an earlier Moment selects the asset as it was then.
+A guarded batch with no creates is sent idempotent; a plain one never is.

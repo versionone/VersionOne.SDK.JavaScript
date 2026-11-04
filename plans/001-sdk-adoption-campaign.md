@@ -45,6 +45,18 @@ Findings from the testing instance worth carrying into later milestones:
   ExternalActionInvocation neither Name nor AssetState. `resolve` derives
   all of this from the metamodel, under test.
 - Number matching is case-insensitive on the server.
+- **ChangeDate as a `with` variable never compares equal** — not even the
+  value just read back — while the same value as a filter literal does.
+  The guard therefore splices ChangeDate as a literal (after a strict
+  timestamp check); gh-v1 already did, which is why its guard works. A
+  likely server defect, alongside the em-dash one.
+- **`Moment=` in a filter is an as-of selector**, not a comparison: an
+  earlier Moment of the asset matches and returns the asset as it was
+  then, and an update scoped by it lands on the current asset. Never use
+  Moment as a compare-and-set stamp.
+- Preview projects even a scalar update in add/remove form
+  (`Estimate: { add: ["2"], remove: [] }`); sent back as a real update, it
+  applies.
 - A StoryStatus create requires `RollupState` (`"Active"` and `64` both
   accepted).
 
@@ -335,7 +347,7 @@ ESM" here means finishing the edges:
 - [x] A2 command-failure error (`CommandFailureError`, `throwOnFailure`, reads always throw)
 - [x] A3 loc2 (`loc2.localize`, `client.localize`; GET, POST past 2000 encoded chars, culture via Accept-Language)
 - [ ] A4 slack-shaped reads (queryV1 or api/asset)
-- [~] A5 services port from gh-v1 — `resolve` done (`client.resolve.numbers`/`.ref`); `guard`, `batch` to come
+- [~] A5 services port from gh-v1 — `resolve` done (`client.resolve.numbers`/`.ref`); `guard` done (`client.assets.sendGuarded`); `batch` to come
 - [ ] A6 CI + prerelease publish
 - [ ] G0–G3 gh-v1 migrations (gh-v1 session)
 - [ ] S1–S4 slack-bot migrations (slack-bot session, `bolt-migration`)

@@ -25,3 +25,5 @@ export type { Localizations, LocalizeOptions } from "./wire/loc2";
 export { Schema } from "./services/schema";
 export { CHUNK as RESOLVE_CHUNK, NUMBER_ROOTS, isAssetNumber, resolveNumbers, resolveRef } from "./services/resolve";
 export type { Resolution, ResolvedAsset } from "./services/resolve";
+export { UNGUARDABLE_TYPES, UnguardableError, guard, sendGuarded, stampsOf, touchedBy, unguardable } from "./services/guard";
+export type { GuardedResult, Unguardable } from "./services/guard";
