@@ -64,5 +64,8 @@ is small.
   change in the pages actually sent; the tests that assert request bodies
   should not change.
 
+API reference: https://docs.digital.ai/agility-api/ (the whole site as
+text: https://docs.digital.ai/agility-api/llms-full.txt).
+
 Do not start the SDK swap itself (that is milestone C1, run from the SDK
 session after G1 merges). Report back with the PR links.

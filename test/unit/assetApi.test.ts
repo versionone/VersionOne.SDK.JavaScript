@@ -131,6 +131,19 @@ describe("assetApi: command failures", () => {
     expect(e.failures.map((f) => f.index)).toEqual([0, null]);
   });
 
+  it("a cascade — one failed create failing its descendants — keeps every failure under the one source index, root cause first (docs: asset-bulk/errors)", async () => {
+    const t = fakeTransport(envelope({ commandFailures: { count: 3, commands: [
+      { "@epic": { AssetType: "Epic", Scope: "Scope:9999", Name: "E" }, error: { message: "Violation'Invalid'Epic.Scope", sourceCommandIndex: 0 } },
+      { "@story": { AssetType: "Story", Name: "S", "#ContextOid": "@epic" }, error: { message: "Invalid OID token: @epic", sourceCommandIndex: 0 } },
+      { "@task": { AssetType: "Task", Name: "T", "#ContextOid": "@story" }, error: { message: "Invalid OID token: @story", sourceCommandIndex: 0 } }
+    ] } }));
+    const e = (await send(t, [{ AssetType: "Epic", Scope: "Scope:9999", Name: "E" }], { throwOnFailure: true }).catch((x: unknown) => x)) as CommandFailureError;
+    expect(e.failures.map((f) => f.index)).toEqual([0, 0, 0]);
+    expect(e.message).toBe("Violation'Invalid'Epic.Scope; Invalid OID token: @epic; Invalid OID token: @story");
+    // The resubmittable list is the response's own, verbatim.
+    expect(e.response.commandFailures.commands).toHaveLength(3);
+  });
+
   it("a query the server rejects throws from query/queries instead of reading as no rows — a failure must never look like an empty result", async () => {
     // The control: a query that matched nothing really is [].
     const empty = await query(fakeTransport(envelope({ queryResult: { results: [[]], resultMetaData: [], count: 0 } })), { from: "Story", select: ["Name"], page: { size: 1, start: 0 } });

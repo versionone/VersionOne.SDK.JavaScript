@@ -17,8 +17,9 @@ allowed to go stale once done.
 Reference: the Agility API documentation is public at
 https://docs.digital.ai/agility-api/ (as of 2026-11-04). Cite it in specs
 and handoffs in place of the older GitHub Pages copy. It is not reachable
-from the cloud environment yet (`docs.digital.ai` is outside its allowed
-network hosts); live behaviour is still settled by the integration tier.
+from the cloud environment (allowed 2026-11-04); `llms-full.txt` there is
+the whole site as one text file, the fastest way to check a claim. Live
+behaviour is still settled by the integration tier.
 
 ## What the consumers do today (surveyed 2026-11-04)
 
@@ -96,10 +97,12 @@ Found by reading the code above against `src/`:
 5. **Missing wire modules** named in spec 000 but not built: `loc2` (both
    consumers), `queryV1` (slack's main read path — or migrate slack to
    api/asset queries instead; see B3), `attachment`/`EmbeddedImage` (rooms).
-6. **rest-1 writes.** Slack updates with `?comment=` (a change comment).
-   Confirm on a dev instance whether api/asset can carry a change comment;
-   if not, `rest1` grows `create`/`update` with the `Attributes` envelope
-   built in the wire module (translation once, per §2).
+6. **rest-1 writes — not needed.** Settled from the docs
+   (apis/asset-bulk/updating-assets, creating-assets): api/asset carries a
+   change comment as `ChangeComment` inside an update's `update` node, or
+   at the root of a create command; `execute` commands cannot carry one.
+   So the bot's `update(oid, data, comment)` moves to api/asset and the SDK
+   grows no rest-1 write path.
 7. **Services.** `resolve` (number → asset), `guard` (ChangeDate
    compare-and-set), `batch` (preview/snapshot/receipt/reverse) — port from
    gh-v1's `resolve.js` and `batch.js`, minus the prompting and file I/O,
@@ -123,8 +126,9 @@ moves.
 - **A3 loc2 wire module** — gap 5, smallest consumer-shared endpoint.
 - **A4 Slack-shaped reads** — decide queryV1-module vs. api/asset-only by
   porting `lib/queries.js` bodies into integration tests against the dev
-  instance; whichever reads translate cleanly wins. Add `rest1` writes only
-  if gap 6 proves api/asset cannot carry a change comment.
+  instance; whichever reads translate cleanly wins. (No `rest1` writes:
+  gap 6 is settled.) If the bot's S2 lands first, this is only the
+  translation check.
 - **A5 Services port** — gap 7. `services/resolve` first (gh-v1's
   `resolveAssets`; slack's `queryForAssetByNumber` needs it too), then
   `services/guard` (`guarded()`), then `services/batch` (preview, describe,
@@ -155,7 +159,8 @@ bodies in `lib/queries.js`), api/asset (`bulk`, `createWithNumber`,
 - **B0 Pre-SDK migrations in the bot's own session** (S1–S4 under
   *Consumer migrations* below). They shrink what the SDK must support:
   once S2 moves reads to api/asset, the SDK needs no `queryV1` module and
-  A4 collapses to "verify the bot's query bodies translate".
+  A4 collapses to "verify the bot's query bodies translate" — and A4's
+  rest-1-writes question is closed (gap 6).
 - **B1 Client swap.** `createV1Client` keeps its surface; inside, one
   `AgilityApiClient({ baseUrl: url, accessToken })`. `query`/`bulk`/`exec`
   → `client.assets.*`; `fetchLocalizations` → `loc2` (A3).
@@ -163,9 +168,9 @@ bodies in `lib/queries.js`), api/asset (`bulk`, `createWithNumber`,
 - **B2 Delete the decodes.** Rows arrive translated: `"True"` comparisons,
   `IsKanban.toLowerCase()`, `toMomentless` and positional
   `results[0][0]`/`results[2]` handling go.
-- **B3 Writes.** `create`/`update` → api/asset unless gap 6 shows the change
-  comment needs rest-1; then `rest1` writes in the SDK and
-  `rest1DataTransformer.js` is deleted either way.
+- **B3 Writes.** `create`/`update` → `assets.send` (api/asset), the change
+  comment as `ChangeComment` in the `update` node (gap 6);
+  `rest1DataTransformer.js` is deleted.
 - **B4 Number resolution.** `queryForAssetByNumber` → `resolve` (A5).
 
 Gate per step: `npm test`, then a sandbox-workspace smoke (asset mention,
@@ -290,7 +295,7 @@ ESM" here means finishing the edges:
   for consumers in CI) vs. npmjs public. Rooms and slack both build in GitHub
   Actions under `digital-ai`, so cross-org package read access matters.
 - Live dev instance for the integration tier from a cloud session
-  (`test/integration/instance.ts`) — needed to settle gap 6 and A4.
+  (`test/integration/instance.ts`) — needed for A4's translation check.
 
 ## Checklist
 

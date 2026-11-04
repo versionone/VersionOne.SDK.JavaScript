@@ -8,7 +8,8 @@
  * of them), one aliased command per array element, `previewOnly` on the
  * query string, YAML as a text body — so callers never learn them.
  *
- * Verified shapes (agility-api-documentation, asset-bulk section):
+ * Verified shapes (https://docs.digital.ai/agility-api/apis/asset-bulk, and
+ * its errors page for commandFailures):
  *   - response: requestId, createdDate, completedDate, duration,
  *     durationSeconds, complete, processing, assetsCreated/assetsModified/
  *     assetsOperatedOn { oidTokens, count }, commandFailures { commands,
@@ -168,12 +169,17 @@ function toNumber(value: unknown): unknown {
 }
 
 /**
- * One failed command, normalised. `index` is the command's position in the
- * batch as sent (the server's sourceCommandIndex — the echoed alias is
- * replaced by a generated one, so the index is the only key back to the
- * request); null when the server gave none. `message` is the server's text,
- * often a localization token ("Violation'Invalid'Link.Asset") a caller can
- * branch on or run through loc-2.
+ * One failed command, normalised. `index` is the zero-based position, in
+ * the batch as sent, of the command that produced the failure (the server's
+ * sourceCommandIndex — the echoed alias is replaced by a generated one, so
+ * the index is the only key back to the request); null when the server gave
+ * none. Several failures can share one index: a failed create fails every
+ * descendant it would have parented, and the first entry is the root cause.
+ * `message` is the server's text, often an apostrophe-delimited token
+ * ("Violation'Invalid'Epic.Scope") a caller can branch on or run through
+ * loc-2 — but an unknown attribute reads differently in `select` and in
+ * `where`, so match on text with care. stackTrace is never kept: only
+ * internal development builds send it.
  */
 export interface CommandFailureDetail { index: number | null; message: string; echoed: Record<string, unknown> }
 
@@ -192,7 +198,12 @@ export function failuresOf<Row extends Asset = Asset>(response: AssetApiResponse
  * nothing: `response` is the whole (translated) envelope, with whatever did
  * succeed — created OIDs, modified OIDs, query rows — and `failures` says
  * which commands did not, by index. The message joins the failures'
- * messages so a log line reads like the server's own words.
+ * messages, root cause first, so a log line reads like the server's own
+ * words. To retry, correct and resend `response.commandFailures.commands`
+ * verbatim: each entry is a complete command under its alias wrapper, the
+ * succeeded commands are absent, so nothing is applied twice. Resending the
+ * original batch is not safe. (Echoed execute failures do not resend
+ * cleanly; rewrite them as from-addressed executes.)
  */
 export class CommandFailureError<Row extends Asset = Asset> extends ApiError {
   readonly failures: CommandFailureDetail[];

@@ -45,9 +45,15 @@ in `test/v1-service.test.js` and `test/queries.test.js` with responses
 captured from the local dev instance (`http://localhost/VersionOne.Web/`),
 committed under `test/fixtures/`. A fake must send what the server sends.
 
-Open question to answer while doing S2/S3 (do not change behaviour for
-it): does an api/asset `update` accept a change comment equivalent to
-rest-1's `?comment=` used by `update()`? Record what you find in the PR.
+Settled, for when writes move (milestone B3, not part of S1–S4): api/asset
+accepts a change comment as `ChangeComment` inside an update command's
+`update` node (or at the root of a create), so `update()`'s `?comment=`
+has an api/asset equivalent; `execute` commands (QuickClose, Reactivate)
+cannot carry one. Reference:
+https://docs.digital.ai/agility-api/apis/asset-bulk/updating-assets
+
+API reference for all of this: https://docs.digital.ai/agility-api/ (the
+whole site as text: https://docs.digital.ai/agility-api/llms-full.txt).
 
 Do not add `@versionone/sdk` yet (milestone B1, run from the SDK session
 after S2 and S3 merge). Report back with the PR links.
