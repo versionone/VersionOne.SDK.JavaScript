@@ -1,4 +1,6 @@
 import { afterAll, expect, it } from "vitest";
+import { ApiError } from "../../src/core/errors";
+import { CommandFailureError } from "../../src/wire/assetApi";
 import type { Member } from "../../src/types/assets/Member";
 import type { Story } from "../../src/types/assets/Story";
 import { assetApi } from "../../src/wire";
@@ -65,5 +67,25 @@ describeInstance("assetApi (live)", () => {
     expect(failures).toHaveLength(1);
     expect(failures[0]!.index).toBe(1);
     expect(failures[0]!.message).toMatch(/Link\.Asset|Invalid/);
+  });
+
+  it("a query the server rejects throws a CommandFailureError naming it by index, while a query that matches nothing is [] — the expect-zero control", async () => {
+    const nothing = await assetApi.query<Story>(t, { from: "Story", select: ["Name"], filter: ["Name=$n"], with: { $n: `${name} no such story` }, page: { size: 1, start: 0 } });
+    expect(nothing).toEqual([]);
+    const err = (await assetApi.queries(t, [
+      { from: "Member", select: ["Name"], where: { IsSelf: "true" }, page: { size: 1, start: 0 } },
+      { from: "Story", select: ["NoSuchAttribute"], page: { size: 1, start: 0 } }
+    ]).catch((e: unknown) => e)) as CommandFailureError;
+    expect(err).toBeInstanceOf(CommandFailureError);
+    expect(err.failures.map((f) => f.index)).toEqual([1]);
+    expect(err.message).toMatch(/Unknown AttributeDefinition: Story\.NoSuchAttribute/);
+    expect(err.response.queryResult.results[0]).toHaveLength(1);
+  });
+
+  it("a body api/asset cannot parse is a 400 with the parser's message, not an opaque 500, and is not retried", async () => {
+    const err = (await t.request({ method: "POST", path: "/api/asset", body: '{"from":"Story",', contentType: "application/json", responseType: "json" }).catch((e: unknown) => e)) as ApiError;
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.status).toBe(400);
+    expect(err.message).toMatch(/not valid JSON/);
   });
 });

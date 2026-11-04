@@ -21,6 +21,20 @@ from the cloud environment (allowed 2026-11-04); `llms-full.txt` there is
 the whole site as one text file, the fastest way to check a claim. Live
 behaviour is still settled by the integration tier.
 
+Findings from the testing instance worth carrying into later milestones:
+
+- api/asset answers a body it cannot parse with **400** and one message
+  in `Exceptions` (changed 2026-11; the docs' errors page says so). The
+  transport reads that shape into `ApiError.message`.
+- A value containing an em dash (—) fails as a `filter` literal and in
+  `where` (`Invalid QueryFilter2 token …`), while `é` passes; the same
+  value as a `with` variable (`Name=$n`) works. Services that build filters
+  from user text (A5 `resolve`, gh-v1's `--filter`, the bot's search) should
+  pass values through `with`, not splice them into the filter string.
+  Possibly a server bug worth a defect.
+- A StoryStatus create requires `RollupState` (`"Active"` and `64` both
+  accepted).
+
 ## What the consumers do today (surveyed 2026-11-04)
 
 **k6i-agility-slack-bot.** Every Agility call goes through one seam,
@@ -294,8 +308,10 @@ ESM" here means finishing the edges:
 - Publish target: GitHub Packages (`@versionone` scope, org auth required
   for consumers in CI) vs. npmjs public. Rooms and slack both build in GitHub
   Actions under `digital-ai`, so cross-org package read access matters.
-- Live dev instance for the integration tier from a cloud session
-  (`test/integration/instance.ts`) — needed for A4's translation check.
+- ~~Live instance for the integration tier from a cloud session~~ — done
+  2026-11-04: `V1_URL`/`V1_ACCESS_TOKEN` point at the API-testing instance
+  `https://www14.v1host.com/v1sdktesting`; `npm run test:integration` is
+  green there (custom fields skip: hosted).
 
 ## Checklist
 

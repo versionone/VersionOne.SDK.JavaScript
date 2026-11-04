@@ -77,13 +77,16 @@ async function readBody(response: Response, responseType: ResponseType): Promise
 /**
  * The message of an error response, from the shapes the Agility endpoints
  * actually send: rest-1's { _type: "Error", error, exceptions: [{ message }] },
- * a bare { message }, or text.
+ * api/asset's { Exceptions: ["…"] } (a request it could not parse — 400
+ * with the parser's message since 2026-11, an opaque 500 before), a bare
+ * { message }, or text.
  */
 function messageOf(data: unknown, status: number): string {
   if (data && typeof data === "object") {
     const d = data as Record<string, unknown>;
     const first = Array.isArray(d.exceptions) && d.exceptions[0] && typeof d.exceptions[0] === "object" ? (d.exceptions[0] as Record<string, unknown>).message : undefined;
-    for (const candidate of [d.error, first, d.message]) {
+    const listed = Array.isArray(d.Exceptions) ? d.Exceptions.filter((x): x is string => typeof x === "string" && !!x).join("; ") : undefined;
+    for (const candidate of [d.error, first, listed, d.message]) {
       if (typeof candidate === "string" && candidate) return candidate;
     }
   }

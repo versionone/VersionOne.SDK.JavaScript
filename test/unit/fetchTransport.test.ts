@@ -54,6 +54,11 @@ describe("createFetchTransport", () => {
     expect(err.message).toBe("Invalid SEL parameter");
     expect(err.details.exceptions[0]!.message).toBe("Unknown token: Owners.Name");
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+    // api/asset's shape for a body it could not parse (copied from a live 400, 2026-11-04).
+    const bulk = vi.fn().mockResolvedValue(json({ Exceptions: ["The request body is not valid JSON. Unexpected end of content while loading JObject. Path 'from', line 1, position 16."] }, 400));
+    const bulkErr = (await createFetchTransport({ baseUrl: "https://x", fetchImpl: bulk }).request({ method: "POST", path: "/api/asset", body: "{" }).catch((e: unknown) => e)) as ApiError;
+    expect(bulkErr.status).toBe(400);
+    expect(bulkErr.message).toMatch(/^The request body is not valid JSON\./);
   });
 
   it("retries a GET on a network failure or a 5xx, never a POST — a retried batch write is a double write", async () => {

@@ -113,10 +113,17 @@ committed files.
 - **Unit** (`test/unit/**`, `npm test`): a fake `Transport`; what was sent,
   what came back, translation both ways. Runs with nothing.
 - **Integration** (`test/integration/**`, `npm run test:integration`): the
-  same modules against a real dev instance, resolved by
+  same modules against a real instance, resolved by
   `test/integration/instance.ts`; skips with a message when none is
-  configured; **refuses a production URL**. Fixtures are named
-  `sdk-integration …` and deleted by the suite that made them.
+  configured. It runs only where fixtures may be written: a local dev
+  instance, or a hosted instance listed in `API_TEST_INSTANCES` as set
+  aside for API testing (today `www14.v1host.com/v1sdktesting`); any other
+  hosted URL and anything named V1Production is **refused**. A suite that
+  recycles the app domain (custom fields) runs on local instances only.
+  Suites bring their own data — a hosted testing instance may be nearly
+  empty (it had no StoryStatus at all on 2026-11-04) — and fixtures are
+  named `sdk-integration …` and deleted by exact OID by the suite that made
+  them.
 
 The API's real behaviours — silent empties, projection order, full-text
 index lag, what a preview echoes — are what fakes cannot reproduce; the

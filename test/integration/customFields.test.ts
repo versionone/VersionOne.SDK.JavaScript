@@ -4,7 +4,7 @@ import { Schema } from "../../src/services/schema";
 import type { Story } from "../../src/types/assets/Story";
 import { assetApi } from "../../src/wire";
 import { createCustomFields, customTokenOf, deleteCustomFields, findCustomField } from "./customFields";
-import { describeInstance, fixtureName, instance } from "./instance";
+import { describeLocalInstance, fixtureName, instance } from "./instance";
 
 /**
  * Custom attributes end to end: definitions created through the classic
@@ -14,7 +14,7 @@ import { describeInstance, fixtureName, instance } from "./instance";
  * in it. Slow: two app-domain recycles. Creates two definitions and one
  * Story on Scope:0, and deletes all three.
  */
-describeInstance("custom fields (live, via the classic UI gadget)", () => {
+describeLocalInstance("custom fields (live, via the classic UI gadget)", () => {
   const t = instance!.transport;
   const SLOW = 180_000;
   const stamp = Date.now().toString(36);
