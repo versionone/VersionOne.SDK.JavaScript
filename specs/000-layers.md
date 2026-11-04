@@ -146,3 +146,7 @@ carrying every failure by index and the whole translated response, so
 what did commit is still known) when asked with `throwOnFailure`. Reads —
 `assetApi.query`/`queries`, and the client's `assets.query`/`queries` —
 always throw: a query the server rejected must not come back as `[]`.
+The server drops a failed query's slot from `queryResult.results` (later
+results shift up); `send` restores it as `null` by `sourceCommandIndex`, so
+positions always match the queries sent, and refuses to guess when the
+counts disagree.

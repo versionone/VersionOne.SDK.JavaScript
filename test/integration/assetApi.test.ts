@@ -88,4 +88,17 @@ describeInstance("assetApi (live)", () => {
     expect(err.status).toBe(400);
     expect(err.message).toMatch(/not valid JSON/);
   });
+
+  it("a failed query's slot is dropped by the server and restored as null by send, so the query after it keeps its own position", async () => {
+    const res = await assetApi.send(t, [
+      { from: "Member", select: ["Name"], where: { IsSelf: "true" }, page: { size: 1, start: 0 } },
+      { from: "SdkIntegrationNoSuchType", select: ["Name"], page: { size: 1, start: 0 } },
+      { from: "Story", select: ["Name"], filter: ["Name=$n"], with: { $n: `${name} no such story` }, page: { size: 1, start: 0 } }
+    ]);
+    expect(assetApi.failuresOf(res).map((f) => f.index)).toEqual([1]);
+    expect(res.queryResult.results).toHaveLength(3);
+    expect(res.queryResult.results[0]).toHaveLength(1);
+    expect(res.queryResult.results[1]).toBeNull();
+    expect(res.queryResult.results[2]).toEqual([]);
+  });
 });

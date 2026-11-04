@@ -150,7 +150,8 @@ describe("assetApi: command failures", () => {
     expect(empty).toEqual([]);
     const rejected = fakeTransport(envelope({
       commandFailures: { count: 1, commands: [{ "@9a1e": { from: "Story" }, error: { message: "Invalid token 'Nmae'", sourceCommandIndex: 1 } }] },
-      queryResult: { results: [[{ _oid: "Link:1" }], []], resultMetaData: [], count: -1 }
+      // The server drops a failed query's slot: two queries, one result array.
+      queryResult: { results: [[{ _oid: "Link:1" }]], resultMetaData: [], count: -1 }
     }));
     const err = (await queries(rejected, [
       { from: "Link", select: ["URL"], page: { size: 5, start: 0 } },
@@ -159,5 +160,30 @@ describe("assetApi: command failures", () => {
     expect(err).toBeInstanceOf(CommandFailureError);
     expect(err.failures[0]!.index).toBe(1);
     expect(err.response.queryResult.results[0]).toEqual([{ _oid: "Link:1" }]);
+  });
+
+  it("send restores the slot the server drops for a failed query — null, not [] — so later queries keep their positions and their types (shape copied from a live response, 2026-11-04)", async () => {
+    // Three queries, the middle one failing: the server sends two result arrays.
+    const live = envelope({
+      commandFailures: { count: 1, commands: [{ "@5b2c$auto-aliased": { from: "NoSuchRoot" }, error: { message: "Unknown AssetType: NoSuchRoot", sourceCommandIndex: 1 } }] },
+      queryResult: { results: [[{ _oid: "Story:1", Number: "S-1" }], []], resultMetaData: [], count: -1 }
+    });
+    const res = await send(fakeTransport(live), [
+      { from: "Workitem", select: ["Number"], page: { size: 1, start: 0 } },
+      { from: "NoSuchRoot", select: ["Number"], page: { size: 1, start: 0 } },
+      { from: "Issue", select: ["Number"], page: { size: 1, start: 0 } }
+    ]);
+    expect(res.queryResult.results).toEqual([[{ _oid: "Story:1", Number: "S-1" }], null, []]);
+    // A non-query command does not take a slot; its failure shifts nothing.
+    const mixed = await send(fakeTransport(envelope({
+      commandFailures: { count: 1, commands: [{ "@c": { AssetType: "Story" }, error: { message: "Violation'Required'Scope", sourceCommandIndex: 0 } }] },
+      queryResult: { results: [[{ _oid: "Member:20" }]], resultMetaData: [], count: -1 }
+    })), [{ AssetType: "Story", Name: "x" }, { from: "Member", select: ["Name"], page: { size: 1, start: 0 } }]);
+    expect(mixed.queryResult.results).toEqual([[{ _oid: "Member:20" }]]);
+  });
+
+  it("refuses to guess when the result count does not match the queries that did not fail", async () => {
+    const t = fakeTransport(envelope({ queryResult: { results: [[], []], resultMetaData: [], count: -1 } }));
+    await expect(send(t, [{ from: "Story", select: ["Name"], page: { size: 1, start: 0 } }])).rejects.toThrow(/cannot tell which result belongs to which query/);
   });
 });

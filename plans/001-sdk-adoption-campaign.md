@@ -32,6 +32,12 @@ Findings from the testing instance worth carrying into later milestones:
   from user text (A5 `resolve`, gh-v1's `--filter`, the bot's search) should
   pass values through `with`, not splice them into the filter string.
   Possibly a server bug worth a defect.
+- A failed query's slot is **dropped** from `queryResult.results` (later
+  ones shift up); the docs promise only that empty matches keep theirs.
+  `send` now restores the slot as `null`. Worth a line in the docs'
+  Queries page. Consumers that index results positionally after a partial
+  failure (the bot's `results[2]`, rooms' `getApiResults`) are exposed
+  until they move to the SDK.
 - A StoryStatus create requires `RollupState` (`"Active"` and `64` both
   accepted).
 

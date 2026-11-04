@@ -78,7 +78,13 @@ export interface AssetApiResponse<Row extends Asset = Asset> {
   assetsModified: OidTokens;
   assetsOperatedOn: OidTokens;
   commandFailures: { commands: CommandFailure[]; count: number };
-  queryResult: { results: Row[][]; resultMetaData: unknown[]; count: number };
+  /**
+   * One slot per query command, in request order; [] where a query matched
+   * nothing. The server DROPS the slot of a query that failed, shifting the
+   * later ones up (live, 2026-11-04); send puts the slot back as null, so a
+   * caller's positions hold and a failure never reads as an empty result.
+   */
+  queryResult: { results: (Row[] | null)[]; resultMetaData: unknown[]; count: number };
 }
 
 // ---- translation ------------------------------------------------------------
@@ -235,10 +241,26 @@ export interface SendOptions extends ReadOptions {
   throwOnFailure?: boolean;
 }
 
-/** The query commands of a batch, in order — the order queryResult.results follows. */
+/** A command's body, aliased or bare. */
+const bodyOf = (c: Command): unknown => { const keys = Object.keys(c); return keys.length === 1 && keys[0]!.startsWith("@") ? (c as Record<string, unknown>)[keys[0]!] : c; };
 const isQuery = (body: unknown): body is QueryBody => !!body && typeof body === "object" && typeof (body as QueryBody).from === "string" && !("update" in body) && !("execute" in body) && !("AssetType" in body);
-function queriesIn(commands: Command[]): QueryBody[] {
-  return commands.flatMap((c) => { const keys = Object.keys(c); const body = keys.length === 1 && keys[0]!.startsWith("@") ? (c as Record<string, unknown>)[keys[0]!] : c; return isQuery(body) ? [body] : []; });
+/** The query commands of a batch, in order, each with its index in the batch. */
+function queriesIn(commands: Command[]): { body: QueryBody; index: number }[] {
+  return commands.flatMap((c, index) => { const body = bodyOf(c); return isQuery(body) ? [{ body, index }] : []; });
+}
+
+/**
+ * The server's results, one slot per query again. It sends a slot for every
+ * query that ran (an empty match included) and none for a query that
+ * failed; a failure names its command by sourceCommandIndex, so the failed
+ * queries are known and the rest fill in order. If the counts disagree the
+ * positions cannot be trusted, and that is an error rather than a guess.
+ */
+function realign<T>(sent: { index: number }[], results: T[], failed: Set<number>): (T | null)[] {
+  const expected = sent.filter((q) => !failed.has(q.index)).length;
+  if (results.length !== expected) throw new Error(`api/asset returned ${results.length} query results for ${expected} queries that did not fail; cannot tell which result belongs to which query`);
+  let next = 0;
+  return sent.map((q) => (failed.has(q.index) ? null : results[next++]!));
 }
 
 /**
@@ -255,12 +277,16 @@ export async function send<Row extends Asset = Asset>(transport: Transport, comm
     body: toWire(commands),
     responseType: "json"
   });
+  // A preview answers with the projection, not an envelope.
+  if (options.previewOnly) return response;
   const queries = queriesIn(commands);
+  const failed = new Set(failuresOf(response).flatMap((f) => (f.index === null ? [] : [f.index])));
+  const aligned = realign(queries, response.queryResult?.results ?? [], failed);
   const contextOf = (i: number): RowContext | undefined => {
-    const type = options.lookup && queries[i] ? fromTypeOf(queries[i]!.from, commands) : null;
+    const type = options.lookup ? fromTypeOf(queries[i]!.body.from, commands) : null;
     return type ? { lookup: options.lookup!, type } : undefined;
   };
-  const translated: AssetApiResponse<Row> = { ...response, queryResult: { ...response.queryResult, results: (response.queryResult?.results ?? []).map((rows, i) => rows.map((r) => fromWireRow<Row>(r as Record<string, unknown>, contextOf(i)))) } };
+  const translated: AssetApiResponse<Row> = { ...response, queryResult: { ...response.queryResult, results: aligned.map((rows, i) => rows && rows.map((r) => fromWireRow<Row>(r as Record<string, unknown>, contextOf(i)))) } };
   if (options.throwOnFailure && translated.commandFailures?.count) throw new CommandFailureError(translated);
   return translated;
 }
