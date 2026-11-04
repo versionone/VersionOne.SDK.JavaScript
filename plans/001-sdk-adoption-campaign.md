@@ -213,6 +213,11 @@ a change of one file.
 
 **gh-v1** (`plans/handoffs/gh-v1.md`)
 
+- **G0 Runs anywhere.** The `gh-v1` bin is committed without its executable
+  bit (`100644`), so installing the extension fails on macOS/Linux; and
+  config comes only from `~/.v1config/v1api/config.json`. Fix the mode and
+  accept `V1_URL` + `V1_ACCESS_TOKEN` from the environment, so cloud
+  sessions and CI can run it.
 - **G1 CommonJS → ESM.** gh-v1 is the one consumer still on `require`
   (`"type"` unset, `module.exports` in every `lib/` file, the `gh-v1` bin
   script). Convert to `"type": "module"`, `import`/`export`, `node:`
@@ -264,7 +269,7 @@ ESM" here means finishing the edges:
   D1 → D2+. gh-v1 first: no framework migration, and stubbed-fetch tests
   prove parity offline. A1 (browser credentials, onUnauthorized) waits for
   rooms; the bot maps `ApiError.status === 401` itself.
-- **In parallel, elsewhere:** G1–G3 in the gh-v1 session, S1–S4 in the
+- **In parallel, elsewhere:** G0–G3 in the gh-v1 session, S1–S4 in the
   slack-bot session (on `bolt-migration`). C1 starts after G1 merges; B1
   after S2 and S3.
 - **Hand-offs:** this session writes the prompt (`plans/handoffs/*.md`);
@@ -289,7 +294,7 @@ ESM" here means finishing the edges:
 - [ ] A4 slack-shaped reads (queryV1 or api/asset)
 - [ ] A5 services port from gh-v1
 - [ ] A6 CI + prerelease publish
-- [ ] G1–G3 gh-v1 migrations (gh-v1 session)
+- [ ] G0–G3 gh-v1 migrations (gh-v1 session)
 - [ ] S1–S4 slack-bot migrations (slack-bot session, `bolt-migration`)
 - [ ] B1–B4 slack bot SDK swap
 - [x] C0 gh-v1 surveyed (2026-11-04)

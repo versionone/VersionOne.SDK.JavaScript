@@ -1,4 +1,4 @@
-# Handoff: gh-v1 migrations G1–G3
+# Handoff: gh-v1 migrations G0–G3
 
 Paste everything below the line into the session working on
 `versionone/gh-v1`. Source: `plans/001-sdk-adoption-campaign.md` in
@@ -9,9 +9,23 @@ Paste everything below the line into the session working on
 
 Context: gh-v1 will become the first consumer of `@versionone/sdk` (the
 TypeScript rewrite of the Agility JS SDK). Before that swap, gh-v1 should
-adopt three migrations so the swap later touches only `lib/api.js`. Do them
-as three separate PRs, in order, each with `npm test` green (99 tests
-today) and no change in CLI behaviour or output.
+adopt these migrations so the swap later touches only `lib/api.js`. Do them
+as separate PRs, in order, each with `npm test` green (99 tests
+today) and no change to existing CLI behaviour or output.
+
+**G0 — Runs anywhere, configurable from the environment.** Do this first; it
+is small.
+- The bin script `gh-v1` is committed as mode `100644`, so
+  `gh extension install versionone/gh-v1` (or `gh extension install .`)
+  gives "permission denied" on macOS and Linux; Windows does not notice.
+  Fix with `git update-index --chmod=+x gh-v1` and commit.
+- `lib/config.js` reads the instance only from
+  `~/.v1config/v1api/config.json` (or `V1_CONFIG_FILE`) and prompts when it
+  is missing. Add: when `V1_URL` and `V1_ACCESS_TOKEN` are both set, use
+  them as the profile (no file, no prompt), so a cloud or CI environment can
+  configure gh-v1 from environment variables. A profile in the file named by
+  `--instance`/`V1_INSTANCE` still wins when one is asked for explicitly.
+  Document both in the README and add a test.
 
 **G1 — CommonJS to ESM.**
 - `package.json`: `"type": "module"`. Convert every `require`/`module.exports`
