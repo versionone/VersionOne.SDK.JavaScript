@@ -5,6 +5,7 @@ import { Schema } from "./services/schema";
 import type { Asset } from "./types/asset";
 import type { Metamodel } from "./types/metamodel";
 import * as assetApi from "./wire/assetApi";
+import * as loc2 from "./wire/loc2";
 import * as meta from "./wire/meta";
 import * as rest1 from "./wire/rest1";
 
@@ -51,6 +52,15 @@ export class AgilityApiClient {
     assetType: (token: string) => meta.getAssetType(this.transport, token),
     attributeDefinition: (tokenref: `${string}.${string}`) => meta.getAttributeDefinition(this.transport, tokenref)
   };
+
+  /**
+   * loc-2.v1: labels for tags, in one request (meta's DisplayName values are
+   * tags). An unmatched tag comes back as itself; the server never says
+   * "missing", so neither does this.
+   */
+  localize(tags: readonly string[], options?: loc2.LocalizeOptions): Promise<loc2.Localizations> {
+    return loc2.localize(this.transport, tags, options);
+  }
 
   /** rest-1.v1: bounded reads, one asset, history. */
   readonly data = {

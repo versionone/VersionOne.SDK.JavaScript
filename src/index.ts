@@ -14,11 +14,12 @@ export type { AssetType, AttributeDefinition, AttributeLookup, AttributeType, At
 export type * from "./types/assets/index";
 
 // The wire layer: one module per endpoint.
-export { assetApi, rest1, meta } from "./wire";
+export { assetApi, rest1, meta, loc2 } from "./wire";
 export * as select from "./wire/select";
 export type { AssetApiResponse, Command, CommandBody, CommandFailureDetail, CommandValue, CreateBody, ExecuteBody, QueryBody, UpdateBody, ReadOptions, RowContext, SendOptions } from "./wire/assetApi";
 export { CommandFailureError } from "./wire/assetApi";
 export type { AssetDocument, AssetsDocument, ReadParams, ReadResult } from "./wire/rest1";
+export type { Localizations, LocalizeOptions } from "./wire/loc2";
 
 // Services: what to do.
 export { Schema } from "./services/schema";

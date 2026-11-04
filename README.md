@@ -21,7 +21,7 @@ npm test
 
 ## Public API
 
-- `AgilityApiClient` - top-level SDK client (`meta`, `data` for rest-1, `assets` for api/asset, `schema`)
+- `AgilityApiClient` - top-level SDK client (`meta`, `data` for rest-1, `assets` for api/asset, `localize` for loc-2, `schema`)
 - `createFetchTransport` - configurable HTTP transport
 - `ApiError` - typed API error; `CommandFailureError` - an api/asset batch in which commands failed (`failures` by index, plus the `response`)
 

@@ -317,7 +317,7 @@ ESM" here means finishing the edges:
 
 - [ ] A1 transport: credentials, onUnauthorized, signal
 - [x] A2 command-failure error (`CommandFailureError`, `throwOnFailure`, reads always throw)
-- [ ] A3 loc2
+- [x] A3 loc2 (`loc2.localize`, `client.localize`; GET, POST past 2000 encoded chars, culture via Accept-Language)
 - [ ] A4 slack-shaped reads (queryV1 or api/asset)
 - [ ] A5 services port from gh-v1
 - [ ] A6 CI + prerelease publish
