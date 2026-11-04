@@ -21,7 +21,10 @@ npm test
 
 ## Public API
 
-- `AgilityApiClient` - top-level SDK client (`meta`, `data` for rest-1, `assets` for api/asset, `localize` for loc-2, `schema`)
+- `AgilityApiClient` - top-level SDK client (`meta`, `data` for rest-1, `assets` for api/asset, `localize` for loc-2, `schema`), and the services on it:
+  - `resolve.numbers` / `resolve.ref` - asset numbers and OID tokens to assets, in one request
+  - `assets.sendGuarded` - a batch as a compare-and-set on each asset's ChangeDate; changed assets come back `skipped`
+  - `batch.run` / `batch.reversible` - preview, snapshot, (confirm,) send guarded, and a receipt with a reverse batch
 - `createFetchTransport` - configurable HTTP transport
 - `ApiError` - typed API error; `CommandFailureError` - an api/asset batch in which commands failed (`failures` by index, plus the `response`)
 

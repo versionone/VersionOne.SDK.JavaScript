@@ -16,7 +16,7 @@ export type * from "./types/assets/index";
 // The wire layer: one module per endpoint.
 export { assetApi, rest1, meta, loc2 } from "./wire";
 export * as select from "./wire/select";
-export type { AssetApiResponse, Command, CommandBody, CommandFailureDetail, CommandValue, CreateBody, ExecuteBody, QueryBody, UpdateBody, ReadOptions, RowContext, SendOptions } from "./wire/assetApi";
+export type { AssetApiResponse, Command, CommandBody, CommandFailureDetail, Outcome, CommandValue, CreateBody, ExecuteBody, QueryBody, UpdateBody, ReadOptions, RowContext, SendOptions } from "./wire/assetApi";
 export { CommandFailureError } from "./wire/assetApi";
 export type { AssetDocument, AssetsDocument, ReadParams, ReadResult } from "./wire/rest1";
 export type { Localizations, LocalizeOptions } from "./wire/loc2";
@@ -27,3 +27,5 @@ export { CHUNK as RESOLVE_CHUNK, NUMBER_ROOTS, isAssetNumber, resolveNumbers, re
 export type { Resolution, ResolvedAsset } from "./services/resolve";
 export { UNGUARDABLE_TYPES, UnguardableError, guard, sendGuarded, stampsOf, touchedBy, unguardable } from "./services/guard";
 export type { GuardedResult, Unguardable } from "./services/guard";
+export { BatchSendError, INVERSE, describe as describeBatch, namesOf, reverseOf, reversible, runBatch, snapshot } from "./services/batch";
+export type { BatchOptions, Described, Named, Receipt, Reverse } from "./services/batch";

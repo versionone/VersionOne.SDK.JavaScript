@@ -34,7 +34,7 @@ import type { Asset, Oid } from "../types/asset";
 import type { AssetTypeToken } from "../types/metamodel";
 import { momentless, typeOfOid } from "../types/oid";
 import * as assetApi from "../wire/assetApi";
-import type { AssetApiResponse, Command, CommandValue, ExecuteBody } from "../wire/assetApi";
+import type { Command, CommandValue, ExecuteBody } from "../wire/assetApi";
 
 /** OIDs per ChangeDate read: bounded, never one giant filter. */
 export const CHUNK = 100;
@@ -139,7 +139,8 @@ export function guard(projected: Command[], stamps: Readonly<Record<Oid, string>
 // ---- the whole move --------------------------------------------------------------
 
 export interface GuardedResult<Row extends Asset = Asset> {
-  response: AssetApiResponse<Row>;
+  /** What the batch did: created, modified, operated, failures, query rows. */
+  outcome: assetApi.Outcome<Row>;
   /** The server's projection the guard was built from. */
   projected: Command[];
   /** The batch as sent. */
@@ -150,7 +151,7 @@ export interface GuardedResult<Row extends Asset = Asset> {
   stamps: Record<Oid, string>;
   /**
    * Touched assets the batch left alone: changed or gone since they were
-   * read — or their command failed, which `response.commandFailures` says.
+   * read — or their command failed, which `outcome.failures` says.
    */
   skipped: Oid[];
 }
@@ -170,7 +171,7 @@ export async function sendGuarded<Row extends Asset = Asset>(transport: Transpor
   const stamps = await stampsOf(transport, touched);
   const { commands: sent, unstamped } = guard(projected, stamps);
   const creates = sent.some((c) => "AssetType" in bodyOf(c));
-  const response = await assetApi.send<Row>(transport, sent, { ...options, idempotent: !creates });
-  const done = new Set([...response.assetsModified.oidTokens, ...response.assetsOperatedOn.oidTokens].map(momentless));
-  return { response, projected, sent, touched, stamps, skipped: [...new Set([...unstamped, ...touched.filter((oid) => !done.has(oid))])] };
+  const outcome = assetApi.outcomeOf(await assetApi.send<Row>(transport, sent, { ...options, idempotent: !creates }));
+  const done = new Set([...outcome.modified, ...outcome.operated]);
+  return { outcome, projected, sent, touched, stamps, skipped: [...new Set([...unstamped, ...touched.filter((oid) => !done.has(oid))])] };
 }

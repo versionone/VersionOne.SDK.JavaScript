@@ -39,7 +39,7 @@ describeInstance("guard (live)", () => {
     const res = await sendGuarded(racing, [{ from: "Story", filter: ["ID=$ids"], with: { $ids: [a, b] }, update: { Estimate: 5 } }]);
     expect(res.touched.sort()).toEqual([a, b].sort());
     expect(res.skipped).toEqual([b]);
-    expect(res.response.assetsModified.oidTokens.map(assetApi.momentless)).toEqual([a]);
+    expect(res.outcome.modified).toEqual([a]);
     expect(await estimate(a)).toBe("5");
     expect(await estimate(b)).toBe("7");
   });
@@ -47,7 +47,7 @@ describeInstance("guard (live)", () => {
   it("sending the same guarded batch twice applies once: the first send advances the ChangeDate the second was stamped with", async () => {
     const first = await sendGuarded(t, [{ from: a, update: { Estimate: 8 } }]);
     const second = await assetApi.send(t, first.sent);
-    expect(first.response.assetsModified.count).toBe(1);
+    expect(first.outcome.modified).toEqual([a]);
     expect(second.assetsModified.count).toBe(0);
     expect(await estimate(a)).toBe("8");
   });

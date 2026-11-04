@@ -230,8 +230,16 @@ instance: same requests out, same rows in.
 - **C2 Delete the decodes.** With rows translated by the schema, `isTrue`
   and `oidOf` drop out of `meta.js`, `resolve.js`, `board.js`; `momentless`
   comes from the SDK.
-- **C3 Invert the services.** Once A5 lands, `resolve.js` and `batch.js`
-  keep only prompting, rendering and receipt files; the logic is imported.
+- **C3 Invert the services.** A5 is done, so `resolve.js` and `batch.js`
+  keep only prompting, console rendering, permalinks and receipt files:
+  `resolveAssets` → `client.resolve.numbers` (its `missing` drives the
+  "not found — skipped" lines); `run()` → `client.batch.run` with
+  `confirm` as the prompt and the receipt written as returned;
+  `--reverse` → `client.batch.reversible` (+ `--force`). Two deliberate
+  differences to carry over: the SDK refuses an unguardable batch unless
+  `guard: false` (gh-v1 sent it as written with a note — keep that UX by
+  checking `unguardable()` first), and its number roots are wider than
+  gh-v1's list.
 - **C4 Passthrough.** `raw`/`blob` stay CLI-local unless an `attachment`
   wire module (gap 5) is built for rooms — then `gh v1 attach` uses it.
 
@@ -347,7 +355,7 @@ ESM" here means finishing the edges:
 - [x] A2 command-failure error (`CommandFailureError`, `throwOnFailure`, reads always throw)
 - [x] A3 loc2 (`loc2.localize`, `client.localize`; GET, POST past 2000 encoded chars, culture via Accept-Language)
 - [ ] A4 slack-shaped reads (queryV1 or api/asset)
-- [~] A5 services port from gh-v1 — `resolve` done (`client.resolve.numbers`/`.ref`); `guard` done (`client.assets.sendGuarded`); `batch` to come
+- [x] A5 services port from gh-v1 — `resolve` (`client.resolve.numbers`/`.ref`), `guard` (`client.assets.sendGuarded`), `batch` (`client.batch.run`/`.reversible`)
 - [ ] A6 CI + prerelease publish
 - [ ] G0–G3 gh-v1 migrations (gh-v1 session)
 - [ ] S1–S4 slack-bot migrations (slack-bot session, `bolt-migration`)

@@ -59,4 +59,15 @@ describe("layers", () => {
     }
     expect(leaks).toEqual([]);
   });
+
+  it("services know no envelope: they read wire modules' model-shaped results (assetApi.outcomeOf), never the endpoint's field names", () => {
+    const leaks: string[] = [];
+    for (const file of walk(join(src, "services"))) {
+      const text = readFileSync(file, "utf8");
+      for (const word of ["oidTokens", "commandFailures", "queryResult", "resultMetaData", "assetsCreated", "assetsModified", "assetsOperatedOn", "previewOnly", "\"Attribute\""]) {
+        if (text.includes(word)) leaks.push(`${relative(src, file)} mentions ${word}`);
+      }
+    }
+    expect(leaks).toEqual([]);
+  });
 });

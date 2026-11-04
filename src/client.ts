@@ -1,6 +1,7 @@
 import type { ClientConfig } from "./core/clientConfig";
 import { createFetchTransport } from "./core/fetchTransport";
 import type { Transport } from "./core/transport";
+import * as batch from "./services/batch";
 import * as guard from "./services/guard";
 import * as resolve from "./services/resolve";
 import { Schema } from "./services/schema";
@@ -28,7 +29,7 @@ export interface ClientOptions {
  * them. Every api/asset read goes through the schema so its rows arrive in
  * the model's shape (numbers as numbers, a single relation as one Ref).
  * Services ported from gh-v1 are exposed here the same way: resolve, the
- * guard (assets.sendGuarded); batch to come.
+ * guard (assets.sendGuarded), batch.
  */
 export class AgilityApiClient {
   readonly transport: Transport;
@@ -72,6 +73,17 @@ export class AgilityApiClient {
   readonly resolve = {
     numbers: (numbers: readonly string[]) => resolve.resolveNumbers(this.transport, numbers),
     ref: (spec: string) => resolve.resolveRef(this.transport, spec)
+  };
+
+  /**
+   * A batch with a record: preview, snapshot what it overwrites, (confirm,)
+   * send guarded, and a receipt with created/touched/skipped assets and a
+   * reverse batch. `reversible` drops from a receipt's reverse the assets
+   * changed since, unless forced.
+   */
+  readonly batch = {
+    run: (commands: assetApi.Command[], options?: batch.BatchOptions) => batch.runBatch(this.transport, this.schema, commands, options),
+    reversible: (receipt: Pick<batch.Receipt, "reverse" | "after">, options?: { force?: boolean }) => batch.reversible(this.transport, receipt, options)
   };
 
   /** rest-1.v1: bounded reads, one asset, history. */

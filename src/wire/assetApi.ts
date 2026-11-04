@@ -198,6 +198,29 @@ export function failuresOf<Row extends Asset = Asset>(response: AssetApiResponse
   }));
 }
 
+/** What a batch did, in the model's terms: the services read this, never the envelope. */
+export interface Outcome<Row extends Asset = Asset> {
+  created: Oid[];
+  modified: Oid[];
+  operated: Oid[];
+  failures: CommandFailureDetail[];
+  /** One slot per query, in request order; null where the query failed. */
+  queryResults: (Row[] | null)[];
+  durationSeconds: number | null;
+}
+
+/** The outcome of a (translated) response: OIDs momentless, failures normalised. */
+export function outcomeOf<Row extends Asset = Asset>(response: AssetApiResponse<Row>): Outcome<Row> {
+  return {
+    created: (response.assetsCreated?.oidTokens ?? []).map(momentless),
+    modified: (response.assetsModified?.oidTokens ?? []).map(momentless),
+    operated: (response.assetsOperatedOn?.oidTokens ?? []).map(momentless),
+    failures: failuresOf(response),
+    queryResults: response.queryResult?.results ?? [],
+    durationSeconds: typeof response.durationSeconds === "number" ? response.durationSeconds : null
+  };
+}
+
 /**
  * A batch in which at least one command failed. api/asset answers 200 and
  * commits per command, so this is not an HTTP failure and not all-or-
