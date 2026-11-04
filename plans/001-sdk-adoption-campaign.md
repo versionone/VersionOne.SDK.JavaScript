@@ -38,6 +38,13 @@ Findings from the testing instance worth carrying into later milestones:
   Queries page. Consumers that index results positionally after a partial
   failure (the bot's `results[2]`, rooms' `getApiResults`) are exposed
   until they move to the SDK.
+- Number roots differ from gh-v1's hand list: Epic, Theme and TestSet are
+  Workitems now (resolved by the Workitem query); Milestone, Okr
+  (KeyResult, OkrObjective), OkrSession, Environment, Grant and
+  ExternalActionInvocation carry numbers too. Grant has no Name and
+  ExternalActionInvocation neither Name nor AssetState. `resolve` derives
+  all of this from the metamodel, under test.
+- Number matching is case-insensitive on the server.
 - A StoryStatus create requires `RollupState` (`"Active"` and `64` both
   accepted).
 
@@ -328,7 +335,7 @@ ESM" here means finishing the edges:
 - [x] A2 command-failure error (`CommandFailureError`, `throwOnFailure`, reads always throw)
 - [x] A3 loc2 (`loc2.localize`, `client.localize`; GET, POST past 2000 encoded chars, culture via Accept-Language)
 - [ ] A4 slack-shaped reads (queryV1 or api/asset)
-- [ ] A5 services port from gh-v1
+- [~] A5 services port from gh-v1 — `resolve` done (`client.resolve.numbers`/`.ref`); `guard`, `batch` to come
 - [ ] A6 CI + prerelease publish
 - [ ] G0–G3 gh-v1 migrations (gh-v1 session)
 - [ ] S1–S4 slack-bot migrations (slack-bot session, `bolt-migration`)

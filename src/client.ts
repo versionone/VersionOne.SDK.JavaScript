@@ -1,6 +1,7 @@
 import type { ClientConfig } from "./core/clientConfig";
 import { createFetchTransport } from "./core/fetchTransport";
 import type { Transport } from "./core/transport";
+import * as resolve from "./services/resolve";
 import { Schema } from "./services/schema";
 import type { Asset } from "./types/asset";
 import type { Metamodel } from "./types/metamodel";
@@ -25,8 +26,8 @@ export interface ClientOptions {
  * The client: one transport, one schema, and the wire modules bound to
  * them. Every api/asset read goes through the schema so its rows arrive in
  * the model's shape (numbers as numbers, a single relation as one Ref).
- * Services (resolve, guard, batch) arrive as the port from gh-v1 lands and
- * are exposed here the same way.
+ * Services ported from gh-v1 are exposed here the same way: resolve now;
+ * guard and batch to come.
  */
 export class AgilityApiClient {
   readonly transport: Transport;
@@ -61,6 +62,16 @@ export class AgilityApiClient {
   localize(tags: readonly string[], options?: loc2.LocalizeOptions): Promise<loc2.Localizations> {
     return loc2.localize(this.transport, tags, options);
   }
+
+  /**
+   * Services: what a person types, turned into assets. Numbers resolve in
+   * one api/asset request across every number root; an OID token is taken
+   * as is.
+   */
+  readonly resolve = {
+    numbers: (numbers: readonly string[]) => resolve.resolveNumbers(this.transport, numbers),
+    ref: (spec: string) => resolve.resolveRef(this.transport, spec)
+  };
 
   /** rest-1.v1: bounded reads, one asset, history. */
   readonly data = {

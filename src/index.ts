@@ -23,3 +23,5 @@ export type { Localizations, LocalizeOptions } from "./wire/loc2";
 
 // Services: what to do.
 export { Schema } from "./services/schema";
+export { CHUNK as RESOLVE_CHUNK, NUMBER_ROOTS, isAssetNumber, resolveNumbers, resolveRef } from "./services/resolve";
+export type { Resolution, ResolvedAsset } from "./services/resolve";
