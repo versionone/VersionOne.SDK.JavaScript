@@ -123,8 +123,11 @@ Found by reading the code above against `src/`:
    which stay in the CLI.
 8. **Distribution.** No CI in this repo, no publish target, version 0.1.0.
    Source is browser-safe already (no `node:` imports, no `Buffer`).
-9. **CommonJS consumers.** gh-v1 is `require`-based; the SDK's `dist/index.cjs`
-   must keep working (a unit test that `require`s the built bundle).
+9. **CommonJS consumers — done.** `test/unit/cjs.test.ts` builds the CJS
+   bundle, installs it as `node_modules/@versionone/sdk`, and has a plain
+   `.cjs` script `require` and use it. The exports map now gives each
+   condition its own types (`.d.cts` for require), which a CJS caller
+   type-checking with NodeNext (gh-v1 after G2) needs.
 
 ## Track A — SDK (this repo, this session)
 
