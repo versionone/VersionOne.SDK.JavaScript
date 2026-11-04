@@ -14,6 +14,12 @@ tests green) to a package that three surfaces depend on:
 Specs (`specs/`) hold invariants; plans (`plans/`) hold sequencing and are
 allowed to go stale once done.
 
+Reference: the Agility API documentation is public at
+https://docs.digital.ai/agility-api/ (as of 2026-11-04). Cite it in specs
+and handoffs in place of the older GitHub Pages copy. It is not reachable
+from the cloud environment yet (`docs.digital.ai` is outside its allowed
+network hosts); live behaviour is still settled by the integration tier.
+
 ## What the consumers do today (surveyed 2026-11-04)
 
 **k6i-agility-slack-bot.** Every Agility call goes through one seam,
@@ -289,7 +295,7 @@ ESM" here means finishing the edges:
 ## Checklist
 
 - [ ] A1 transport: credentials, onUnauthorized, signal
-- [ ] A2 command-failure error
+- [x] A2 command-failure error (`CommandFailureError`, `throwOnFailure`, reads always throw)
 - [ ] A3 loc2
 - [ ] A4 slack-shaped reads (queryV1 or api/asset)
 - [ ] A5 services port from gh-v1

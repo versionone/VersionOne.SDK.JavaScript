@@ -130,3 +130,12 @@ and the rest-1 module will refuse a Data read without one. The transport
 retries only idempotent requests (GET by default), only on a network
 failure or a 5xx, never a 4xx; a batch write is never retried unless the
 caller has made it idempotent with a guard and says so.
+
+A failure never reads as an empty. api/asset answers 200 and commits per
+command, so a failed command is reported inside the envelope
+(`commandFailures`, each by `sourceCommandIndex`). `assetApi.send` returns
+it there by default and throws a `CommandFailureError` (an `ApiError`
+carrying every failure by index and the whole translated response, so
+what did commit is still known) when asked with `throwOnFailure`. Reads —
+`assetApi.query`/`queries`, and the client's `assets.query`/`queries` —
+always throw: a query the server rejected must not come back as `[]`.

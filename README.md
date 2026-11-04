@@ -21,9 +21,11 @@ npm test
 
 ## Public API
 
-- `VersionOneClient` - top-level SDK client
+- `AgilityApiClient` - top-level SDK client (`meta`, `data` for rest-1, `assets` for api/asset, `schema`)
 - `createFetchTransport` - configurable HTTP transport
-- `ApiError` - typed API error
+- `ApiError` - typed API error; `CommandFailureError` - an api/asset batch in which commands failed (`failures` by index, plus the `response`)
+
+API reference: https://docs.digital.ai/agility-api/
 
 ## Extend with new APIs
 

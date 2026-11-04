@@ -23,6 +23,7 @@
  *     bare query-scoped updates and executes expanded to one command per
  *     matched asset, aliased ones echoed unexpanded.
  */
+import { ApiError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import type { Asset, Oid, Ref } from "../types/asset";
 import type { AssetTypeToken, AttributeLookup, AttributeType } from "../types/metamodel";
@@ -166,13 +167,43 @@ function toNumber(value: unknown): unknown {
   return Number.isNaN(n) ? value : n;
 }
 
+/**
+ * One failed command, normalised. `index` is the command's position in the
+ * batch as sent (the server's sourceCommandIndex — the echoed alias is
+ * replaced by a generated one, so the index is the only key back to the
+ * request); null when the server gave none. `message` is the server's text,
+ * often a localization token ("Violation'Invalid'Link.Asset") a caller can
+ * branch on or run through loc-2.
+ */
+export interface CommandFailureDetail { index: number | null; message: string; echoed: Record<string, unknown> }
+
 /** The failures of a response, normalised: index and message, always both. */
-export function failuresOf<Row extends Asset = Asset>(response: AssetApiResponse<Row>): { index: number | null; message: string; echoed: Record<string, unknown> }[] {
+export function failuresOf<Row extends Asset = Asset>(response: AssetApiResponse<Row>): CommandFailureDetail[] {
   return (response.commandFailures?.commands ?? []).map(({ error, ...echoed }) => ({
     index: typeof error === "object" && error && typeof error.sourceCommandIndex === "number" ? error.sourceCommandIndex : null,
     message: typeof error === "string" ? error : error?.message || "command failed",
     echoed
   }));
+}
+
+/**
+ * A batch in which at least one command failed. api/asset answers 200 and
+ * commits per command, so this is not an HTTP failure and not all-or-
+ * nothing: `response` is the whole (translated) envelope, with whatever did
+ * succeed — created OIDs, modified OIDs, query rows — and `failures` says
+ * which commands did not, by index. The message joins the failures'
+ * messages so a log line reads like the server's own words.
+ */
+export class CommandFailureError<Row extends Asset = Asset> extends ApiError {
+  readonly failures: CommandFailureDetail[];
+  readonly response: AssetApiResponse<Row>;
+
+  constructor(response: AssetApiResponse<Row>, failures: CommandFailureDetail[] = failuresOf(response)) {
+    super(failures.map((f) => f.message).join("; ") || "command failed", 200, "CommandFailure", failures);
+    this.name = "CommandFailureError";
+    this.failures = failures;
+    this.response = response;
+  }
 }
 
 // ---- the calls --------------------------------------------------------------
@@ -185,6 +216,12 @@ export interface ReadOptions {
 export interface SendOptions extends ReadOptions {
   /** Return the projection instead of executing (?previewOnly=true). */
   previewOnly?: boolean;
+  /**
+   * Throw a CommandFailureError when any command failed, instead of
+   * returning the envelope with failures inside it. The commands that
+   * succeeded are committed either way; the error carries the response.
+   */
+  throwOnFailure?: boolean;
 }
 
 /** The query commands of a batch, in order — the order queryResult.results follows. */
@@ -193,7 +230,12 @@ function queriesIn(commands: Command[]): QueryBody[] {
   return commands.flatMap((c) => { const keys = Object.keys(c); const body = keys.length === 1 && keys[0]!.startsWith("@") ? (c as Record<string, unknown>)[keys[0]!] : c; return isQuery(body) ? [body] : []; });
 }
 
-/** Send a batch. The response is the envelope; per-command failures are inside it, not thrown. Query rows are translated, each by its query's type when a schema is given. */
+/**
+ * Send a batch. The response is the envelope; per-command failures are
+ * inside it (failuresOf reads them), or thrown as a CommandFailureError with
+ * throwOnFailure. Query rows are translated, each by its query's type when a
+ * schema is given.
+ */
 export async function send<Row extends Asset = Asset>(transport: Transport, commands: Command[], options: SendOptions = {}): Promise<AssetApiResponse<Row>> {
   const response = await transport.request<AssetApiResponse<Row>>({
     method: "POST",
@@ -207,7 +249,9 @@ export async function send<Row extends Asset = Asset>(transport: Transport, comm
     const type = options.lookup && queries[i] ? fromTypeOf(queries[i]!.from, commands) : null;
     return type ? { lookup: options.lookup!, type } : undefined;
   };
-  return { ...response, queryResult: { ...response.queryResult, results: (response.queryResult?.results ?? []).map((rows, i) => rows.map((r) => fromWireRow<Row>(r as Record<string, unknown>, contextOf(i)))) } };
+  const translated: AssetApiResponse<Row> = { ...response, queryResult: { ...response.queryResult, results: (response.queryResult?.results ?? []).map((rows, i) => rows.map((r) => fromWireRow<Row>(r as Record<string, unknown>, contextOf(i)))) } };
+  if (options.throwOnFailure && translated.commandFailures?.count) throw new CommandFailureError(translated);
+  return translated;
 }
 
 /** Preview a batch: the projection, one command per asset the server would touch. */
@@ -230,9 +274,14 @@ export async function query<Row extends Asset = Asset>(transport: Transport, q: 
   return rows ?? [];
 }
 
-/** Several queries in one request; one array of rows per query, in order, [] where a query matched nothing. */
+/**
+ * Several queries in one request; one array of rows per query, in order, []
+ * where a query matched nothing. A query the server rejected (a bad select
+ * token, a malformed filter) throws a CommandFailureError rather than
+ * reading as [] — a failure must never look like an empty result.
+ */
 export async function queries<Row extends Asset = Asset>(transport: Transport, qs: QueryBody[], options: ReadOptions = {}): Promise<Row[][]> {
   for (const q of qs) if (!q.page) throw new Error(`query of ${q.from} without a page: every api/asset read must be bounded`);
-  const response = await send<Row>(transport, qs, options);
+  const response = await send<Row>(transport, qs, { ...options, throwOnFailure: true });
   return qs.map((_, i) => response.queryResult.results[i] ?? []);
 }

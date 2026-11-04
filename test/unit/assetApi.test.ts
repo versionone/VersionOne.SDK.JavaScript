@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RequestOptions, Transport } from "../../src/core/transport";
 import type { Asset } from "../../src/types/asset";
+import { ApiError } from "../../src/core/errors";
 import type { Story } from "../../src/types/assets/Story";
-import { failuresOf, fromWireRow, momentless, preview, queries, query, send, sendYaml, toWire, type AssetApiResponse } from "../../src/wire/assetApi";
+import { CommandFailureError, failuresOf, type Command, fromWireRow, momentless, preview, queries, query, send, sendYaml, toWire, type AssetApiResponse } from "../../src/wire/assetApi";
 
 // Rows in a canned envelope are whatever the fake server says; the model type is applied by the caller under test.
 type AnyRow = Asset & Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -83,5 +84,67 @@ describe("assetApi: calls", () => {
     const parsed = await sendYaml(t, '"@epic":\n  AssetType: Epic\n  Name: Y\n', { previewOnly: true });
     expect(t.calls[0]).toMatchObject({ method: "POST", path: "/api/asset", contentType: "text/yaml", query: { previewOnly: "true" }, body: '"@epic":\n  AssetType: Epic\n  Name: Y\n' });
     expect(parsed).toEqual([{ "@epic": { AssetType: "Epic", Name: "Y" } }]);
+  });
+});
+
+describe("assetApi: command failures", () => {
+  // A batch commits per command and answers 200 either way: the second
+  // command failed, the first created Story:5. Shapes as the server sends
+  // them (error object with sourceCommandIndex; echoed alias regenerated).
+  const partial = () => envelope({
+    assetsCreated: { oidTokens: ["Story:5:10"], count: 1 },
+    commandFailures: { count: 1, commands: [{ "@0f3c": { AssetType: "Story" }, error: { message: "Violation'Required'Scope", sourceCommandIndex: 1, stackTrace: "   at …" } }] }
+  });
+  const batch: Command[] = [{ "@ok": { AssetType: "Story", Name: "x", Scope: "Scope:0" } }, { "@bad": { AssetType: "Story", Name: "y" } }];
+
+  it("send returns failures inside the envelope by default — nothing thrown, successes readable", async () => {
+    const res = await send(fakeTransport(partial()), batch);
+    expect(res.assetsCreated.oidTokens).toEqual(["Story:5:10"]);
+    expect(failuresOf(res)).toEqual([{ index: 1, message: "Violation'Required'Scope", echoed: { "@0f3c": { AssetType: "Story" } } }]);
+  });
+
+  it("with throwOnFailure, send throws a CommandFailureError carrying each failure by its index in the batch and the whole response, so what did commit is still known", async () => {
+    const err = await send(fakeTransport(partial()), batch, { throwOnFailure: true }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(CommandFailureError);
+    expect(err).toBeInstanceOf(ApiError);
+    const e = err as CommandFailureError;
+    expect(e.message).toBe("Violation'Required'Scope");
+    expect(e.status).toBe(200);
+    expect(e.code).toBe("CommandFailure");
+    expect(e.failures).toEqual([{ index: 1, message: "Violation'Required'Scope", echoed: { "@0f3c": { AssetType: "Story" } } }]);
+    expect(e.failures[0]).not.toHaveProperty("stackTrace");
+    expect(e.response.assetsCreated.oidTokens).toEqual(["Story:5:10"]);
+  });
+
+  it("with throwOnFailure and no failures, send returns the envelope as usual", async () => {
+    const res = await send(fakeTransport(envelope({ assetsCreated: { oidTokens: ["Story:6"], count: 1 } })), batch, { throwOnFailure: true });
+    expect(res.assetsCreated.oidTokens).toEqual(["Story:6"]);
+  });
+
+  it("joins several failures' messages, string errors included, and keeps a null index where the server gave none", async () => {
+    const t = fakeTransport(envelope({ commandFailures: { count: 2, commands: [
+      { "@a": {}, error: { message: "first", sourceCommandIndex: 0 } },
+      { "@b": {}, error: "second" }
+    ] } }));
+    const e = (await send(t, batch, { throwOnFailure: true }).catch((x: unknown) => x)) as CommandFailureError;
+    expect(e.message).toBe("first; second");
+    expect(e.failures.map((f) => f.index)).toEqual([0, null]);
+  });
+
+  it("a query the server rejects throws from query/queries instead of reading as no rows — a failure must never look like an empty result", async () => {
+    // The control: a query that matched nothing really is [].
+    const empty = await query(fakeTransport(envelope({ queryResult: { results: [[]], resultMetaData: [], count: 0 } })), { from: "Story", select: ["Name"], page: { size: 1, start: 0 } });
+    expect(empty).toEqual([]);
+    const rejected = fakeTransport(envelope({
+      commandFailures: { count: 1, commands: [{ "@9a1e": { from: "Story" }, error: { message: "Invalid token 'Nmae'", sourceCommandIndex: 1 } }] },
+      queryResult: { results: [[{ _oid: "Link:1" }], []], resultMetaData: [], count: -1 }
+    }));
+    const err = (await queries(rejected, [
+      { from: "Link", select: ["URL"], page: { size: 5, start: 0 } },
+      { from: "Story", select: ["Nmae"], page: { size: 5, start: 0 } }
+    ]).catch((e: unknown) => e)) as CommandFailureError;
+    expect(err).toBeInstanceOf(CommandFailureError);
+    expect(err.failures[0]!.index).toBe(1);
+    expect(err.response.queryResult.results[0]).toEqual([{ _oid: "Link:1" }]);
   });
 });

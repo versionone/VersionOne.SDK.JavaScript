@@ -16,7 +16,8 @@ export type * from "./types/assets/index";
 // The wire layer: one module per endpoint.
 export { assetApi, rest1, meta } from "./wire";
 export * as select from "./wire/select";
-export type { AssetApiResponse, Command, CommandBody, CommandValue, CreateBody, ExecuteBody, QueryBody, UpdateBody, ReadOptions, RowContext, SendOptions } from "./wire/assetApi";
+export type { AssetApiResponse, Command, CommandBody, CommandFailureDetail, CommandValue, CreateBody, ExecuteBody, QueryBody, UpdateBody, ReadOptions, RowContext, SendOptions } from "./wire/assetApi";
+export { CommandFailureError } from "./wire/assetApi";
 export type { AssetDocument, AssetsDocument, ReadParams, ReadResult } from "./wire/rest1";
 
 // Services: what to do.
