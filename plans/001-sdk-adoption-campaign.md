@@ -39,11 +39,35 @@ hand-decodes string booleans in 48 places (including `getApiResults`
 patching `IsReadOnly`), and `src/metaAssetStore/` keeps its own per-type
 field knowledge that overlaps the SDK's `schema` service.
 
-**gh-v1.** Not reachable from this session (the GitHub credential has no
-access to `versionone/gh-v1`). `src/client.ts` already says the `resolve`,
-`guard` and `batch` services "arrive as the port from gh-v1 lands", so gh-v1
-is both a source for Track A2 and a consumer. Everything below about gh-v1
-is a placeholder until it can be read.
+**gh-v1** (surveyed 2026-11-04 at `41fe333`). A `gh` extension in plain
+CommonJS Node (≥20), no runtime dependencies, `node --test` with 99 passing
+tests. One seam, `lib/api.js` (native `fetch`, `Authorization` header from
+config), required by 22 modules. It is already the SDK's design in JS form:
+
+- `query`/`queries` over api/asset with a default page on every query;
+  `asset` throws on `commandFailures` with the failures kept structured
+  (`err.failures`); `attempt` tolerates them and reports each by
+  `sourceCommandIndex` — this *is* gap 4 below, already proven.
+- `rest` flattens rest-1's `Attributes` and refuses a read without a page
+  (what `src/wire/rest1.ts` already does); `meta` and `localize` (loc-2.v1);
+  `blob` get/post for attachment.img; `raw` for the `gh v1 api` passthrough.
+- `lib/resolve.js` — numbers → assets: one bounded `Workitem` query for
+  every number, then one rest-1 `BaseAsset` read with type-qualified wheres
+  for the non-workitem numbered types; plus room and project-path lookup
+  with interactive disambiguation (`lib/prompt.js`).
+- `lib/batch.js` — the receipt pipeline behind `gh v1 bulk`/`apply`:
+  preview (projection), hydrate, before-snapshot, **`guarded()`** (each
+  projected update/execute rewritten as a query-scoped command filtered on
+  `ID` and the snapshot's `ChangeDate` — a per-request compare-and-set, the
+  "guard" spec 000 §6 means), send, and a best-effort reverse batch.
+- `lib/guard.js` is CLI policy for `gh v1 api` (endpoint allowlist,
+  unbounded-request detection, secret redaction) — not the §6 guard.
+- It also hand-decodes string booleans (`isTrue` in `api.js`, `meta.js`,
+  `resolve.js`, `board.js`) and keeps its own `momentless`/`oidOf`.
+
+So gh-v1 is the *source* for A2, A5 and parts of A3, and the most natural
+first consumer: same runtime, same `fetch`, no framework migration in
+flight.
 
 ## Gaps the consumers expose in the SDK
 
@@ -70,10 +94,14 @@ Found by reading the code above against `src/`:
    Confirm on a dev instance whether api/asset can carry a change comment;
    if not, `rest1` grows `create`/`update` with the `Attributes` envelope
    built in the wire module (translation once, per §2).
-7. **Services.** `resolve` (number → OID), `guard`, `batch` — port from
-   gh-v1 (blocked on access).
+7. **Services.** `resolve` (number → asset), `guard` (ChangeDate
+   compare-and-set), `batch` (preview/snapshot/receipt/reverse) — port from
+   gh-v1's `resolve.js` and `batch.js`, minus the prompting and file I/O,
+   which stay in the CLI.
 8. **Distribution.** No CI in this repo, no publish target, version 0.1.0.
    Source is browser-safe already (no `node:` imports, no `Buffer`).
+9. **CommonJS consumers.** gh-v1 is `require`-based; the SDK's `dist/index.cjs`
+   must keep working (a unit test that `require`s the built bundle).
 
 ## Track A — SDK (this repo, this session)
 
@@ -91,8 +119,12 @@ moves.
   porting `lib/queries.js` bodies into integration tests against the dev
   instance; whichever reads translate cleanly wins. Add `rest1` writes only
   if gap 6 proves api/asset cannot carry a change comment.
-- **A5 Services port** — gap 7, once gh-v1 is readable. `resolve` first
-  (both slack's `queryForAssetByNumber` and gh-v1 need it).
+- **A5 Services port** — gap 7. `services/resolve` first (gh-v1's
+  `resolveAssets`; slack's `queryForAssetByNumber` needs it too), then
+  `services/guard` (`guarded()`), then `services/batch` (preview, describe,
+  snapshot, reverseOf — a receipt as data; writing it to disk stays in
+  gh-v1). gh-v1's tests for these move with them, rewritten against recorded
+  responses.
 - **A6 CI and packaging** — GitHub Actions running `npm run verify` on PRs;
   publish prereleases (`0.x`, `next` tag) to GitHub Packages under the
   `@versionone` scope (or npmjs — decision below). Until then consumers pin a
@@ -123,19 +155,25 @@ Ride the Bolt migration rather than rewriting the seam twice: Phase 2's
 Gate per step: `npm test`, then a sandbox-workspace smoke (mention an asset,
 `/v1` search, backlog-item status change, webhook notification).
 
-## Track C — gh-v1 (fast, blocked)
+## Track C — gh-v1 (fast, first consumer)
 
-Blocked on read access. Once readable:
+Its 99 tests stub global `fetch`, so the swap can be proven without a live
+instance: same requests out, same rows in.
 
-- **C0** Inventory its Agility client and which pieces are the `resolve` /
-  `guard` / `batch` originals (feeds A5).
-- **C1** Invert the dependency: gh-v1 imports those services from the SDK
-  instead of owning them; its own transport becomes `createFetchTransport`.
-- **C2** Command-by-command migration behind its existing tests.
+- **C1 Seam swap.** Re-implement `lib/api.js`'s exported surface (`query`,
+  `queries`, `asset`, `attempt`, `rest`, `meta`, `localize`, `raw`, `blob`,
+  `permalink`) on `AgilityApiClient`, `require`d from the CJS build. Callers
+  unchanged; all 99 tests green. Needs A2, A3 (loc2), gap 9.
+- **C2 Delete the decodes.** With rows translated by the schema, `isTrue`
+  and `oidOf` drop out of `meta.js`, `resolve.js`, `board.js`; `momentless`
+  comes from the SDK.
+- **C3 Invert the services.** Once A5 lands, `resolve.js` and `batch.js`
+  keep only prompting, rendering and receipt files; the logic is imported.
+- **C4 Passthrough.** `raw`/`blob` stay CLI-local unless an `attachment`
+  wire module (gap 5) is built for rooms — then `gh v1 attach` uses it.
 
-If gh-v1 is not TypeScript/Node, C1–C2 change shape (the SDK becomes the
-reference implementation and a contract-test source rather than a
-dependency) — revisit after C0.
+`lib/guard.js` stays in gh-v1: it is policy for a terminal passthrough, not
+SDK behaviour.
 
 ## Track D — agility-rooms (slow)
 
@@ -162,15 +200,15 @@ Strangler, starting below the call sites so nothing user-visible moves:
   and a push. Consumer work happens on a feature branch in each consumer repo
   (proposed: `sdk-adoption`), never on their default branches, PRs only on
   request.
-- **Order:** A1 → A2 → A3 → B0/B1 → A4 → B2–B4 → A6 → D1 → (A5, B5, C* when
-  gh-v1 is readable) → D2+.
+- **Order:** A2 → A3 → C1 → C2 → A1 → B0/B1 → A5 → C3 → A4 → B2–B5 → A6 →
+  D1 → D2+. gh-v1 goes first because it needs no framework migration and its
+  stubbed-fetch tests prove parity offline; A1 (browser credentials,
+  onUnauthorized) is only needed once the slack bot and rooms start.
 - **Status:** this file's checklist below is the source of truth; update it
   in the commit that finishes a milestone.
 
 ## Decisions needed
 
-- Grant this session access to `versionone/gh-v1` (Claude GitHub App
-  installation on that repo) — unblocks A5, B5, Track C.
 - Publish target: GitHub Packages (`@versionone` scope, org auth required
   for consumers in CI) vs. npmjs public. Rooms and slack both build in GitHub
   Actions under `digital-ai`, so cross-org package read access matters.
@@ -186,5 +224,6 @@ Strangler, starting below the call sites so nothing user-visible moves:
 - [ ] A5 services port from gh-v1
 - [ ] A6 CI + prerelease publish
 - [ ] B0–B5 slack bot
-- [ ] C0–C2 gh-v1
+- [x] C0 gh-v1 surveyed (2026-11-04)
+- [ ] C1–C4 gh-v1
 - [ ] D1–D4 agility-rooms
