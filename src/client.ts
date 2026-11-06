@@ -22,6 +22,8 @@ export interface ClientOptions {
    * queries first touch them.
    */
   metamodel?: Metamodel;
+  /** Share an existing schema (and its cache) instead of starting a new one. */
+  schema?: Schema;
 }
 
 /**
@@ -44,9 +46,27 @@ export class AgilityApiClient {
       accessToken: config.accessToken,
       timeoutMs: config.timeoutMs,
       retries: config.retries,
-      defaultHeaders: config.defaultHeaders
+      defaultHeaders: config.defaultHeaders,
+      credentials: config.credentials,
+      onUnauthorized: config.onUnauthorized,
+      unauthorizedStatuses: config.unauthorizedStatuses
     });
-    this.schema = new Schema(this.transport, opts.metamodel);
+    this.config = config;
+    this.schema = opts.schema ?? new Schema(this.transport, opts.metamodel);
+  }
+
+  private readonly config: ClientConfig;
+
+  /**
+   * The same client, with every request it sends tied to `signal`: abort it
+   * (on navigation, say) and in-flight requests end with an ApiError coded
+   * ABORTED. The schema and its cache are shared; a type load that other
+   * callers are waiting on is not cancelled.
+   */
+  withSignal(signal: AbortSignal): AgilityApiClient {
+    const base = this.transport;
+    const transport: Transport = { request: (options) => base.request({ ...options, signal: options.signal ?? signal }) };
+    return new AgilityApiClient(this.config, { transport, schema: this.schema });
   }
 
   /** meta.v1: the instance's schema, raw. (The translated, cached view is `schema`.) */

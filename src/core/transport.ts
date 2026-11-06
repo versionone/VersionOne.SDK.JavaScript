@@ -24,6 +24,11 @@ export interface RequestOptions {
    * never idempotent unless the caller has made it so with a guard.
    */
   idempotent?: boolean;
+  /**
+   * The caller's cancellation: aborting it ends the request (and any retry
+   * still to come) with an ApiError coded ABORTED. Never retried.
+   */
+  signal?: AbortSignal;
 }
 
 export interface Transport {

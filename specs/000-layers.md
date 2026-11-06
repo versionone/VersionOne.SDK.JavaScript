@@ -138,6 +138,13 @@ retries only idempotent requests (GET by default), only on a network
 failure or a 5xx, never a 4xx; a batch write is never retried unless the
 caller has made it idempotent with a guard and says so.
 
+Re-authentication follows the same rule. On a 401 (or a status the caller
+lists) the transport calls `onUnauthorized` once per request; "retry" resends
+an idempotent request one more time, outside the `retries` count. A plain
+write is never resent: the hook still runs, so the session can be repaired,
+and the caller decides. A caller's abort (`signal`) ends the request as
+`ABORTED` and is never retried.
+
 A failure never reads as an empty. api/asset answers 200 and commits per
 command, so a failed command is reported inside the envelope
 (`commandFailures`, each by `sourceCommandIndex`). `assetApi.send` returns

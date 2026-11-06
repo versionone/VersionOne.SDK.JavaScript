@@ -351,15 +351,15 @@ ESM" here means finishing the edges:
 
 ## Checklist
 
-- [ ] A1 transport: credentials, onUnauthorized, signal
+- [x] A1 transport: credentials, onUnauthorized (idempotent requests resent once; writes never), signal (`RequestOptions.signal`, `client.withSignal`)
 - [x] A2 command-failure error (`CommandFailureError`, `throwOnFailure`, reads always throw)
 - [x] A3 loc2 (`loc2.localize`, `client.localize`; GET, POST past 2000 encoded chars, culture via Accept-Language)
 - [ ] A4 slack-shaped reads (queryV1 or api/asset)
 - [x] A5 services port from gh-v1 — `resolve` (`client.resolve.numbers`/`.ref`), `guard` (`client.assets.sendGuarded`), `batch` (`client.batch.run`/`.reversible`)
-- [ ] A6 CI + prerelease publish
+- [ ] A6 CI + prerelease publish — CI (`.github/workflows/ci.yml`: verify on Node 20/22/24, `npm pack` artifact) and git-SHA installs (`prepare`) done; publish waits on the registry decision
 - [ ] G0–G3 gh-v1 migrations (gh-v1 session)
 - [ ] S1–S4 slack-bot migrations (slack-bot session, `bolt-migration`)
-- [ ] B1–B4 slack bot SDK swap
+- [ ] B1–B4 slack bot SDK swap — brief: `plans/003-adopt-sdk-k6i-agility-slack-bot.md`
 - [x] C0 gh-v1 surveyed (2026-11-04)
-- [ ] C1–C4 gh-v1
+- [ ] C1–C4 gh-v1 — brief: `plans/002-adopt-sdk-gh-v1.md`
 - [ ] D1–D4 agility-rooms

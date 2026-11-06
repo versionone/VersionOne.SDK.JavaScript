@@ -1,0 +1,73 @@
+# Plan 002: gh-v1 adopts `@versionone/sdk` (Track C)
+
+Brief for a session on `versionone/gh-v1`. Start once the SDK PR that adds
+this file has merged into `proposed_type_script_api_version`. Source plan:
+`plans/001-sdk-adoption-campaign.md`, Track C.
+
+## Goal
+
+gh-v1 talks to Agility only through `@versionone/sdk`. CLI behaviour and
+output stay the same; the code that duplicates the SDK goes.
+
+## Where things stand (checked 2026-11-06, gh-v1 `676bcd8`)
+
+- G0–G3 are merged: executable bin, `V1_URL`/`V1_ACCESS_TOKEN` config, ESM
+  (`"type": "module"`), `jsconfig.json` + `npm run typecheck`, one paging
+  module (`lib/paging.js`).
+- One seam: `lib/api.js` exports `api(cfg)` returning `query`, `queries`,
+  `asset`, `attempt`, `rest`, `meta`, `localize`, `raw`, `blob`,
+  `permalink`, typed by the `Api` JSDoc typedef. 104 tests under `test/`
+  stub global `fetch`.
+- String-boolean and OID helpers (`isTrue`, `oidOf`, `momentless`) are used
+  in `lib/api.js`, `meta.js`, `resolve.js`, `board.js`, `batch.js`, and
+  `commands/apply.js`, `bulk.js`, `board.js`.
+
+## Dependency
+
+No registry package yet. Add the first runtime dependency as a pinned commit:
+`"@versionone/sdk": "github:versionone/VersionOne.SDK.JavaScript#<merge sha>"`.
+The SDK's `prepare` script builds `dist` on install. gh-v1 is ESM now, so use
+`import` (the ESM build), not `require`.
+
+## Steps, one PR each, on branch `sdk-adoption`
+
+1. **C1 Seam swap** (`lib/api.js`). Keep `api(cfg)` and the `Api` typedef.
+   Inside, build one `AgilityApiClient({ baseUrl: cfg.v1Url, accessToken })`.
+   Map: `query`/`queries` → `client.assets.query`/`queries`;
+   `asset` → `client.assets.send(cmds, { throwOnFailure: true })`
+   (a `CommandFailureError` carries `failures` by index — keep `err.failures`);
+   `attempt` → `client.assets.send` (failures returned, not thrown);
+   `rest` → `client.data.list`/`get`; `meta` → `client.meta.*`;
+   `localize` → `client.localize`. `raw`, `blob`, `permalink` stay local.
+   Rows now arrive translated (`true`, numbers, single relations as one
+   Ref), so update the fixtures in tests that assert raw strings, and add
+   the meta fixture the schema needs (`test/meta-fixture.js`, or seed
+   `ClientOptions.metamodel`).
+2. **C2 Delete the decodes.** Remove `isTrue`/`oidOf` call sites listed
+   above; import `momentless` from the SDK.
+3. **C3 Invert the services.** `resolveAssets` → `client.resolve.numbers`
+   (its `missing` drives the "not found — skipped" lines). `batch.run` →
+   `client.batch.run`, with `confirm` as the prompt and the receipt written
+   as returned. `--reverse` → `client.batch.reversible` (`--force` passes
+   `force`). Keep the CLI's UX for an unguardable batch by checking
+   `unguardable()` first, then sending with `guard: false` and the existing
+   note. Prompting, rendering, permalinks and receipt files stay in gh-v1.
+4. **C4 Passthrough.** `raw`/`blob` stay as they are. `lib/guard.js` stays:
+   it is CLI policy, not SDK behaviour.
+
+## Rules
+
+- Requests out must match today's, apart from what translation changes.
+  Add a test that asserts the request body where it differs, and say why.
+- Every query keeps an explicit page (the SDK refuses one without).
+- No live Agility writes. Live reads only against the API-testing instance,
+  with an explicit page size, well under 20 s of server work.
+
+## Done when
+
+- `npm test` and `npm run typecheck` pass on each PR.
+- `lib/api.js` has no `fetch` call except in `raw`/`blob`.
+- No `isTrue`/`oidOf`/local `momentless` remain in `lib/`.
+- `lib/resolve.js` and `lib/batch.js` keep only prompting, rendering and
+  file I/O.
+- Plan 001's checklist line `C1–C4 gh-v1` is ticked, with the PR links.
