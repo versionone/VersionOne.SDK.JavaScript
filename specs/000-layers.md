@@ -132,9 +132,11 @@ expect-zero control beside every "it returned rows".
 
 ## 6. Politeness is in the layer
 
-No read is unbounded: `assetApi.queries` refuses a query without a page,
+No read is unbounded: `assetApi.queries` and `queryV1.queries` refuse a
+query without a page,
 and the rest-1 module will refuse a Data read without one. The transport
-retries only idempotent requests (GET by default), only on a network
+retries only idempotent requests (GET by default, and every query.v1
+POST, since that endpoint cannot write), only on a network
 failure or a 5xx, never a 4xx; a batch write is never retried unless the
 caller has made it idempotent with a guard and says so.
 

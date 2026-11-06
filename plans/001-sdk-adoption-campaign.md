@@ -134,8 +134,11 @@ Found by reading the code above against `src/`:
    return failures typed (it does) and offer `throwOnFailure` producing an
    `ApiError` subclass carrying `sourceCommandIndex` per failure.
 5. **Missing wire modules** named in spec 000 but not built: `loc2` (both
-   consumers), `queryV1` (slack's main read path — or migrate slack to
-   api/asset queries instead; see B3), `attachment`/`EmbeddedImage` (rooms).
+   consumers), `queryV1` (slack's main read path), `attachment`/
+   `EmbeddedImage` (rooms). `queryV1` is built (2026-11-06) and kept on
+   purpose even though api/asset can run the same queries: query.v1 is
+   read-only by construction and answers with rows alone, so it is the safe,
+   simple place to explore a query (and its requests may be retried).
 6. **rest-1 writes — not needed.** Settled from the docs
    (apis/asset-bulk/updating-assets, creating-assets): api/asset carries a
    change comment as `ChangeComment` inside an update's `update` node, or
@@ -166,11 +169,11 @@ moves.
 - **A2 Command-failure ergonomics** — gap 4: `CommandFailureError`,
   `send(..., { throwOnFailure })`, `sourceCommandIndex` preserved.
 - **A3 loc2 wire module** — gap 5, smallest consumer-shared endpoint.
-- **A4 Slack-shaped reads** — decide queryV1-module vs. api/asset-only by
-  porting `lib/queries.js` bodies into integration tests against the dev
-  instance; whichever reads translate cleanly wins. (No `rest1` writes:
-  gap 6 is settled.) If the bot's S2 lands first, this is only the
-  translation check.
+- **A4 Slack-shaped reads** — done: a `queryV1` wire module and
+  `client.queryV1.query`/`queries`, rows translated through the same
+  schema as api/asset (the integration tier proves both endpoints give the
+  same rows). The bot keeps query.v1 for its reads. (No `rest1` writes:
+  gap 6 is settled.)
 - **A5 Services port** — gap 7. `services/resolve` first (gh-v1's
   `resolveAssets`; slack's `queryForAssetByNumber` needs it too), then
   `services/guard` (`guarded()`), then `services/batch` (preview, describe,
@@ -200,12 +203,12 @@ bodies in `lib/queries.js`), api/asset (`bulk`, `createWithNumber`,
 
 - **B0 Pre-SDK migrations in the bot's own session** (S1–S4 under
   *Consumer migrations* below). They shrink what the SDK must support:
-  once S2 moves reads to api/asset, the SDK needs no `queryV1` module and
-  A4 collapses to "verify the bot's query bodies translate" — and A4's
-  rest-1-writes question is closed (gap 6).
+  once S2 pages every read, B1's reads move to `client.queryV1` as they
+  are; A4's rest-1-writes question is closed (gap 6).
 - **B1 Client swap.** `createV1Client` keeps its surface; inside, one
-  `AgilityApiClient({ baseUrl: url, accessToken })`. `query`/`bulk`/`exec`
-  → `client.assets.*`; `fetchLocalizations` → `loc2` (A3).
+  `AgilityApiClient({ baseUrl: url, accessToken })`. `query` →
+  `client.queryV1.queries`; `bulk`/`exec` → `client.assets.*`;
+  `fetchLocalizations` → `loc2` (A3).
   `test/v1-service.test.js` stays the parity proof.
 - **B2 Delete the decodes.** Rows arrive translated: `"True"` comparisons,
   `IsKanban.toLowerCase()`, `toMomentless` and positional
@@ -301,10 +304,9 @@ ESM" here means finishing the edges:
 - **S1 Finish ESM tooling.** `jsconfig.json` still says `module: commonJS`,
   `target: es6`; set `NodeNext`/`ES2022` and turn on `checkJs` so editors
   and `tsc --noEmit` see the real module system (and, later, SDK types).
-- **S2 query.v1 → api/asset reads.** Same query bodies; the endpoint is
-  `api/asset` and results come from `queryResult.results` (positional, one
-  array per query). Add an explicit `page` to every body. Removes the
-  SDK's need for a `queryV1` module.
+- **S2 Page every read.** Reads stay on query.v1 (read-only, simplest
+  responses). Add an explicit `page` to every body in `lib/queries.js`,
+  as the SDK's `queryV1` refuses an unpaged query.
 - **S3 Close Bolt Phase 2.** Drop `botkit`, `botbuilder-*`,
   `botkit-plugin-cms` and `axios` from `package.json` once nothing imports
   them; delete `lib/v1api.js` and the `plugins/` Botkit modules that
@@ -355,7 +357,7 @@ ESM" here means finishing the edges:
 - [x] A1 transport: credentials, onUnauthorized (idempotent requests resent once; writes never), signal (`RequestOptions.signal`, `client.withSignal`)
 - [x] A2 command-failure error (`CommandFailureError`, `throwOnFailure`, reads always throw)
 - [x] A3 loc2 (`loc2.localize`, `client.localize`; GET, POST past 2000 encoded chars, culture via Accept-Language)
-- [ ] A4 slack-shaped reads (queryV1 or api/asset)
+- [x] A4 slack-shaped reads — `queryV1` wire module, `client.queryV1.query`/`queries` (read-only, idempotent, same row translation as api/asset)
 - [x] A5 services port from gh-v1 — `resolve` (`client.resolve.numbers`/`.ref`), `guard` (`client.assets.sendGuarded`), `batch` (`client.batch.run`/`.reversible`)
 - [ ] A6 CI + prerelease publish — CI (`.github/workflows/ci.yml`: verify on Node 20/22/24, `npm pack` artifact) and git-SHA installs (`prepare`) done; publish waits on the registry decision
 - [ ] G0–G3 gh-v1 migrations (gh-v1 session)

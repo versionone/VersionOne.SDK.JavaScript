@@ -21,7 +21,7 @@ hand-decoding and rest-1 write path go.
   `fetchLocalizations` (loc-2), and `queryFor*` helpers built on
   `lib/queries.js`. `test/v1-service.test.js` stubs global `fetch`.
 - **S1–S4 are not done yet**: `jsconfig.json` still says `commonJS`/`es6`;
-  reads still post to `query.v1`; `axios`, `botkit*`, `botbuilder-*` are
+  query bodies have no explicit page; `axios`, `botkit*`, `botbuilder-*` are
   still dependencies and `lib/v1api.js` still exists. These come first.
 
 ## Dependency
@@ -34,12 +34,12 @@ The SDK's `prepare` script builds `dist` on install. The bot is ESM, so
 ## Steps, one PR each
 
 0. **S1–S4 first**, as written in `plans/handoffs/k6i-agility-slack-bot.md`.
-   B1 needs at least S2 (reads on api/asset) and S3 (axios and Botkit gone).
+   B1 needs at least S2 (every read paged) and S3 (axios and Botkit gone).
    If the bot's own session already merged them, skip.
 1. **B1 Client swap** (`services/v1.js`). Inside `createV1Client`, build one
    `new AgilityApiClient({ baseUrl: url, accessToken })`. `query` →
-   `client.assets.queries` (positional; a failed query now throws instead
-   of shifting later results); `bulk`/`exec`/`createWithNumber` →
+   `client.queryV1.queries` (the bot's reads stay on query.v1: read-only,
+   simplest responses; a refused query throws with the server's message); `bulk`/`exec`/`createWithNumber` →
    `client.assets.send`; `fetchLocalizations` → `client.localize`;
    `findAssets` → `client.data.list("BaseAsset", { find, findin, where,
    sort, page, deleted: false })`. Map `ApiError` with `status === 401`
@@ -72,8 +72,9 @@ The SDK's `prepare` script builds `dist` on install. The bot is ESM, so
 ## Done when
 
 - `npm test` passes on each PR; S1's `npm run typecheck` passes.
-- `services/v1.js` makes no `fetch` call of its own; nothing posts to
-  `query.v1` or writes through rest-1.
+- `services/v1.js` makes no `fetch` call of its own; reads go through
+  `client.queryV1` (or `client.data` for `find`), and nothing writes through
+  rest-1.
 - No string-boolean comparisons or local `toMomentless` remain.
 - Sandbox-workspace smoke passes: asset mention, `/agility find`,
   backlog-item status change, webhook notification.

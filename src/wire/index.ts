@@ -7,6 +7,7 @@ export * as assetApi from "./assetApi";
 export * as rest1 from "./rest1";
 export * as meta from "./meta";
 export * as loc2 from "./loc2";
+export * as queryV1 from "./queryV1";
 export * as select from "./select";
 export type { AssetDocument, AssetsDocument, ReadParams, ReadResult } from "./rest1";
 export type { AssetApiResponse, Command, CommandBody, CommandValue, CreateBody, ExecuteBody, QueryBody, UpdateBody, CommandFailure, CommandError, OidTokens, SendOptions } from "./assetApi";
