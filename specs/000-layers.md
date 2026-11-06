@@ -158,7 +158,10 @@ always throw: a query the server rejected must not come back as `[]`.
 The server drops a failed query's slot from `queryResult.results` (later
 results shift up); `send` restores it as `null` by `sourceCommandIndex`, so
 positions always match the queries sent, and refuses to guess when the
-counts disagree.
+counts disagree. If a failure carries no sourceCommandIndex it may be any
+of the queries, so every query slot is null and the failures are the
+answer (thrown for reads and with throwOnFailure); a disagreement with no
+such failure is an error of its own.
 
 The guard (`services/guard`) is what makes a write batch safe to resend:
 each per-asset command of the server's projection is sent scoped to its
