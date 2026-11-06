@@ -2,6 +2,7 @@ export { AgilityApiClient } from "./client";
 export type { ClientOptions } from "./client";
 export { ApiError } from "./core/errors";
 export { createFetchTransport } from "./core/fetchTransport";
+export type { FetchTransportConfig, UnauthorizedContext, UnauthorizedDecision } from "./core/fetchTransport";
 export type { ClientConfig } from "./core/clientConfig";
 export type { RequestBody, RequestOptions, ResponseType, Transport } from "./core/transport";
 

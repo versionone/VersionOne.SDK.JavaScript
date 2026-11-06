@@ -31,6 +31,41 @@ export interface FetchTransportConfig {
   /** Extra attempts after the first, for idempotent requests only. Default 0. */
   retries?: number;
   fetchImpl?: typeof fetch;
+  /**
+   * fetch's credentials mode. A browser app on the instance's own origin
+   * that authenticates with the session cookie sets "same-origin" or
+   * "include" (pair it with defaultHeaders { "X-Requested-With":
+   * "XMLHttpRequest" } so the server answers 401 rather than a login page).
+   * Left unset, fetch's default applies.
+   */
+  credentials?: RequestCredentials;
+  /**
+   * Called when the server answers 401 (or a status in unauthorizedStatuses):
+   * the place to re-authenticate — open a login popup, re-run setup. Resolve
+   * "retry" to send the request once more, "fail" to throw the error.
+   *
+   * A retry is offered only for an idempotent request (every GET; a write the
+   * caller marked idempotent). A plain api/asset write is never resent
+   * automatically, even after a 401: the hook still runs, so the session
+   * can be repaired, and the caller decides whether to send again.
+   */
+  onUnauthorized?: (context: UnauthorizedContext) => UnauthorizedDecision | Promise<UnauthorizedDecision>;
+  /** Which statuses call onUnauthorized. Default [401]; a cookie-session app may add 403. */
+  unauthorizedStatuses?: readonly number[];
+}
+
+export type UnauthorizedDecision = "retry" | "fail";
+
+export interface UnauthorizedContext {
+  error: ApiError;
+  request: RequestOptions;
+  /** Whether a "retry" will be honoured: false for a non-idempotent write. */
+  retryable: boolean;
+}
+
+/** The ApiError a caller's abort turns into. */
+function abortedError(signal: AbortSignal): ApiError {
+  return new ApiError("Request aborted", 0, "ABORTED", { cause: signal.reason });
 }
 
 function buildUrl(baseUrl: string, path: string, query?: RequestOptions["query"]): string {
@@ -101,6 +136,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
   const timeoutMs = config.timeoutMs ?? 60_000;
   const retries = Math.max(0, config.retries ?? 0);
   const authorization = config.authorization ?? (config.accessToken ? `Bearer ${config.accessToken}` : undefined);
+  const unauthorizedStatuses = config.unauthorizedStatuses ?? [401];
 
   return {
     async request<T>(options: RequestOptions): Promise<T> {
@@ -114,15 +150,29 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
       const idempotent = options.idempotent ?? options.method === "GET";
       const attempts = idempotent ? retries + 1 : 1;
 
+      const callerSignal = options.signal;
+
       let lastError: unknown;
+      let reauthorized = false;
       for (let attempt = 0; attempt < attempts; attempt += 1) {
+        if (callerSignal?.aborted) throw abortedError(callerSignal);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        const onAbort = () => controller.abort();
+        callerSignal?.addEventListener("abort", onAbort, { once: true });
+        const settle = () => {
+          clearTimeout(timeoutId);
+          callerSignal?.removeEventListener("abort", onAbort);
+        };
         let response: Response;
         try {
-          response = await fetchImpl(url, { method: options.method, headers, body, signal: controller.signal });
+          const init: RequestInit = { method: options.method, headers, body, signal: controller.signal };
+          if (config.credentials) init.credentials = config.credentials;
+          response = await fetchImpl(url, init);
         } catch (error) {
-          clearTimeout(timeoutId);
+          settle();
+          // The caller gave up: final, whatever attempt this was.
+          if (callerSignal?.aborted) throw abortedError(callerSignal);
           // Network failure or timeout: the only case a retry can help.
           lastError = error instanceof Error && error.name === "AbortError"
             ? new ApiError(`Timed out after ${timeoutMs} ms`, 0, "TIMEOUT", { cause: error })
@@ -130,14 +180,33 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           if (attempt + 1 < attempts) await delay(150 * (attempt + 1));
           continue;
         }
-        clearTimeout(timeoutId);
 
-        if (response.ok) return (await readBody(response, responseType)) as T;
+        try {
+          if (response.ok) return (await readBody(response, responseType)) as T;
 
-        // An answer, not a failure to get one. 5xx may be retried when
-        // idempotent; anything else is final.
-        const data = await readBody(response, responseType === "bytes" ? "text" : responseType === "json" ? "auto" : responseType);
-        lastError = new ApiError(messageOf(data, response.status), response.status, undefined, data);
+          // An answer, not a failure to get one. 5xx may be retried when
+          // idempotent; anything else is final.
+          const data = await readBody(response, responseType === "bytes" ? "text" : responseType === "json" ? "auto" : responseType);
+          lastError = new ApiError(messageOf(data, response.status), response.status, undefined, data);
+        } catch (error) {
+          if (callerSignal?.aborted) throw abortedError(callerSignal);
+          throw error;
+        } finally {
+          settle();
+        }
+
+        if (config.onUnauthorized && !reauthorized && unauthorizedStatuses.includes(response.status)) {
+          // One re-authentication per request: a second refusal is final.
+          reauthorized = true;
+          const decision = await config.onUnauthorized({ error: lastError as ApiError, request: options, retryable: idempotent });
+          if (callerSignal?.aborted) throw abortedError(callerSignal);
+          if (decision === "retry" && idempotent) {
+            // Not counted against `retries`: those are for failures to get an answer.
+            attempt -= 1;
+            continue;
+          }
+          break;
+        }
         if (response.status >= 500 && attempt + 1 < attempts) {
           await delay(150 * (attempt + 1));
           continue;

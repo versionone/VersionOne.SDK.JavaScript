@@ -25,7 +25,7 @@ npm test
   - `resolve.numbers` / `resolve.ref` - asset numbers and OID tokens to assets, in one request
   - `assets.sendGuarded` - a batch as a compare-and-set on each asset's ChangeDate; changed assets come back `skipped`
   - `batch.run` / `batch.reversible` - preview, snapshot, (confirm,) send guarded, and a receipt with a reverse batch
-- `createFetchTransport` - configurable HTTP transport
+- `createFetchTransport` - configurable HTTP transport: `credentials` for same-origin cookie auth, `onUnauthorized` to re-authenticate on a 401 (resends idempotent requests once), and a per-request `signal`; `client.withSignal(signal)` ties a whole client to one
 - `ApiError` - typed API error; `CommandFailureError` - an api/asset batch in which commands failed (`failures` by index, plus the `response`)
 
 API reference: https://docs.digital.ai/agility-api/
@@ -37,6 +37,10 @@ API reference: https://docs.digital.ai/agility-api/
 3. Implement methods using `Transport.request`.
 4. Export from `src/index.ts`.
 5. Add tests under `test/`.
+
+## Installing before a release
+
+No registry package yet. Pin a commit: `npm install github:versionone/VersionOne.SDK.JavaScript#<sha>` builds `dist` on install (the `prepare` script). CI also uploads an `npm pack` tarball on every run.
 
 ## Before PR
 
