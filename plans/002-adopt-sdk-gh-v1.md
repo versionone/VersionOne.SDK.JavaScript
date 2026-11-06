@@ -25,16 +25,27 @@ output stay the same; the code that duplicates the SDK goes.
   in `lib/api.js`, `meta.js`, `resolve.js`, `board.js`, `batch.js`, and
   `commands/apply.js`, `bulk.js`, `board.js`.
 
-## Dependency
+## Dependency: vendored
 
-No registry package yet. Add the first runtime dependency as a pinned commit:
-`"@versionone/sdk": "github:versionone/VersionOne.SDK.JavaScript#<merge sha>"`.
-The SDK's `prepare` script builds `dist` on install. gh-v1 is ESM now, so use
-`import` (the ESM build), not `require`.
+gh installs a script extension with a plain `git clone` and never runs npm,
+so gh-v1 cannot rely on `node_modules` at run time. The SDK is still a
+runtime dependency, but its code ships inside the repo:
+
+- `vendor/versionone-sdk/` holds the SDK's ESM build (`index.js`, which
+  imports nothing) and types (`index.d.ts`), plus `SOURCE.json` naming
+  the commit they came from. `lib/api.js` imports from there.
+- `package.json` lists `@versionone/sdk` under `devDependencies`, pinned
+  to a full commit, so the lockfile records exactly what was vendored.
+- To move the pin: change it in `package.json`, then
+  `npm install && npm run vendor:sdk`, and commit the copy.
+  `test/vendor.test.js` fails if the copy, `SOURCE.json` and the pin
+  disagree.
+- Publishing the SDK to a registry (plan 001, *Decisions needed*) changes
+  only where the pin points; the copy stays.
 
 ## Steps, one PR each, on branch `sdk-adoption`
 
-1. **C1 Seam swap** (`lib/api.js`). Keep `api(cfg)` and the `Api` typedef.
+1. **C1 Seam swap** (`lib/api.js`) — done in versionone/gh-v1#33. Keep `api(cfg)` and the `Api` typedef.
    Inside, build one `AgilityApiClient({ baseUrl: cfg.v1Url, accessToken })`.
    Map: `query`/`queries` → `client.assets.query`/`queries`;
    `asset` → `client.assets.send(cmds, { throwOnFailure: true })`

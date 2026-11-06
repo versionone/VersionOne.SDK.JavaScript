@@ -225,8 +225,9 @@ instance: same requests out, same rows in.
 
 - **C1 Seam swap.** Re-implement `lib/api.js`'s exported surface (`query`,
   `queries`, `asset`, `attempt`, `rest`, `meta`, `localize`, `raw`, `blob`,
-  `permalink`) on `AgilityApiClient`, `require`d from the CJS build. Callers
-  unchanged; all 99 tests green. Needs A2, A3 (loc2), gap 9.
+  `permalink`) on the SDK, imported from a vendored copy of its ESM build
+  (gh installs extensions without npm; see plan 002, *Dependency*). Callers
+  unchanged; all tests green. Needs A2, A3 (loc2).
 - **C2 Delete the decodes.** With rows translated by the schema, `isTrue`
   and `oidOf` drop out of `meta.js`, `resolve.js`, `board.js`; `momentless`
   comes from the SDK.
@@ -361,5 +362,5 @@ ESM" here means finishing the edges:
 - [ ] S1–S4 slack-bot migrations (slack-bot session, `bolt-migration`)
 - [ ] B1–B4 slack bot SDK swap — brief: `plans/003-adopt-sdk-k6i-agility-slack-bot.md`
 - [x] C0 gh-v1 surveyed (2026-11-04)
-- [ ] C1–C4 gh-v1 — brief: `plans/002-adopt-sdk-gh-v1.md`
+- [ ] C1–C4 gh-v1 — brief: `plans/002-adopt-sdk-gh-v1.md`; C1 in versionone/gh-v1#33 (SDK vendored)
 - [ ] D1–D4 agility-rooms
