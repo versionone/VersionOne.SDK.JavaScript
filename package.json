@@ -54,7 +54,7 @@
     "chai": "3.4.1",
     "chai-as-promised": "5.2.0",
     "escope": "^3.3.0",
-    "eslint": "1.10.3",
+    "eslint": "6.8.0",
     "mocha": "2.3.4",
     "sinon": "2.0.0-pre",
     "wallaby-webpack": "0.0.22",
