@@ -360,9 +360,10 @@ ESM" here means finishing the edges:
 - [x] A4 slack-shaped reads — `queryV1` wire module, `client.queryV1.query`/`queries` (read-only, idempotent, same row translation as api/asset)
 - [x] A5 services port from gh-v1 — `resolve` (`client.resolve.numbers`/`.ref`), `guard` (`client.assets.sendGuarded`), `batch` (`client.batch.run`/`.reversible`)
 - [ ] A6 CI + prerelease publish — CI (`.github/workflows/ci.yml`: verify on Node 20/22/24, `npm pack` artifact) and git-SHA installs (`prepare`) done; publish waits on the registry decision
-- [ ] G0–G3 gh-v1 migrations (gh-v1 session)
-- [ ] S1–S4 slack-bot migrations (slack-bot session, `bolt-migration`)
-- [ ] B1–B4 slack bot SDK swap — brief: `plans/003-adopt-sdk-k6i-agility-slack-bot.md`
+- [x] G0–G3 gh-v1 migrations — versionone/gh-v1#29–#32
+- [x] S1–S4 slack-bot migrations — digital-ai/k6i-agility-slack-bot#21–#24 (on `bolt-migration`)
+- [ ] B1–B4 slack bot SDK swap — brief: `plans/003-adopt-sdk-k6i-agility-slack-bot.md` (unblocked: S2, S3 and SDK #42 merged)
 - [x] C0 gh-v1 surveyed (2026-11-04)
-- [ ] C1–C4 gh-v1 — brief: `plans/002-adopt-sdk-gh-v1.md`; C1 in versionone/gh-v1#33 (SDK vendored)
+- [x] C1 gh-v1 seam swap — versionone/gh-v1#33, with the vendored SDK's hashes, CI and Node 22 floor in #35
+- [ ] C2–C4 gh-v1 — brief: `plans/002-adopt-sdk-gh-v1.md` (C2–C3 in progress in a gh-v1 session)
 - [ ] D1–D4 agility-rooms
