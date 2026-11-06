@@ -63,8 +63,11 @@ The SDK's `prepare` script builds `dist` on install. The bot is ESM, so
   without). Values from user text go in `with` variables, not spliced into
   `filter`/`where` (an em dash breaks a literal).
 - Fixtures send what the server sends (S4): `"True"`, not `true`.
-- No live Agility writes from the session. Live reads only with an explicit
-  page size and well under 20 s of server work.
+- Live Agility calls go only to the API/SDK testing instance,
+  `https://www14.v1host.com/v1sdktesting` (`V1_URL`). Writes are allowed
+  there and nowhere else: name fixtures `sdk-integration …` and delete them
+  by exact OID when done. Every query sets an explicit page size and stays
+  well under 20 s of server work.
 
 ## Done when
 

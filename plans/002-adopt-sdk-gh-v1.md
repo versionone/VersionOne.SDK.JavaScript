@@ -60,8 +60,11 @@ The SDK's `prepare` script builds `dist` on install. gh-v1 is ESM now, so use
 - Requests out must match today's, apart from what translation changes.
   Add a test that asserts the request body where it differs, and say why.
 - Every query keeps an explicit page (the SDK refuses one without).
-- No live Agility writes. Live reads only against the API-testing instance,
-  with an explicit page size, well under 20 s of server work.
+- Live Agility calls go only to the API/SDK testing instance,
+  `https://www14.v1host.com/v1sdktesting` (`V1_URL`). Writes are allowed
+  there and nowhere else: name fixtures `sdk-integration …` and delete them
+  by exact OID when done. Every query sets an explicit page size and stays
+  well under 20 s of server work.
 
 ## Done when
 
