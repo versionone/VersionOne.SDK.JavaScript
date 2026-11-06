@@ -28,7 +28,7 @@ export interface RetrospectivePrompt extends Asset {
   readonly Moment?: string | null; // read-only
   Name: string; // required
   readonly Now?: Ref<RetrospectivePrompt> | null; // read-only
-  Order?: string | null;
+  Order?: number | null;
   readonly Prior?: Ref<RetrospectivePrompt> | null; // read-only
   readonly RetireComment?: string | null; // read-only
   readonly RetireDate?: DateString | null; // read-only

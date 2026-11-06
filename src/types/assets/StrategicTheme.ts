@@ -25,7 +25,7 @@ export interface StrategicTheme extends BaseAsset {
   readonly Moment?: string | null; // read-only
   readonly Now?: Ref<StrategicTheme> | null; // read-only
   readonly Number?: string | null; // read-only
-  Order?: string | null;
+  Order?: number | null;
   readonly Rooms: Ref<Room>[]; // read-only
   Scope: Ref<Scope>; // required
 }

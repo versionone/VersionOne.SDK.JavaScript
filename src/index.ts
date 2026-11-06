@@ -28,5 +28,5 @@ export { CHUNK as RESOLVE_CHUNK, NUMBER_ROOTS, isAssetNumber, resolveNumbers, re
 export type { Resolution, ResolvedAsset } from "./services/resolve";
 export { UNGUARDABLE_TYPES, UnguardableError, guard, sendGuarded, stampsOf, touchedBy, unguardable } from "./services/guard";
 export type { GuardedResult, Unguardable } from "./services/guard";
-export { BatchSendError, INVERSE, describe as describeBatch, namesOf, reverseOf, reversible, runBatch, snapshot } from "./services/batch";
-export type { BatchOptions, Described, Named, Receipt, Reverse } from "./services/batch";
+export { BatchRecordError, BatchSendError, INVERSE, describe as describeBatch, namesOf, reverseOf, reversible, runBatch, snapshot } from "./services/batch";
+export type { BatchOptions, Described, NameLookupFailure, Named, Receipt, Reverse } from "./services/batch";

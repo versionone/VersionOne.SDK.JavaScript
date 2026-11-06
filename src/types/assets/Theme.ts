@@ -25,7 +25,7 @@ export interface Theme extends Workitem {
   LastVersion?: string | null;
   readonly Moment?: string | null; // read-only
   readonly Now?: Ref<Theme> | null; // read-only
-  Order?: string | null;
+  Order?: number | null;
   Priority?: Ref<WorkitemPriority> | null;
   Risk?: Ref<WorkitemRisk> | null;
   Source?: Ref<ThemeSource> | null;

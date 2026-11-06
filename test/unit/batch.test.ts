@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe as group, expect, it, vi } from "vitest";
 import type { RequestOptions, Transport } from "../../src/core/transport";
-import { BatchSendError, describe, reverseOf, reversible, runBatch, type Receipt } from "../../src/services/batch";
+import { BatchRecordError, BatchSendError, describe, reverseOf, reversible, runBatch, type Receipt } from "../../src/services/batch";
 import { UnguardableError } from "../../src/services/guard";
 import { Schema } from "../../src/services/schema";
 import { toMetamodel, type MetamodelDocument } from "../../src/wire/meta";
@@ -116,6 +116,51 @@ group("batch", () => {
     expect(e.receipt.sentCommands).toHaveLength(4);
     expect(e.receipt.before["Epic:9"]).toBeDefined();
     expect(e.receipt.sent).toBe(false);
+  });
+
+  it("a batch of only aliased updates and executes is work: with guard off it is sent as written, noted as unsnapshotted, and left out of the reverse", async () => {
+    // gh-v1's `apply` hit this: preview echoes aliased writes unexpanded, so nothing reads as per-asset work.
+    const close: Command[] = [{ "@close": { from: "Story:20", execute: "QuickClose" } }];
+    let sent: Command[] | undefined;
+    const t = server({ preview: close, lookup: (q) => q.with!.$oids!.map((oid) => (q.select!.includes("Name") ? { _oid: oid, Name: "Twenty", Number: "S-20" } : { _oid: oid, ChangeDate: "2026-11-06T10:00:00.1" })), send: (body) => { sent = body; return envelope({ assetsOperatedOn: { oidTokens: ["Story:20:900"], count: 1 } }); } });
+    const r = await runBatch(t, schema, close, { guard: false });
+    expect(sent).toEqual(close);
+    expect(r.sent).toBe(true);
+    expect(r.described.deferred).toEqual([{ index: 0, alias: "@close", from: "Story:20", kind: "execute" }]);
+    expect(r.touched).toEqual([{ oid: "Story:20", number: "S-20", name: "Twenty" }]); // named after the send: preview never listed it
+    expect(r.after).toEqual({ "Story:20": "2026-11-06T10:00:00.1" });
+    expect(r.notes.join("\n")).toMatch(/@close.*aliased execute.*not reversible/);
+    expect(r.reverse.commands).toEqual([]);
+    expect(r.reverse.notes.join("\n")).toMatch(/@close.*not reversed/);
+  });
+
+  it("confirm sees the touched assets' names on the receipt, looked up once; a failed name lookup is a note, not a silence", async () => {
+    const t = server({ preview: PREVIEW, lookup, send: () => envelope({ assetsCreated: { oidTokens: ["Task:50"], count: 1 }, assetsModified: { oidTokens: ["Story:1"], count: 1 }, assetsOperatedOn: { oidTokens: ["Epic:9"], count: 1 } }) });
+    let seen: Receipt["names"] | undefined;
+    const r = await runBatch(t, schema, REQUEST, { confirm: (receipt) => { seen = receipt.names; return true; } });
+    expect(seen).toEqual({ "Story:1": { number: "S-1", name: "One" }, "Story:2": { number: "S-2", name: "Two" }, "Epic:9": { number: "E-9", name: "Nine" } });
+    const nameQueries = t.calls.filter((c) => (c.body as Q[])[0]?.select?.includes("Name") && (c.body as Q[])[0]?.with?.$oids?.some((o) => o.startsWith("Story")));
+    expect(nameQueries).toHaveLength(1); // not again after the send
+    expect(r.touched.map((x) => x.name)).toEqual(["One", "Nine"]);
+    expect(r.notes).toEqual([]);
+
+    const refusing = server({ preview: PREVIEW, lookup: (q) => { if (q.select!.includes("Name") && q.with!.$oids![0]!.startsWith("Epic")) throw new Error("Unknown AttributeDefinition: Epic.Name"); return lookup(q); }, send: () => envelope({ assetsOperatedOn: { oidTokens: ["Epic:9"], count: 1 } }) });
+    const lookupFailed = (await runBatch(refusing, schema, REQUEST).catch((e: unknown) => e)) as Receipt;
+    expect(lookupFailed.sent).toBe(true);
+    expect(lookupFailed.notes.some((n) => /could not look up Name for 1 Epic asset: .*Epic\.Name/.test(n))).toBe(true);
+  });
+
+  it("a read-back that fails after the send throws BatchRecordError with the receipt: sent, outcome and reverse kept, after incomplete", async () => {
+    const afterFails = (q: Q) => { if (q.select!.length === 1 && q.select![0] === "ChangeDate") throw new Error("socket hang up"); return lookup(q); };
+    const t = server({ preview: PREVIEW, lookup: afterFails, send: () => envelope({ assetsCreated: { oidTokens: ["Task:50"], count: 1 }, assetsModified: { oidTokens: ["Story:1"], count: 1 }, assetsOperatedOn: { oidTokens: ["Epic:9"], count: 1 } }) });
+    const e = (await runBatch(t, schema, REQUEST).catch((x: unknown) => x)) as BatchRecordError;
+    expect(e).toBeInstanceOf(BatchRecordError);
+    expect(e.message).toMatch(/sent and its outcome recorded.*receipt\.after is incomplete.*socket hang up/);
+    expect(e.receipt.sent).toBe(true);
+    expect(e.receipt.outcome?.created).toEqual(["Task:50"]);
+    expect(e.receipt.created).toEqual([{ alias: "@t", type: "Task", oid: "Task:50", number: "TK-50", name: "new task" }]);
+    expect(e.receipt.reverse.commands.length).toBeGreaterThan(0);
+    expect(e.receipt.after).toEqual({});
   });
 
   it("reversible drops assets changed since the batch (their ChangeDate is not the one recorded after it) unless forced", async () => {

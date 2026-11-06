@@ -30,7 +30,7 @@ export interface RegressionTest extends BaseAsset {
   readonly Moment?: string | null; // read-only
   readonly Now?: Ref<RegressionTest> | null; // read-only
   readonly Number?: string | null; // read-only
-  Order?: string | null;
+  Order?: number | null;
   Owners: Ref<Member>[];
   Reference?: string | null;
   RegressionSuites: Ref<RegressionSuite>[];

@@ -28,7 +28,7 @@ export interface Test extends Workitem {
   readonly Key?: string | null; // read-only
   readonly Moment?: string | null; // read-only
   readonly Now?: Ref<Test> | null; // read-only
-  Order?: string | null;
+  Order?: number | null;
   Setup?: string | null;
   Status?: Ref<TestStatus> | null;
   Steps?: string | null;

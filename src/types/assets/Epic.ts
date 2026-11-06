@@ -41,7 +41,7 @@ export interface Epic extends Workitem {
   readonly Moment?: string | null; // read-only
   readonly MorphedFrom?: Ref<Story> | null; // read-only
   readonly Now?: Ref<Epic> | null; // read-only
-  Order?: string | null;
+  Order?: number | null;
   PlannedCompletionBy?: Ref<Milestone> | null;
   PlannedEnd?: DateString | null;
   PlannedRelease?: Ref<Release> | null;

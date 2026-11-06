@@ -41,7 +41,7 @@ const SCALAR = {
   Opaque: "string",
   Guid: "string",
   Duration: "string",
-  Rank: "string",
+  Rank: "number",
   Date: "DateString",
   Numeric: "number",
   LongInt: "number",

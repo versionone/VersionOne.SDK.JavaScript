@@ -32,7 +32,7 @@ export interface Request extends BaseAsset {
   readonly Moment?: string | null; // read-only
   readonly Now?: Ref<Request> | null; // read-only
   readonly Number?: string | null; // read-only
-  Order?: string | null;
+  Order?: number | null;
   Owner?: Ref<Member> | null;
   PrimaryWorkitems: Ref<PrimaryWorkitem>[];
   Priority?: Ref<RequestPriority> | null;

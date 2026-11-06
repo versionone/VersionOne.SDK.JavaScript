@@ -26,7 +26,7 @@ export interface Task extends Workitem {
   LastVersion?: string | null;
   readonly Moment?: string | null; // read-only
   readonly Now?: Ref<Task> | null; // read-only
-  Order?: string | null;
+  Order?: number | null;
   Source?: Ref<TaskSource> | null;
   Status?: Ref<TaskStatus> | null;
 }

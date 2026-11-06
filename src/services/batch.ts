@@ -35,16 +35,23 @@ export interface Described {
   queries: { index: number; from: string }[];
   updates: { oid: Oid; attributes: Record<string, CommandValue> }[];
   executes: { oid: Oid; op: string; args: Record<string, CommandValue> }[];
+  /**
+   * Aliased updates and executes: preview does not expand them, so they
+   * have no per-asset entry above, no snapshot and no reverse. They are
+   * work all the same, sent as written (only with guard: false).
+   */
+  deferred: { index: number; alias: string; from: string; kind: "update" | "execute" }[];
 }
 
 const bodyOf = (c: Command): Record<string, unknown> => aliased(c)?.body ?? (c as Record<string, unknown>);
 
 /** What a batch does: creates and queries read off the request; updates and executes, per asset, off the projection. */
 export function describe(commands: Command[], projected: Command[]): Described {
-  const out: Described = { creates: [], queries: [], updates: [], executes: [] };
+  const out: Described = { creates: [], queries: [], updates: [], executes: [], deferred: [] };
   commands.forEach((c, index) => {
     const a = aliased(c), body = bodyOf(c);
-    if (typeof body.AssetType === "string") out.creates.push({ index, alias: a?.alias ?? null, type: body.AssetType, name: typeof body.Name === "string" ? body.Name : null });
+    if (a && typeof body.from === "string" && ("update" in body || "execute" in body)) out.deferred.push({ index, alias: a.alias, from: body.from, kind: "update" in body ? "update" : "execute" });
+    else if (typeof body.AssetType === "string") out.creates.push({ index, alias: a?.alias ?? null, type: body.AssetType, name: typeof body.Name === "string" ? body.Name : null });
     else if (typeof body.from === "string" && !("update" in body) && !("execute" in body)) out.queries.push({ index, from: body.from });
   });
   for (const p of projected) {
@@ -74,23 +81,35 @@ const plain = (v: unknown): unknown =>
 
 export interface Named { number: string | null; name: string | null }
 
+/** Told about a name lookup that failed: the type, the assets left unnamed, and why. */
+export type NameLookupFailure = (failure: { type: AssetTypeToken; oids: Oid[]; error: unknown }) => void;
+
 /**
  * Numbers and names, one bounded query per type and chunk, asking each type
  * only for what the schema says it has (a Conversation has neither, and
- * asking fails the query). Cosmetic: a lookup the server refuses leaves
- * those assets unnamed rather than failing a batch that may already be sent.
+ * asking fails the query). Cosmetic: a lookup that fails leaves those assets
+ * unnamed rather than failing a batch that may already be sent, and is
+ * reported to `onFailure` so a caller can say so.
  */
-export async function namesOf(transport: Transport, schema: Schema, oids: Iterable<Oid>): Promise<Map<Oid, Named>> {
+export async function namesOf(transport: Transport, schema: Schema, oids: Iterable<Oid>, onFailure?: NameLookupFailure): Promise<Map<Oid, Named>> {
   const out = new Map<Oid, Named>();
   for (const [type, list] of byType(oids)) {
-    await schema.load(type);
-    const select = ["Name", "Number"].filter((a) => schema.attribute(type, a));
+    let select: string[];
+    try {
+      await schema.load(type);
+      select = ["Name", "Number"].filter((a) => schema.attribute(type, a));
+    } catch (error) {
+      onFailure?.({ type, oids: list, error });
+      continue;
+    }
     if (!select.length) continue;
     for (const part of chunks(list)) {
       try {
         const rows = await assetApi.query<Asset & { Name?: string; Number?: string }>(transport, { from: type, select, filter: ["ID=$oids"], with: { $oids: part }, page: { size: part.length, start: 0 } });
         for (const r of rows) out.set(momentless(r._oid), { number: r.Number ?? null, name: r.Name ?? null });
-      } catch { /* cosmetic: leave these unnamed */ }
+      } catch (error) {
+        onFailure?.({ type, oids: part, error });
+      }
     }
   }
   return out;
@@ -157,6 +176,7 @@ export function reverseOf(described: Described, before: Record<Oid, Record<strin
     else notes.push(`${e.oid}: ${e.op} has no known inverse (was ${String(before[e.oid]?.AssetState ?? "?")})`);
   }
   for (const oid of [...done.created].reverse()) commands.push({ from: momentless(oid), execute: "Delete" });
+  for (const d of described.deferred ?? []) notes.push(`command ${d.index} (${d.alias}): an aliased ${d.kind} of ${d.from}, sent as written with no snapshot; not reversed`);
   if (commands.length) notes.unshift("restores the state recorded at snapshotAt; anything that changed between then and sentAt is not reflected, and a scalar restored to null is cleared, not unset");
   return { commands, notes };
 }
@@ -169,6 +189,8 @@ export interface Receipt {
   previewedAt: string;
   preview: Command[];
   described: Described;
+  /** Numbers and names of the assets the preview touches, looked up before confirm. */
+  names: Record<Oid, Named>;
   snapshotAt?: string;
   /** Before values per touched asset, ChangeDate included: what the guard compared and the reverse restores. */
   before: Record<Oid, Record<string, unknown>>;
@@ -187,6 +209,24 @@ export interface Receipt {
   /** Touched assets the guard left alone: changed or gone since the snapshot. */
   skipped: Oid[];
   reverse: Reverse;
+  /** What the record could not do and why: a name lookup that failed, deferred commands sent unsnapshotted. */
+  notes: string[];
+}
+
+/**
+ * The batch was sent and the server's outcome is on the receipt
+ * (`receipt.sent`, `receipt.outcome`, `receipt.reverse`), but reading the
+ * assets back afterwards failed, so `receipt.after` is incomplete: keep the
+ * receipt, and know that a reverse built from it cannot check every asset
+ * for changes made since.
+ */
+export class BatchRecordError extends Error {
+  readonly receipt: Receipt;
+  constructor(cause: unknown, receipt: Receipt) {
+    super(`the batch was sent and its outcome recorded, but reading the assets back afterwards failed, so receipt.after is incomplete: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+    this.name = "BatchRecordError";
+    this.receipt = receipt;
+  }
 }
 
 /** The send itself failed (a timeout, a 5xx): whether the server applied it is unknown. The receipt holds everything up to the attempt. */
@@ -204,7 +244,7 @@ export interface BatchOptions {
   guard?: boolean;
   /** Stop after the snapshot and send nothing: the receipt says what would happen. */
   dryRun?: boolean;
-  /** Asked after the snapshot, before the send; false sends nothing. */
+  /** Asked after the snapshot, before the send, with the touched assets' names on the receipt; false sends nothing. */
   confirm?: (receipt: Receipt) => boolean | Promise<boolean>;
 }
 
@@ -218,14 +258,18 @@ export async function runBatch(transport: Transport, schema: Schema, commands: C
   const fatal = refused.filter((r) => r.reason.includes("rejected by the server"));
   if (fatal.length || (useGuard && refused.length)) throw new UnguardableError(useGuard ? refused : fatal);
 
+  const notes: string[] = [];
+  const noteFailure: NameLookupFailure = ({ type, oids, error }) =>
+    notes.push(`could not look up Name for ${oids.length} ${type} asset${oids.length === 1 ? "" : "s"}: ${error instanceof Error ? error.message : String(error)}`);
   const previewedAt = now();
   const projected = await assetApi.preview(transport, commands);
   const described = describe(commands, projected);
   const touched = touchedBy(projected);
-  const names = await namesOf(transport, schema, touched);
-  const receipt: Receipt = { receipt: 1, request: commands, previewedAt, preview: projected, described, before: {}, sent: false, guarded: false, created: [], touched: [], after: {}, skipped: [], reverse: { commands: [], notes: [] } };
-  const nothing = !described.creates.length && !described.updates.length && !described.executes.length && !described.queries.length;
+  const names = await namesOf(transport, schema, touched, noteFailure);
+  const receipt: Receipt = { receipt: 1, request: commands, previewedAt, preview: projected, described, names: Object.fromEntries(names), before: {}, sent: false, guarded: false, created: [], touched: [], after: {}, skipped: [], reverse: { commands: [], notes: [] }, notes };
+  const nothing = !described.creates.length && !described.updates.length && !described.executes.length && !described.queries.length && !described.deferred.length;
   if (nothing) return receipt;
+  for (const d of described.deferred) notes.push(`command ${d.index} (${d.alias}): an aliased ${d.kind}, which preview does not expand; sent as written, not snapshotted, not reversible`);
   receipt.snapshotAt = now();
   receipt.before = await snapshot(transport, described);
   if (options.dryRun) return receipt;
@@ -248,15 +292,26 @@ export async function runBatch(transport: Transport, schema: Schema, commands: C
   receipt.sent = true;
   receipt.outcome = done;
 
-  // Everything below decorates a response already recorded; a failed lookup cannot cost the record.
-  const createdNames = await namesOf(transport, schema, done.created);
-  receipt.created = done.created.map((oid, i) => ({ alias: described.creates[i]?.alias ?? null, type: described.creates[i]?.type ?? typeOfOid(oid), oid, ...(createdNames.get(oid) ?? { number: null, name: null }) }));
+  // The record, from the response alone: nothing below this block can lose it.
   const hit = [...new Set([...done.modified, ...done.operated])];
-  receipt.touched = hit.map((oid) => ({ oid, ...(names.get(oid) ?? { number: null, name: null }) }));
-  const all = [...done.created, ...hit];
-  receipt.after = all.length ? await stampsOf(transport, all) : {};
+  const unnamed = { number: null, name: null };
+  receipt.created = done.created.map((oid, i) => ({ alias: described.creates[i]?.alias ?? null, type: described.creates[i]?.type ?? typeOfOid(oid), oid, ...unnamed }));
+  receipt.touched = hit.map((oid) => ({ oid, ...(names.get(oid) ?? unnamed) }));
   receipt.skipped = useGuard ? [...new Set([...unstamped, ...touched.filter((oid) => !hit.includes(oid))])] : [];
   receipt.reverse = reverseOf(described, receipt.before, done);
+
+  // Decoration, read back from the server. Names are cosmetic (a failure is
+  // a note); the after stamps are not, so a failure there throws with the
+  // receipt, outcome and all.
+  try {
+    const more = await namesOf(transport, schema, [...done.created, ...hit.filter((oid) => !names.has(oid))], noteFailure);
+    receipt.created = receipt.created.map((c) => ({ ...c, ...(more.get(c.oid) ?? unnamed) }));
+    receipt.touched = receipt.touched.map((t) => (names.has(t.oid) ? t : { ...t, ...(more.get(t.oid) ?? unnamed) }));
+    const all = [...done.created, ...hit];
+    receipt.after = all.length ? await stampsOf(transport, all) : {};
+  } catch (error) {
+    throw new BatchRecordError(error, receipt);
+  }
   return receipt;
 }
 
