@@ -9,17 +9,14 @@ this file has merged into `proposed_type_script_api_version`. Source plan:
 gh-v1 talks to Agility only through `@versionone/sdk`. CLI behaviour and
 output stay the same; the code that duplicates the SDK goes.
 
-## Where things stand (checked 2026-11-06, gh-v1 `2c58c7e`)
+## Where things stand (checked 2026-11-06, gh-v1 `676bcd8`)
 
 - G0–G3 are merged: executable bin, `V1_URL`/`V1_ACCESS_TOKEN` config, ESM
   (`"type": "module"`), `jsconfig.json` + `npm run typecheck`, one paging
   module (`lib/paging.js`).
-- The bin `gh-v1` is now a `sh` launcher that runs `gh-v1.js` with the real
-  node (bypassing Volta's shim, which mangles arguments on Windows). The
-  swap does not touch either; keep `test/launcher.test.js` green.
 - One seam: `lib/api.js` exports `api(cfg)` returning `query`, `queries`,
   `asset`, `attempt`, `rest`, `meta`, `localize`, `raw`, `blob`,
-  `permalink`, typed by the `Api` JSDoc typedef. Its tests under `test/`
+  `permalink`, typed by the `Api` JSDoc typedef. 104 tests under `test/`
   stub global `fetch`.
 - String-boolean and OID helpers (`isTrue`, `oidOf`, `momentless`) are used
   in `lib/api.js`, `meta.js`, `resolve.js`, `board.js`, `batch.js`, and
