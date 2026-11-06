@@ -10,6 +10,7 @@ import type { Metamodel } from "./types/metamodel";
 import * as assetApi from "./wire/assetApi";
 import * as loc2 from "./wire/loc2";
 import * as meta from "./wire/meta";
+import * as queryV1 from "./wire/queryV1";
 import * as rest1 from "./wire/rest1";
 
 export interface ClientOptions {
@@ -111,6 +112,22 @@ export class AgilityApiClient {
     list: <Row extends Asset = Asset>(type: string, params: rest1.ReadParams) => rest1.list<Row>(this.transport, type, params),
     get: <Row extends Asset = Asset>(oid: string, sel?: string[]) => rest1.get<Row>(this.transport, oid, sel),
     history: <Row extends Asset = Asset>(target: string, params: rest1.ReadParams) => rest1.history<Row>(this.transport, target, params)
+  };
+
+  /**
+   * query.v1: reads only, the same query bodies as assets.query, rows
+   * translated the same way. The endpoint cannot write, so it is the safe
+   * place to explore a query; its requests may be retried like a GET.
+   */
+  readonly queryV1 = {
+    query: async <Row extends Asset = Asset>(q: assetApi.QueryBody) => {
+      await this.schema.ensureFor([q]);
+      return queryV1.query<Row>(this.transport, q, { lookup: this.schema });
+    },
+    queries: async <Row extends Asset = Asset>(qs: assetApi.QueryBody[]) => {
+      await this.schema.ensureFor(qs);
+      return queryV1.queries<Row>(this.transport, qs, { lookup: this.schema });
+    }
   };
 
   /** api/asset: batches and queries, rows translated through the schema. */

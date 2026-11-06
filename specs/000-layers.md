@@ -132,9 +132,11 @@ expect-zero control beside every "it returned rows".
 
 ## 6. Politeness is in the layer
 
-No read is unbounded: `assetApi.queries` refuses a query without a page,
+No read is unbounded: `assetApi.queries` and `queryV1.queries` refuse a
+query without a page,
 and the rest-1 module will refuse a Data read without one. The transport
-retries only idempotent requests (GET by default), only on a network
+retries only idempotent requests (GET by default, and every query.v1
+POST, since that endpoint cannot write), only on a network
 failure or a 5xx, never a 4xx; a batch write is never retried unless the
 caller has made it idempotent with a guard and says so.
 
@@ -156,7 +158,10 @@ always throw: a query the server rejected must not come back as `[]`.
 The server drops a failed query's slot from `queryResult.results` (later
 results shift up); `send` restores it as `null` by `sourceCommandIndex`, so
 positions always match the queries sent, and refuses to guess when the
-counts disagree.
+counts disagree. If a failure carries no sourceCommandIndex it may be any
+of the queries, so every query slot is null and the failures are the
+answer (thrown for reads and with throwOnFailure); a disagreement with no
+such failure is an error of its own.
 
 The guard (`services/guard`) is what makes a write batch safe to resend:
 each per-asset command of the server's projection is sent scoped to its

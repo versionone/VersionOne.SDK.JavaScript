@@ -186,4 +186,30 @@ describe("assetApi: command failures", () => {
     const t = fakeTransport(envelope({ queryResult: { results: [[], []], resultMetaData: [], count: -1 } }));
     await expect(send(t, [{ from: "Story", select: ["Name"], page: { size: 1, start: 0 } }])).rejects.toThrow(/cannot tell which result belongs to which query/);
   });
+
+  it("a failure without a command index makes every query slot null and reports the failure itself — not a 'cannot tell' error", async () => {
+    // A create fails, and a follow-up query on its alias fails without saying which command it was.
+    const unattributed = () => envelope({
+      commandFailures: { count: 2, commands: [
+        { "@new": { AssetType: "Story" }, error: { message: "Resolution'Ambiguous'Story.Scope'Scope", sourceCommandIndex: 0 } },
+        { error: { message: "Unknown AssetType: @new" } }
+      ] },
+      queryResult: { results: [[{ _oid: "Member:20" }]], resultMetaData: [], count: -1 }
+    });
+    const batch: Command[] = [
+      { "@new": { AssetType: "Story", Name: "x" } },
+      { from: "@new", select: ["Number"], page: { size: 1, start: 0 } },
+      { from: "Member", select: ["Name"], page: { size: 1, start: 0 } }
+    ];
+    const res = await send(fakeTransport(unattributed()), batch);
+    expect(res.queryResult.results).toEqual([null, null]); // neither row placed: either query may be the one that failed
+    expect(failuresOf(res).map((f) => f.index)).toEqual([0, null]);
+    const err = (await send(fakeTransport(unattributed()), batch, { throwOnFailure: true }).catch((e: unknown) => e)) as CommandFailureError;
+    expect(err).toBeInstanceOf(CommandFailureError);
+    expect(err.message).toBe("Resolution'Ambiguous'Story.Scope'Scope; Unknown AssetType: @new");
+    // A read throws the failure too, root cause first.
+    await expect(queries(fakeTransport(envelope({ commandFailures: { count: 1, commands: [{ error: { message: "Unknown AttributeDefinition: Story.Nope" } }] }, queryResult: { results: [], resultMetaData: [], count: -1 } })), [
+      { from: "Story", select: ["Nope"], page: { size: 1, start: 0 } }
+    ])).rejects.toMatchObject({ name: "CommandFailureError", message: "Unknown AttributeDefinition: Story.Nope" });
+  });
 });

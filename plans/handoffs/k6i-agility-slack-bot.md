@@ -21,16 +21,12 @@ no `require`). `jsconfig.json` still declares `module: commonJS`,
 `npm run typecheck` (`tsc -p jsconfig.json`; `typescript` is already a
 devDependency). Start non-strict; fix or annotate what it finds.
 
-**S2 — Reads from query.v1 to api/asset.** In `services/v1.js`, `query()`
-posts to `query.v1`. Post the same bodies to `api/asset` instead and read
-`queryResult.results` (one array per query, positional, an empty array
-for a query that matched nothing) so callers still receive an array of
-result arrays. Add an explicit `page: { size, start }` to every body in
-`lib/queries.js` (api/asset reads should never be unbounded). Note that
-api/asset returns every scalar as a string (`"True"`, `"5"`) and a
-single relation selected with a sub-select as a one-element list — check
-each call site's comparisons against a real response. Update
-`test/v1-service.test.js`.
+**S2 — Page every read.** Reads stay on `query.v1`: it is read-only and
+answers with rows alone, and the SDK has a `queryV1` module for it. Add an
+explicit `page: { size, start }` to every body in `lib/queries.js` (the
+SDK refuses an unpaged query; no read should be unbounded), choosing sizes
+that match what each caller actually shows. Update
+`test/v1-service.test.js` to assert the pages sent.
 
 **S3 — Close Bolt Phase 2.** AGENTS.md says axios is dropped in Phase 2.
 Once nothing imports them, remove `axios`, `botkit`,
