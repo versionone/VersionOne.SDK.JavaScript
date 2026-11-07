@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RequestOptions, Transport } from "../../src/core/transport";
-import { UnguardableError, guard, sendGuarded, touchedBy, unguardable } from "../../src/services/guard";
+import { UnguardableError, guard, passesOf, sendGuarded, sendPasses, touchedBy, unguardable } from "../../src/services/guard";
 import type { Command } from "../../src/wire/assetApi";
 
 const envelope = (over: Record<string, unknown> = {}) => ({
@@ -79,5 +79,34 @@ describe("guard", () => {
     const ideas = fakeTransport([{ "@x": { oid: "Idea:7", update: { Name: { add: ["y"], remove: [] } } } }]);
     await expect(sendGuarded(ideas, [{ from: "Idea:7", update: { Name: "y" } }])).rejects.toThrow(/Idea has no ChangeDate/);
     expect(ideas.calls).toHaveLength(1); // the preview only
+  });
+});
+
+describe("guard passes: two commands on one asset", () => {
+  const P = (oid: string, cmd: Record<string, unknown>) => ({ [`@${oid.replace(":", "")}${Object.keys(cmd)[0]}`]: { oid, ...cmd } }) as unknown as Command;
+  const env = (over: Record<string, unknown> = {}) => ({ requestId: "r", assetsCreated: { oidTokens: [], count: 0 }, assetsModified: { oidTokens: [], count: 0 }, assetsOperatedOn: { oidTokens: [], count: 0 }, commandFailures: { commands: [], count: 0 }, queryResult: { results: [], resultMetaData: [], count: -1 }, ...over });
+
+  it("passesOf puts an asset's second command in a second pass; creates ride in the first", () => {
+    const create = { "@t": { AssetType: "Task", Name: "x" } } as Command;
+    const passes = passesOf([create, P("Story:1", { execute: { op: "Reactivate", args: {} } }), P("Story:2", { execute: { op: "Delete", args: {} } }), P("Story:1", { execute: { op: "Delete", args: {} } })]);
+    expect(passes.map((p) => p.length)).toEqual([3, 1]);
+    expect(passes[1]![0]).toEqual(P("Story:1", { execute: { op: "Delete", args: {} } }));
+  });
+
+  it("the second pass goes only for assets whose first command applied, guarded on the ChangeDate read just after it", async () => {
+    const sent: unknown[][] = [];
+    const transport = { request: vi.fn(async (o: { body: unknown[] }) => {
+      const body = o.body as Record<string, unknown>[];
+      if (body.length === 1 && (body[0]!.select as string[] | undefined)?.[0] === "ChangeDate") return env({ queryResult: { results: [[{ _oid: "Story:1", ChangeDate: "2026-11-07T12:00:00.5" }]], resultMetaData: [], count: 1 } });
+      sent.push(body);
+      // Pass 1: Story:1 applies, Story:2 was changed by someone else and matches nothing.
+      return sent.length === 1 ? env({ assetsOperatedOn: { oidTokens: ["Story:1:77"], count: 1 } }) : env({ assetsOperatedOn: { oidTokens: ["Story:1"], count: 1 } });
+    }) } as unknown as Parameters<typeof sendPasses>[0];
+    const projected = [P("Story:1", { execute: { op: "Reactivate", args: {} } }), P("Story:2", { execute: { op: "Reactivate", args: {} } }), P("Story:1", { execute: { op: "Delete", args: {} } }), P("Story:2", { execute: { op: "Delete", args: {} } })];
+    const r = await sendPasses(transport, projected, { "Story:1": "2026-11-07T11:00:00.1", "Story:2": "2026-11-07T11:00:00.2" });
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toEqual([{ from: "Story", filter: ["ID=$oid", "ChangeDate='2026-11-07T12:00:00.5'"], with: { $oid: "Story:1" }, execute: { op: "Delete", args: {} } }]); // Story:2's Delete never sent
+    expect(r.sent).toHaveLength(3);
+    expect(r.outcome.operated).toEqual(["Story:1", "Story:1"]);
   });
 });

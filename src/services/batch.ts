@@ -22,7 +22,7 @@ import type { AssetTypeToken } from "../types/metamodel";
 import { momentless, typeOfOid } from "../types/oid";
 import * as assetApi from "../wire/assetApi";
 import type { Command, CommandValue } from "../wire/assetApi";
-import { aliased, guard, stampsOf, touchedBy, unguardable, UnguardableError } from "./guard";
+import { aliased, guard, GuardedPassError, passesOf, sendPasses, stampsOf, touchedBy, unguardable, UnguardableError } from "./guard";
 import type { Schema } from "./schema";
 
 /** OIDs per lookup query: bounded, never one giant filter. */
@@ -275,18 +275,30 @@ export async function runBatch(transport: Transport, schema: Schema, commands: C
   if (options.dryRun) return receipt;
   if (options.confirm && !(await options.confirm(receipt))) return receipt;
 
-  let toSend = commands, unstamped: Oid[] = [];
-  if (useGuard) {
-    const stamps = Object.fromEntries(Object.entries(receipt.before).flatMap(([oid, v]) => (typeof v.ChangeDate === "string" ? [[oid, v.ChangeDate]] : [])));
-    ({ commands: toSend, unstamped } = guard(projected, stamps));
-  }
+  let unstamped: Oid[] = [];
   receipt.guarded = useGuard;
-  receipt.sentCommands = toSend;
   receipt.sentAt = now();
   let done: assetApi.Outcome;
   try {
-    done = assetApi.outcomeOf(await assetApi.send(transport, toSend, { idempotent: useGuard && !toSend.some((c) => "AssetType" in bodyOf(c)) }));
+    if (useGuard) {
+      // Guarded pass by pass: a second command on the same asset (Reactivate
+      // then Delete in a reverse) goes only if the first applied (guard.ts).
+      const stamps = Object.fromEntries(Object.entries(receipt.before).flatMap(([oid, v]) => (typeof v.ChangeDate === "string" ? [[oid, v.ChangeDate]] : [])));
+      receipt.sentCommands = guard(passesOf(projected)[0]!, stamps).commands; // what the first pass sends; replaced below by everything sent
+      const result = await sendPasses(transport, projected, stamps);
+      ({ outcome: done, unstamped } = result);
+      receipt.sentCommands = result.sent;
+    } else {
+      receipt.sentCommands = commands;
+      done = assetApi.outcomeOf(await assetApi.send(transport, commands));
+    }
   } catch (error) {
+    if (error instanceof GuardedPassError) {
+      // Earlier passes applied: the receipt says so, and what failed after.
+      receipt.sent = true;
+      receipt.outcome = error.outcome;
+      receipt.sentCommands = error.sent;
+    }
     throw new BatchSendError(error, receipt);
   }
   receipt.sent = true;
@@ -315,15 +327,43 @@ export async function runBatch(transport: Transport, schema: Schema, commands: C
   return receipt;
 }
 
+/** Each asset's AssetState by name ("Active", "Closed"), one bounded query per type and chunk. An asset that no longer exists is absent. */
+async function statesOf(transport: Transport, oids: Oid[]): Promise<Record<Oid, string>> {
+  const out: Record<Oid, string> = {};
+  for (const [type, list] of byType(oids)) {
+    for (const part of chunks(list)) {
+      const rows = await assetApi.query<Asset & { AssetState?: unknown }>(transport, { from: type, select: ["AssetState"], filter: ["ID=$oids"], with: { $oids: part }, page: { size: part.length, start: 0 } });
+      for (const r of rows) if (r.AssetState != null) out[momentless(r._oid)] = String(r.AssetState);
+    }
+  }
+  return out;
+}
+
+/** AssetState as the endpoint spells a closed asset: by name, or by Core's code (128). */
+const isClosed = (state: string | undefined): boolean => state === "Closed" || state === "128";
+
 /**
  * A receipt's reverse batch, minus the assets someone changed since the
  * batch (their ChangeDate is no longer the one recorded just after it),
  * unless `force`. Send what it returns with runBatch like any batch.
+ *
+ * Agility refuses to Delete a closed asset (Violation'AssetCannotDeleteClosed),
+ * so a Delete of an asset that is closed now gets a Reactivate just before
+ * it: two commands on one asset, which runBatch sends in two guarded passes
+ * (the Delete only if the Reactivate applied). `reactivated` lists them.
  */
-export async function reversible(transport: Transport, receipt: Pick<Receipt, "reverse" | "after">, options: { force?: boolean } = {}): Promise<{ commands: Command[]; drifted: { oid: Oid; was: string; now: string | null }[] }> {
+export async function reversible(transport: Transport, receipt: Pick<Receipt, "reverse" | "after">, options: { force?: boolean } = {}): Promise<{ commands: Command[]; drifted: { oid: Oid; was: string; now: string | null }[]; reactivated: Oid[] }> {
   const targets = receipt.reverse.commands.map((c) => momentless(String(bodyOf(c).from)));
   const now = await stampsOf(transport, targets.filter((oid) => receipt.after[oid] !== undefined));
   const drifted = targets.flatMap((oid) => (receipt.after[oid] !== undefined && now[oid] !== receipt.after[oid] ? [{ oid, was: receipt.after[oid]!, now: now[oid] ?? null }] : []));
   const skip = new Set(options.force ? [] : drifted.map((d) => d.oid));
-  return { commands: receipt.reverse.commands.filter((c) => !skip.has(momentless(String(bodyOf(c).from)))), drifted };
+  const kept = receipt.reverse.commands.filter((c) => !skip.has(momentless(String(bodyOf(c).from))));
+  const deletes = kept.flatMap((c) => (bodyOf(c).execute === "Delete" ? [momentless(String(bodyOf(c).from))] : []));
+  const states = deletes.length ? await statesOf(transport, deletes) : {};
+  const reactivated = deletes.filter((oid) => isClosed(states[oid]));
+  const commands = kept.flatMap((c) => {
+    const body = bodyOf(c), oid = momentless(String(body.from));
+    return body.execute === "Delete" && reactivated.includes(oid) ? [{ from: oid, execute: "Reactivate" } as Command, c] : [c];
+  });
+  return { commands, drifted, reactivated };
 }

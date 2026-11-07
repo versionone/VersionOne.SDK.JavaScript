@@ -79,4 +79,18 @@ describeInstance("batch (live)", () => {
     const [row] = await assetApi.query<{ _oid: string; AssetState: string }>(t, { from: story, select: ["AssetState"], page: { size: 1, start: 0 } });
     expect(row!.AssetState).toBe("Closed");
   });
+  it("undoing a batch whose created asset was closed since reactivates it first, then deletes it (Agility refuses to delete a closed asset)", async () => {
+    const receipt = await client.batch.run([{ "@s": { AssetType: "Story", Name: fixtureName("batch undo closed"), Scope: { _oid: "Scope:0" } } }]);
+    const story = receipt.created[0]!.oid;
+    created.push(story);
+    await assetApi.send(t, [{ from: story, execute: "QuickClose" }], { throwOnFailure: true });
+    // Closing it changed it since the batch, so the reverse is forced.
+    const undo = await client.batch.reversible(receipt, { force: true });
+    expect(undo.reactivated).toEqual([story]);
+    expect(undo.commands).toEqual([{ from: story, execute: "Reactivate" }, { from: story, execute: "Delete" }]);
+    const reversed = await client.batch.run(undo.commands);
+    expect(reversed.outcome!.failures).toEqual([]);
+    expect(reversed.skipped).toEqual([]);
+    expect(await assetApi.query(t, { from: "Story", select: ["Name"], filter: ["ID=$s"], with: { $s: story }, page: { size: 1, start: 0 } })).toEqual([]);
+  });
 });

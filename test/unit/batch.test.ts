@@ -163,6 +163,17 @@ group("batch", () => {
     expect(e.receipt.after).toEqual({});
   });
 
+  it("reversible puts a Reactivate before deleting an asset that is closed now: Agility refuses to delete a closed asset", async () => {
+    const receipt = { after: { "Task:50": "2026-11-04T17:00:00.5", "Story:1": "2026-11-04T17:00:00.1" }, reverse: { notes: [], commands: [{ from: "Story:1", update: { Estimate: "3" } }, { from: "Task:50", execute: "Delete" }] as Command[] } };
+    const t = server({ preview: [], lookup: (q) => q.with!.$oids!.map((oid) => (q.select![0] === "AssetState" ? { _oid: oid, AssetState: "Closed" } : { _oid: oid, ChangeDate: receipt.after[oid as "Task:50"] })), send: () => envelope() });
+    const r = await reversible(t, receipt);
+    expect(r.reactivated).toEqual(["Task:50"]);
+    expect(r.commands).toEqual([{ from: "Story:1", update: { Estimate: "3" } }, { from: "Task:50", execute: "Reactivate" }, { from: "Task:50", execute: "Delete" }]);
+    // An open one is deleted as is.
+    const open = server({ preview: [], lookup: (q) => q.with!.$oids!.map((oid) => (q.select![0] === "AssetState" ? { _oid: oid, AssetState: "Active" } : { _oid: oid, ChangeDate: receipt.after[oid as "Task:50"] })), send: () => envelope() });
+    expect((await reversible(open, receipt)).reactivated).toEqual([]);
+  });
+
   it("reversible drops assets changed since the batch (their ChangeDate is not the one recorded after it) unless forced", async () => {
     const receipt = { after: { "Story:1": "2026-11-04T17:00:00.1", "Epic:9": "2026-11-04T17:00:00.3" }, reverse: { notes: [], commands: [{ from: "Story:1", update: { Estimate: "3" } }, { from: "Epic:9", execute: "Reactivate" }] as Command[] } };
     const now: Record<string, string> = { "Story:1": "2026-11-04T18:00:00.9", "Epic:9": "2026-11-04T17:00:00.3" };

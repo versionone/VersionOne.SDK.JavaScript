@@ -176,3 +176,8 @@ exception to "values travel as `with` variables", because a ChangeDate
 variable never compares equal — after a strict timestamp check. Moment is
 not a stamp: a filter on an earlier Moment selects the asset as it was then.
 A guarded batch with no creates is sent idempotent; a plain one never is.
+Two commands on one asset are sent in passes: the second goes only if the
+first applied, guarded on the ChangeDate read just after it (a shared
+pre-batch stamp would make the second match nothing). A reverse batch
+reactivates a closed asset before deleting it, since Agility refuses to
+delete a closed asset.

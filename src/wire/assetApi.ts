@@ -242,6 +242,24 @@ export function outcomeOf<Row extends Asset = Asset>(response: AssetApiResponse<
   };
 }
 
+/** An outcome with nothing in it, to merge several sends into. */
+export const emptyOutcome = <Row extends Asset = Asset>(): Outcome<Row> => ({ created: [], modified: [], operated: [], failures: [], queryResults: [], durationSeconds: null });
+
+/**
+ * Add one send's outcome to another's, for a batch sent in several
+ * requests. `offset` is how many commands were sent before this one, so a
+ * failure's index stays a position in everything sent.
+ */
+export function mergeOutcome<Row extends Asset = Asset>(into: Outcome<Row>, done: Outcome<Row>, offset: number): Outcome<Row> {
+  into.created.push(...done.created);
+  into.modified.push(...done.modified);
+  into.operated.push(...done.operated);
+  into.failures.push(...done.failures.map((f) => ({ ...f, index: f.index === null ? null : f.index + offset })));
+  into.queryResults.push(...done.queryResults);
+  if (done.durationSeconds !== null) into.durationSeconds = (into.durationSeconds ?? 0) + done.durationSeconds;
+  return into;
+}
+
 /**
  * A batch in which at least one command failed. api/asset answers 200 and
  * commits per command, so this is not an HTTP failure and not all-or-
