@@ -402,7 +402,9 @@ ESM" here means finishing the edges:
 - [ ] A6 CI + prerelease publish — CI (`.github/workflows/ci.yml`: verify on Node 20/22/24, `npm pack` artifact), git-SHA installs (`prepare`) and the dependency audit done; publish `@versionone/sdk@1.0.0-alpha.0` to npmjs with `--tag alpha` next (needs an org owner's token or trusted publisher)
 - [x] G0–G3 gh-v1 migrations — versionone/gh-v1#29–#32
 - [x] S1–S4 slack-bot migrations — digital-ai/k6i-agility-slack-bot#21–#24 (on `bolt-migration`)
-- [ ] B1–B4 slack bot SDK swap — brief: `plans/003-adopt-sdk-k6i-agility-slack-bot.md` (unblocked: S2, S3 and SDK #42 merged)
+- [x] B1 slack bot client swap — digital-ai/k6i-agility-slack-bot#29
+- [x] B2 slack bot decodes deleted; reads through `client.queryV1` with a schema — digital-ai/k6i-agility-slack-bot#30
+- [ ] B3–B4 slack bot writes on api/asset, number resolution — brief: `docs/handoffs/slack-bot-sdk-b3-b4.md` in the bot repo
 - [x] C0 gh-v1 surveyed (2026-11-04)
 - [x] C1 gh-v1 seam swap — versionone/gh-v1#33, with the vendored SDK's hashes, CI and Node 22 floor in #35
 - [x] C2 gh-v1 rows translated through the schema; `isTrue`/`oidOf` gone — versionone/gh-v1#36
