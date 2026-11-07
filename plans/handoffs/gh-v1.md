@@ -7,7 +7,7 @@ Paste everything below the line into the session working on
 
 ---
 
-Context: gh-v1 will become the first consumer of `@versionone/sdk` (the
+Context: gh-v1 will become the first consumer of `@versionone/agility-sdk` (the
 TypeScript rewrite of the Agility JS SDK). Before that swap, gh-v1 should
 adopt these migrations so the swap later touches only `lib/api.js`. Do them
 as separate PRs, in order, each with `npm test` green (99 tests

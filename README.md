@@ -1,8 +1,25 @@
-# VersionOne SDK (TypeScript starter)
+# @versionone/agility-sdk
 
-Minimal TypeScript SDK starter for building JavaScript bindings to external APIs.
+TypeScript SDK for the Digital.ai Agility (formerly VersionOne) API. It works in Node (ESM or CommonJS) and the browser, ships its own types, and has no runtime dependencies.
 
-## Quick start
+Not to be confused with `v1sdk`, the 2.x JavaScript SDK: this is a new API, not a compatible successor.
+
+## Install
+
+Alpha releases are for feedback; the API may change between them.
+
+```bash
+npm install @versionone/agility-sdk@alpha
+```
+
+```ts
+import { AgilityApiClient } from "@versionone/agility-sdk";
+
+const client = new AgilityApiClient({ baseUrl: "https://www14.v1host.com/v1sdktesting", accessToken: process.env.V1_ACCESS_TOKEN });
+const stories = await client.queryV1.query({ from: "Story", select: ["Name", "Estimate"], page: { size: 10, start: 0 } });
+```
+
+## Working on the SDK
 
 ```bash
 npm install

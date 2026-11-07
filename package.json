@@ -1,11 +1,15 @@
 {
-  "name": "@versionone/sdk",
+  "name": "@versionone/agility-sdk",
   "version": "0.1.0",
-  "description": "Minimal TypeScript SDK starter for digital.ai Agility APIs",
+  "description": "TypeScript SDK for the Digital.ai Agility (VersionOne) API: queries, batches, schema-translated rows, guarded writes, attachments",
   "keywords": [
+    "agility",
+    "digital.ai",
+    "versionone",
+    "v1",
     "sdk",
-    "typescript",
-    "api-client"
+    "api-client",
+    "typescript"
   ],
   "license": "MIT",
   "type": "module",
@@ -52,5 +56,13 @@
   },
   "volta": {
     "node": "24.14.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/versionone/VersionOne.SDK.JavaScript.git"
+  },
+  "homepage": "https://github.com/versionone/VersionOne.SDK.JavaScript#readme",
+  "bugs": {
+    "url": "https://github.com/versionone/VersionOne.SDK.JavaScript/issues"
   }
 }

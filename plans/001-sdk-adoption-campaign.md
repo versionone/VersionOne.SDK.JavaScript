@@ -1,7 +1,7 @@
 # Plan 001: TypeScript SDK campaign and adoption
 
 A parallel campaign, run from a cloud agent session on this repo, alongside
-daily work. Goal: take `@versionone/sdk` from a verified starter (layers,
+daily work. Goal: take `@versionone/agility-sdk` from a verified starter (layers,
 api/asset + rest-1 + meta.v1 wire modules, schema-driven translation, 49 unit
 tests green) to a package that three surfaces depend on:
 
@@ -83,7 +83,7 @@ Findings from the testing instance worth carrying into later milestones:
 the `Attributes` envelope via `lib/transformDataToAsset.js`; `findAssets`
 reads with `find`/`findin`/`page`), and `loc-2.v1`. Its `AGENTS.md` already
 plans for this: the Bolt migration's Phase 2 rewrites the seam as
-`services/v1.js` on native `fetch` "so it can migrate into `@versionone/sdk`".
+`services/v1.js` on native `fetch` "so it can migrate into `@versionone/agility-sdk`".
 It hand-decodes string scalars in 3 places (`"Team.HasProcess" === "True"`,
 `IsKanban.toLowerCase() === "true"`) — exactly what spec 000 §2a removes.
 
@@ -196,7 +196,7 @@ Found by reading the code above against `src/`:
 8. **Distribution.** No CI in this repo, no publish target, version 0.1.0.
    Source is browser-safe already (no `node:` imports, no `Buffer`).
 9. **CommonJS consumers — done.** `test/unit/cjs.test.ts` builds the CJS
-   bundle, installs it as `node_modules/@versionone/sdk`, and has a plain
+   bundle, installs it as `node_modules/@versionone/agility-sdk`, and has a plain
    `.cjs` script `require` and use it. The exports map now gives each
    condition its own types (`.d.cts` for require), which a CJS caller
    type-checking with NodeNext (gh-v1 after G2) needs.
@@ -449,7 +449,9 @@ ESM" here means finishing the edges:
 ## Decisions needed
 
 - ~~Publish target~~ — decided 2026-11-07: public npmjs, as
-  `@versionone/sdk` (the `@versionone` org already publishes there), starting
+  `@versionone/agility-sdk` (renamed from `@versionone/sdk` on 2026-11-07,
+  before any publish: the scope already has `ctm-pipeline-builder-sdk`, and
+  the product is Agility; the `@versionone` org already publishes there), starting
   at `1.0.0-alpha.0` on the `alpha` dist-tag so `latest` is never a
   prerelease. Not `v1sdk` 3.x: the 2.x package (`v1sdk`, last published
   2022) stays as it is, because a new major of the same name would imply a
@@ -473,7 +475,7 @@ ESM" here means finishing the edges:
 - [x] A4 slack-shaped reads — `queryV1` wire module, `client.queryV1.query`/`queries` (read-only, idempotent, same row translation as api/asset)
 - [x] A5 services port from gh-v1 — `resolve` (`client.resolve.numbers`/`.ref`), `guard` (`client.assets.sendGuarded`), `batch` (`client.batch.run`/`.reversible`)
 - [x] A7 attachments and embedded images — `attachment` wire module (`attachment.img` bytes, `EmbeddedImage.mvc/Upload`, URL helpers, browser-safe Base64), `client.attachments` (list/info/get/add/put/remove/url; inline up to `INLINE_LIMIT`, two-step above) and `client.embeddedImages` (upload/url/normalize)
-- [ ] A6 CI + prerelease publish — CI (`.github/workflows/ci.yml`: verify on Node 20/22/24, `npm pack` artifact), git-SHA installs (`prepare`) and the dependency audit done; publish `@versionone/sdk@1.0.0-alpha.0` to npmjs with `--tag alpha` next (needs an org owner's token or trusted publisher)
+- [ ] A6 CI + prerelease publish — CI (`.github/workflows/ci.yml`: verify on Node 20/22/24, `npm pack` artifact), git-SHA installs (`prepare`) and the dependency audit done; publish `@versionone/agility-sdk@1.0.0-alpha.0` to npmjs with `--tag alpha` next (needs an org owner's token or trusted publisher)
 - [x] G0–G3 gh-v1 migrations — versionone/gh-v1#29–#32
 - [x] S1–S4 slack-bot migrations — digital-ai/k6i-agility-slack-bot#21–#24 (on `bolt-migration`)
 - [x] B1 slack bot client swap — digital-ai/k6i-agility-slack-bot#29
