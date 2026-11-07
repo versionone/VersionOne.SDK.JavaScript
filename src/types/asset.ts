@@ -19,10 +19,24 @@ export type DateString = string;
  * OldBrokenDownStory 208, Deprecated 254, Deleted 255). rest-1 renders the
  * number and query.v1 the name; the wire layer normalises to the name.
  */
-export type AssetStateValue = "Future" | "Active" | "Closed" | "Dead" | "OldBrokenDownStory" | "Deprecated" | "Deleted";
+export type AssetStateValue = "Future" | "Active" | "Closed" | "Dead" | "Template" | "OldBrokenDownStory" | "Deprecated" | "Deleted";
 
 /** Core's AssetState codes, by name — the rest-1 rendering. */
-export const ASSET_STATE_CODES: Record<AssetStateValue, number> = { Future: 0, Active: 64, Closed: 128, Dead: 192, OldBrokenDownStory: 208, Deprecated: 254, Deleted: 255 };
+export const ASSET_STATE_CODES: Record<AssetStateValue, number> = { Future: 0, Active: 64, Closed: 128, Dead: 192, Template: 200, OldBrokenDownStory: 208, Deprecated: 254, Deleted: 255 };
+
+const STATE_OF_CODE: Record<number, AssetStateValue> = Object.fromEntries(Object.entries(ASSET_STATE_CODES).map(([name, code]) => [code, name as AssetStateValue]));
+
+/**
+ * An AssetState by name, whichever way the endpoint spelled it: api/asset
+ * and query.v1 send the name ("Closed") for most states but the code for a
+ * few ("200", a template), and rest-1 always sends the number. An unknown
+ * code is left as sent.
+ */
+export function assetStateOf(value: unknown): AssetStateValue | string | null {
+  if (value == null) return null;
+  const code = typeof value === "number" ? value : typeof value === "string" && /^\d+$/.test(value) ? Number(value) : NaN;
+  return Number.isNaN(code) ? String(value) : STATE_OF_CODE[code] ?? String(value);
+}
 
 /**
  * A reference to another asset: always at least its OID, plus whatever a

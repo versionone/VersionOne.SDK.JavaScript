@@ -53,7 +53,22 @@ export interface QueryBody {
   /** Group the rows by a relation: each result row is then a group, its rows under `_children` (translated like any row of `from`). */
   group?: (string | { from: string; [key: string]: unknown })[];
 }
+/**
+ * An update. Each key of `update` is an attribute; its value replaces a
+ * scalar or a single relation (null clears it). A multi-value relation is
+ * changed with `{ add: [...], remove: [...] }`. A plain list does NOT
+ * replace a multi-value relation: the server ADDS its members, like rest-1's
+ * `act: "add"` (seen live on v1sdktesting, 2026-11-07). To set one exactly,
+ * remove what should go and add what should come. A change comment goes in
+ * the update node as `ChangeComment`.
+ */
 export interface UpdateBody { from: string; filter?: string[]; where?: Record<string, string>; with?: Record<string, CommandValue>; update: Record<string, CommandValue> }
+/**
+ * An operation (QuickClose, Inactivate, Reactivate, Delete, …), optionally
+ * with arguments. It cannot carry a change comment. Agility refuses to
+ * Delete a closed asset (Violation'AssetCannotDeleteClosed): Reactivate it
+ * first, as batch.reversible does.
+ */
 export interface ExecuteBody { from: string; filter?: string[]; where?: Record<string, string>; with?: Record<string, CommandValue>; execute: string | { op: string; args?: Record<string, CommandValue>; list?: Record<string, CommandValue>[] } }
 export type CommandBody = CreateBody | QueryBody | UpdateBody | ExecuteBody;
 
@@ -240,6 +255,24 @@ export function outcomeOf<Row extends Asset = Asset>(response: AssetApiResponse<
     queryResults: response.queryResult?.results ?? [],
     durationSeconds: typeof response.durationSeconds === "number" ? response.durationSeconds : null
   };
+}
+
+/** An outcome with nothing in it, to merge several sends into. */
+export const emptyOutcome = <Row extends Asset = Asset>(): Outcome<Row> => ({ created: [], modified: [], operated: [], failures: [], queryResults: [], durationSeconds: null });
+
+/**
+ * Add one send's outcome to another's, for a batch sent in several
+ * requests. `offset` is how many commands were sent before this one, so a
+ * failure's index stays a position in everything sent.
+ */
+export function mergeOutcome<Row extends Asset = Asset>(into: Outcome<Row>, done: Outcome<Row>, offset: number): Outcome<Row> {
+  into.created.push(...done.created);
+  into.modified.push(...done.modified);
+  into.operated.push(...done.operated);
+  into.failures.push(...done.failures.map((f) => ({ ...f, index: f.index === null ? null : f.index + offset })));
+  into.queryResults.push(...done.queryResults);
+  if (done.durationSeconds !== null) into.durationSeconds = (into.durationSeconds ?? 0) + done.durationSeconds;
+  return into;
 }
 
 /**

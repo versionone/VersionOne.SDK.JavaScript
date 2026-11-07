@@ -65,6 +65,13 @@ Findings from the testing instance worth carrying into later milestones:
   applies.
 - A StoryStatus create requires `RollupState` (`"Active"` and `64` both
   accepted).
+- An api/asset update that gives a multi-value relation as a plain list
+  **adds** to it (like rest-1's `act: "add"`); it does not replace the list
+  (slack bot, 2026-11-07).
+- **Agility refuses to Delete a closed asset**
+  (`Violation'AssetCannotDeleteClosed`); reactivate first. The batch
+  service's reverse does this (`reversible` reports `reactivated`), and the
+  guard sends a second command on one asset as a second pass.
 
 ## What the consumers do today (surveyed 2026-11-04)
 
@@ -90,6 +97,37 @@ remove. 67 files import axios; `api/asset` appears 96 times, `query.v1` 29,
 hand-decodes string booleans in 48 places (including `getApiResults`
 patching `IsReadOnly`), and `src/metaAssetStore/` keeps its own per-type
 field knowledge that overlaps the SDK's `schema` service.
+
+Re-surveyed 2026-11-07 at `main` `0874590` (read-only):
+
+- **HTTP.** One default axios instance (`src/utils/axios.tsx`) plus
+  `getAxiosInstance(...)` variants, a bare `meta` instance and a plain
+  `axios.create` in `src/navigation/routes.tsx`; several skip the
+  auth-refresh and snackbar interceptors. 88 production files import axios.
+  Cookie auth only. On 401/403 an SSO popup (`Account.mvc/Login`), then
+  replay. Cancellation by `AbortController` in a few places; no retries.
+  The commandFailures snackbar runs only when the URL is exactly
+  `/api/asset`; 9 calls written `api/asset` (no slash) bypass it.
+- **Endpoints.** api/asset (111 call sites, 57 files), query.v1 (16),
+  rest-1.v1 reads (4) **and writes** (5 `Data/{T}/{id}` posts with
+  `{ Attributes: { X: { value, act } } }`, plus 2 `?op=Copy`), meta.v1,
+  loc-2.v1, `loc.v1`, `config.v1`, `attachment.img`, `embedded.img`,
+  `EmbeddedImage.mvc/Upload`, about 15 other `*.mvc` routes and about 20
+  custom `api/*` routes (reports, tags, watch, rooms2config, LLM).
+- **Writes.** `metaAssetSlice` updates multi-value fields as
+  `{ X: { [value]: "add" | "remove" } }`, sends a cleared relation as
+  `"NULL"`, updates optimistically and reverts on error. Execute ops with
+  and without `args` (Convert). No change comments, no ChangeDate checks.
+- **Reads.** 34 explicit pages, but some board and `ID=$Oids` reads are
+  unbounded. Positional `results[n]` with index constants
+  (`metaAssetStore/constants.ts`). No `group` queries.
+- **Decoding.** 46 `"True"`/`"False"` comparisons; `NULL_OID` referenced
+  118 times; `massageApiAssetResponseObject` unwraps single relations by
+  meta. meta.v1 is loaded by `store/metaDefinition/useMetaDefinitionStore.ts`
+  (per type, in-flight dedupe, ETag revalidation), not by `metaAssetStore/`.
+- **Tests.** Jest (222 files) mocks modules; no MSW. The AI domain's
+  injected `IHttpClient` / `FakeHttpClient` is the cleanest seam for a swap.
+  Playwright (79 specs) runs against a live server, including attachment CRUD.
 
 **gh-v1** (surveyed 2026-11-04 at `41fe333`). A `gh` extension in plain
 CommonJS Node (≥20), no runtime dependencies, `node --test` with 99 passing
@@ -213,6 +251,25 @@ moves.
   Integration tests on v1sdktesting with `sdk-integration` fixtures,
   deleted by OID.
 
+  What rooms does today (survey 2026-11-07), which A7 must cover:
+  - **Upload** is one api/asset create with the bytes inline: `{ AssetType:
+    "Attachment", Asset, ContentType, Filename, Name, Content: <Base64> }`
+    (`MultiValueRelations/Attachments.tsx`). The UI caps a file at 4 MB and
+    has no 413 handling. So `add` needs both modes: inline Base64 for small
+    files (one request, what rooms does) and create-then-POST-bytes for
+    large ones (what the docs and gh-v1 do), chosen by size.
+  - **Preview** of an image re-reads `Content` for one row and builds a
+    `data:` URL; **download** opens `attachment.img/<id>` from the app root.
+    So `get` returns bytes and type, and the service exposes the
+    `attachment.img` URL for a browser to open.
+  - **Delete** is `execute: "Delete"` on the Attachment.
+  - **Embedded images** (TinyMCE paste) post multipart to
+    `EmbeddedImage.mvc/Upload` with fields `image` and `oidToken`; the
+    answer is HTML with `<textarea>{ "Url": … }</textarea>`. Stored HTML
+    references `embedded.img/<id>`, rewritten to app-root URLs. So:
+    `embeddedImages.upload(asset, blob)` → `{ id, url }`, parsing that
+    response, and a helper that normalises `embedded.img` URLs.
+
 ## Track B — k6i-agility-slack-bot (fast, on `bolt-migration`)
 
 Target branch: `bolt-migration`, not `main`. There, Bolt Phase 2 has already
@@ -280,6 +337,13 @@ instance: same requests out, same rows in.
 SDK behaviour.
 
 ## Track D — agility-rooms (slow)
+
+Open questions from the 2026-11-07 survey: rooms still writes through
+rest-1 (5 attribute posts, 2 `?op=Copy`) and reads `rest-1.v1/New/{T}`
+templates, which gap 6's "no rest-1 writes" did not foresee; decide whether
+those move to api/asset (Copy as an execute?) or the SDK grows a narrow
+rest-1 write path. Its commandFailures policy should apply to every
+api/asset call, not only URLs spelled `/api/asset`.
 
 Strangler, starting below the call sites so nothing user-visible moves:
 
@@ -404,7 +468,8 @@ ESM" here means finishing the edges:
 - [x] S1–S4 slack-bot migrations — digital-ai/k6i-agility-slack-bot#21–#24 (on `bolt-migration`)
 - [x] B1 slack bot client swap — digital-ai/k6i-agility-slack-bot#29
 - [x] B2 slack bot decodes deleted; reads through `client.queryV1` with a schema — digital-ai/k6i-agility-slack-bot#30
-- [ ] B3–B4 slack bot writes on api/asset, number resolution — brief: `docs/handoffs/slack-bot-sdk-b3-b4.md` in the bot repo
+- [x] B3 slack bot writes on `client.assets.send` (rest-1 writes gone) — digital-ai/k6i-agility-slack-bot#32
+- [x] B4 slack bot number lookups on `client.resolve.numbers` — digital-ai/k6i-agility-slack-bot#34 (SDK #44 adopted in #33: pin `785b4c9`, a `TypeCache` per instance)
 - [x] C0 gh-v1 surveyed (2026-11-04)
 - [x] C1 gh-v1 seam swap — versionone/gh-v1#33, with the vendored SDK's hashes, CI and Node 22 floor in #35
 - [x] C2 gh-v1 rows translated through the schema; `isTrue`/`oidOf` gone — versionone/gh-v1#36

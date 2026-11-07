@@ -23,7 +23,7 @@
  *   - a page is required by this module: no Data read is unbounded.
  */
 import type { Transport } from "../core/transport";
-import { ASSET_STATE_CODES, type Asset, type AssetStateValue, type Oid, type Ref } from "../types/asset";
+import { assetStateOf, type Asset, type Oid, type Ref } from "../types/asset";
 import { momentless } from "../types/oid";
 
 export { momentless };
@@ -57,7 +57,6 @@ export interface ReadParams {
 
 // ---- translation -----------------------------------------------------------
 
-const CODE_TO_STATE: Record<number, AssetStateValue> = Object.fromEntries(Object.entries(ASSET_STATE_CODES).map(([name, code]) => [code, name as AssetStateValue]));
 
 const toRef = (doc: AssetRefDocument): Ref => ({ _oid: momentless(doc.idref) });
 
@@ -76,7 +75,7 @@ export function fromAssetDocument<Row extends Asset = Asset>(doc: AssetDocument,
     if (a._type === "Relation") {
       out[key] = Array.isArray(a.value) ? a.value.map(toRef) : a.value ? toRef(a.value) : null;
     } else if (key === "AssetState" && typeof a.value === "number") {
-      out[key] = CODE_TO_STATE[a.value] ?? a.value;
+      out[key] = assetStateOf(a.value);
     } else {
       out[key] = a.value;
     }

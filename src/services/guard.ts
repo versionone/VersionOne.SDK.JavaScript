@@ -136,6 +136,80 @@ export function guard(projected: Command[], stamps: Readonly<Record<Oid, string>
   return { commands, unstamped };
 }
 
+// ---- passes --------------------------------------------------------------------
+
+/**
+ * A projection split into passes: the k-th per-asset command for each asset
+ * goes in pass k; creates and queries ride in pass 0. One pass is the usual
+ * case. Two commands on one asset (a reverse batch's Reactivate then Delete,
+ * say) cannot share a pass: both would be stamped with the ChangeDate read
+ * before the batch, the first would advance it, and the second would match
+ * nothing — silently skipped.
+ */
+export function passesOf(projected: Command[]): Command[][] {
+  const seen = new Map<Oid, number>();
+  const passes: Command[][] = [[]];
+  for (const p of projected) {
+    const x = perAsset(p);
+    const k = x ? seen.get(x.oid) ?? 0 : 0;
+    if (x) seen.set(x.oid, k + 1);
+    (passes[k] ??= []).push(p);
+  }
+  return passes;
+}
+
+/** A guarded send that failed after some passes applied: `outcome` and `sent` say what did. */
+export class GuardedPassError extends Error {
+  constructor(readonly cause: unknown, readonly outcome: assetApi.Outcome, readonly sent: Command[], readonly pass: number) {
+    super(`guarded send failed in pass ${pass + 1}${pass ? " (earlier passes applied)" : ""}: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+    this.name = "GuardedPassError";
+  }
+}
+
+/**
+ * Send a projection guarded, pass by pass. Pass 0 is guarded on `stamps`
+ * (read before the batch). A later pass sends an asset's next command only
+ * if its previous one applied, guarded on the ChangeDate read again just
+ * after it — so the chain stays a compare-and-set, with one narrow window
+ * between our write and that read. An asset whose earlier command was
+ * skipped is skipped for the rest of the batch. Failure indexes are
+ * positions in `sent` (all passes, in order). A send that fails in the
+ * first pass throws as it would alone; in a later pass it throws a
+ * GuardedPassError carrying what the earlier passes did.
+ */
+export async function sendPasses<Row extends Asset = Asset>(transport: Transport, projected: Command[], stamps: Readonly<Record<Oid, string>>, options: Pick<assetApi.SendOptions, "lookup" | "throwOnFailure"> = {}): Promise<{ outcome: assetApi.Outcome<Row>; sent: Command[]; unstamped: Oid[] }> {
+  const passes = passesOf(projected);
+  const outcome = assetApi.emptyOutcome<Row>();
+  const sent: Command[] = [], unstamped: Oid[] = [];
+  let applied = new Set<Oid>();
+  for (const [k, pass] of passes.entries()) {
+    let current: { commands: Command[]; unstamped: Oid[] };
+    if (k === 0) current = guard(pass, stamps);
+    else {
+      // Only assets whose previous command applied go on, stamped afresh.
+      const eligible = pass.filter((p) => applied.has(perAsset(p)!.oid));
+      current = guard(eligible, await stampsOf(transport, eligible.map((p) => perAsset(p)!.oid)));
+    }
+    const commands = current.commands;
+    unstamped.push(...current.unstamped);
+    if (!commands.length) break;
+    const offset = sent.length;
+    let done: assetApi.Outcome<Row>;
+    try {
+      const creates = commands.some((c) => "AssetType" in bodyOf(c));
+      done = assetApi.outcomeOf(await assetApi.send<Row>(transport, commands, { ...options, idempotent: !creates }));
+    } catch (error) {
+      // Nothing applied yet: the error is the whole story, as for a single send.
+      if (k === 0) throw error;
+      throw new GuardedPassError(error, outcome, sent, k);
+    }
+    sent.push(...commands);
+    assetApi.mergeOutcome(outcome, done, offset);
+    applied = new Set([...done.modified, ...done.operated].map(momentless));
+  }
+  return { outcome, sent, unstamped: [...new Set(unstamped)] };
+}
+
 // ---- the whole move --------------------------------------------------------------
 
 export interface GuardedResult<Row extends Asset = Asset> {
@@ -169,9 +243,7 @@ export async function sendGuarded<Row extends Asset = Asset>(transport: Transpor
   const ideas = touched.filter((oid) => UNGUARDABLE_TYPES.includes(typeOfOid(oid)));
   if (ideas.length) throw new UnguardableError(ideas.map((oid) => ({ index: -1, reason: `${oid}: ${typeOfOid(oid)} has no ChangeDate` })));
   const stamps = await stampsOf(transport, touched);
-  const { commands: sent, unstamped } = guard(projected, stamps);
-  const creates = sent.some((c) => "AssetType" in bodyOf(c));
-  const outcome = assetApi.outcomeOf(await assetApi.send<Row>(transport, sent, { ...options, idempotent: !creates }));
+  const { outcome, sent, unstamped } = await sendPasses<Row>(transport, projected, stamps, options);
   const done = new Set([...outcome.modified, ...outcome.operated]);
   return { outcome, projected, sent, touched, stamps, skipped: [...new Set([...unstamped, ...touched.filter((oid) => !done.has(oid))])] };
 }
