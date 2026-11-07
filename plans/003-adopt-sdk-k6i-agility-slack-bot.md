@@ -1,9 +1,14 @@
 # Plan 003: k6i-agility-slack-bot adopts `@versionone/agility-sdk` (Track B)
 
-Brief for a session on `digital-ai/k6i-agility-slack-bot`. Start once the
-SDK PR that adds this file has merged into `proposed_type_script_api_version`.
-Source plan: `plans/001-sdk-adoption-campaign.md`, Track B. Work on
-`bolt-migration` (branch `sdk-adoption` from it), never `main`.
+Brief for a session on `digital-ai/k6i-agility-slack-bot`. Source plan:
+`plans/001-sdk-adoption-campaign.md`, Track B. Work on `bolt-migration`,
+never `main`.
+
+**Status (2026-11-07): done.** S1–S4 (digital-ai/k6i-agility-slack-bot#21–#24)
+and B1–B4 (#29, #30, #32, #34) merged; the bot installs
+`@versionone/agility-sdk@1.0.0-alpha.0` from npmjs (#41). Its SDK requests
+(group rows, a shared TypeCache, a registry release, number roots, Template)
+are all answered. The rest of this brief is the record of how.
 
 ## Goal
 
@@ -20,15 +25,15 @@ hand-decoding and rest-1 write path go.
   `findAssets` (rest-1 `find`/`findin`, `page` up to 200),
   `fetchLocalizations` (loc-2), and `queryFor*` helpers built on
   `lib/queries.js`. `test/v1-service.test.js` stubs global `fetch`.
-- **S1–S4 are not done yet**: `jsconfig.json` still says `commonJS`/`es6`;
+- **S1–S4 were not done yet** (then; all merged since): `jsconfig.json` still says `commonJS`/`es6`;
   query bodies have no explicit page; `axios`, `botkit*`, `botbuilder-*` are
   still dependencies and `lib/v1api.js` still exists. These come first.
 
 ## Dependency
 
-No registry package yet. Pin a commit:
-`"@versionone/agility-sdk": "github:versionone/VersionOne.SDK.JavaScript#<merge sha>"`.
-The SDK's `prepare` script builds `dist` on install. The bot is ESM, so
+`"@versionone/agility-sdk": "1.0.0-alpha.0"` from npmjs, an exact pin
+(until the first publish it was a git commit, which needed `git` in the
+image and wrote a `git+ssh` URL into the lockfile). The bot is ESM, so
 `import { AgilityApiClient } from "@versionone/agility-sdk"`.
 
 ## Steps, one PR each

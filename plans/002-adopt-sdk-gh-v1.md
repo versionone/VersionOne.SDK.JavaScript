@@ -1,8 +1,12 @@
 # Plan 002: gh-v1 adopts `@versionone/agility-sdk` (Track C)
 
-Brief for a session on `versionone/gh-v1`. Start once the SDK PR that adds
-this file has merged into `proposed_type_script_api_version`. Source plan:
+Brief for a session on `versionone/gh-v1`. Source plan:
 `plans/001-sdk-adoption-campaign.md`, Track C.
+
+**Status (2026-11-07): done.** C1–C4 merged (versionone/gh-v1#33, #35–#38);
+gh-v1 then moved to the renamed, published package (#39, #40). gh-v1
+reaches Agility only through the vendored SDK, apart from the `gh v1 api`
+passthrough. The rest of this brief is the record of how.
 
 ## Goal
 
@@ -33,15 +37,18 @@ runtime dependency, but its code ships inside the repo:
 
 - `vendor/versionone-sdk/` holds the SDK's ESM build (`index.js`, which
   imports nothing) and types (`index.d.ts`), plus `SOURCE.json` naming
-  the commit they came from. `lib/api.js` imports from there.
-- `package.json` lists `@versionone/agility-sdk` under `devDependencies`, pinned
-  to a full commit, so the lockfile records exactly what was vendored.
+  the version they came from and each file's SHA-256. `lib/api.js`
+  imports from there.
+- `package.json` lists `@versionone/agility-sdk` under `devDependencies`,
+  pinned to an exact published version (`1.0.0-alpha.0` today; before the
+  first publish it was a git commit), so the lockfile records exactly what
+  was vendored.
 - To move the pin: change it in `package.json`, then
   `npm install && npm run vendor:sdk`, and commit the copy.
   `test/vendor.test.js` fails if the copy, `SOURCE.json` and the pin
   disagree.
-- Publishing the SDK to a registry (plan 001, *Decisions needed*) changes
-  only where the pin points; the copy stays.
+- The SDK is on npmjs (plan 001, A6); that changed only where the pin
+  points. The copy stays, because gh never runs npm.
 
 ## Steps, one PR each, on branch `sdk-adoption`
 
