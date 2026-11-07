@@ -475,7 +475,7 @@ ESM" here means finishing the edges:
 - [x] A4 slack-shaped reads — `queryV1` wire module, `client.queryV1.query`/`queries` (read-only, idempotent, same row translation as api/asset)
 - [x] A5 services port from gh-v1 — `resolve` (`client.resolve.numbers`/`.ref`), `guard` (`client.assets.sendGuarded`), `batch` (`client.batch.run`/`.reversible`)
 - [x] A7 attachments and embedded images — `attachment` wire module (`attachment.img` bytes, `EmbeddedImage.mvc/Upload`, URL helpers, browser-safe Base64), `client.attachments` (list/info/get/add/put/remove/url; inline up to `INLINE_LIMIT`, two-step above) and `client.embeddedImages` (upload/url/normalize)
-- [ ] A6 CI + prerelease publish — CI, git-SHA installs, the dependency audit and the publish workflow (`.github/workflows/publish.yml`: on a `v*` tag, verify, dist-tag from the prerelease id, `npm publish --provenance`) done; version `1.0.0-alpha.0`. License decided 2026-11-07: MIT (`LICENSE`; `master`'s BSD 3-clause `LICENSE.md` stays with the 2.x code). Left: the first publish by hand and the trusted-publisher link on npmjs
+- [x] A6 CI + prerelease publish — `@versionone/agility-sdk@1.0.0-alpha.0` on npmjs (2026-11-07; dist-tags `alpha` and, as npm sets on a first publish, `latest`), MIT. CI on Linux and Windows; `.github/workflows/publish.yml` publishes later versions from a `v*` tag once trusted publishing is linked on npmjs. The first version was published by hand, so it has no provenance
 - [x] G0–G3 gh-v1 migrations — versionone/gh-v1#29–#32
 - [x] S1–S4 slack-bot migrations — digital-ai/k6i-agility-slack-bot#21–#24 (on `bolt-migration`)
 - [x] B1 slack bot client swap — digital-ai/k6i-agility-slack-bot#29

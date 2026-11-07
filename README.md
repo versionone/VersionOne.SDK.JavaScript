@@ -76,7 +76,9 @@ git tag v1.0.0-alpha.1 && git push origin v1.0.0-alpha.1
 ```
 
 Authentication is npm trusted publishing: on npmjs, the package's settings
-link this repository and `publish.yml`, and no token is stored. A package
+link this repository, `publish.yml` and the GitHub environment `npm`, and no
+token is stored. The `npm` environment (repository settings) requires an
+approval, so a pushed tag waits for a maintainer before it publishes. A package
 must exist before it can be linked, so the very first version is published
 once by hand by an `@versionone` org member (`npm publish --access public
 --tag alpha` from a clean checkout of the tagged commit), then linked.

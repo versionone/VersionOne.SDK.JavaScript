@@ -7,11 +7,11 @@ name: Publish
 # (alpha, beta, rc), so `npm install @versionone/agility-sdk` never picks it
 # up; only a plain version moves `latest`.
 #
-# Authentication is npm trusted publishing (OIDC): link this repository and
-# this workflow file on the package's npmjs settings page, and no token is
-# stored anywhere. The package must exist before it can be linked, so the
-# very first version may need one manual publish (see the README's
-# "Releasing" section); an NPM_TOKEN secret, if set, is used as a fallback.
+# Authentication is npm trusted publishing (OIDC): on the package's npmjs
+# settings, link organization versionone, repository VersionOne.SDK.JavaScript,
+# workflow publish.yml and environment npm; no token is stored anywhere.
+# (1.0.0-alpha.0 was published by hand, as a package must exist before it
+# can be linked.) An NPM_TOKEN secret, if set, is used as a fallback.
 
 on:
   push:
@@ -28,6 +28,10 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # The GitHub environment "npm" holds the approval rule (a required
+    # reviewer, v* tags only), and npm's trusted-publisher link names it, so
+    # only a run in this environment can publish.
+    environment: npm
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
