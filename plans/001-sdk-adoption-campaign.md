@@ -365,5 +365,7 @@ ESM" here means finishing the edges:
 - [ ] B1–B4 slack bot SDK swap — brief: `plans/003-adopt-sdk-k6i-agility-slack-bot.md` (unblocked: S2, S3 and SDK #42 merged)
 - [x] C0 gh-v1 surveyed (2026-11-04)
 - [x] C1 gh-v1 seam swap — versionone/gh-v1#33, with the vendored SDK's hashes, CI and Node 22 floor in #35
-- [ ] C2–C4 gh-v1 — brief: `plans/002-adopt-sdk-gh-v1.md` (C2–C3 in progress in a gh-v1 session)
+- [x] C2 gh-v1 rows translated through the schema; `isTrue`/`oidOf` gone — versionone/gh-v1#36
+- [x] C3 gh-v1 resolve and batch on `client.resolve`/`client.batch` — versionone/gh-v1#37 (with the SDK fixes from #43)
+- [ ] C4 gh-v1 passthrough — `raw`/`blob` stay CLI-local unless an `attachment` wire module is built for rooms
 - [ ] D1–D4 agility-rooms
