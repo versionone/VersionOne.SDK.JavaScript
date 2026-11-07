@@ -8,7 +8,7 @@ export type { RequestBody, RequestOptions, ResponseType, Transport } from "./cor
 
 // The model: what things are.
 export type { Asset, AttributeValue, CustomAttributes, DateString, Oid, Ref, AssetStateValue } from "./types/asset";
-export { ASSET_STATE_CODES } from "./types/asset";
+export { ASSET_STATE_CODES, assetStateOf } from "./types/asset";
 export { isOidToken, momentless, parseOid, toOid, typeOfOid } from "./types/oid";
 export type { OidParts } from "./types/oid";
 export type { AssetType, AttributeDefinition, AttributeLookup, AttributeType, AttributeTokenRef, AssetTypeToken, Metamodel } from "./types/metamodel";

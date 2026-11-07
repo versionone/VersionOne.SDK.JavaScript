@@ -18,7 +18,8 @@
  * matching on the server is case-insensitive.
  */
 import type { Transport } from "../core/transport";
-import type { Asset, AssetStateValue, Oid } from "../types/asset";
+import { assetStateOf, type Asset, type AssetStateValue, type Oid } from "../types/asset";
+import type { TypeCache } from "./schema";
 import type { AssetTypeToken } from "../types/metamodel";
 import { isOidToken, momentless, typeOfOid } from "../types/oid";
 import * as assetApi from "../wire/assetApi";
@@ -76,15 +77,25 @@ export interface Resolution {
   missing: string[];
 }
 
-// Roots an instance turned out not to have, per transport: asked once, then left out.
+// Roots an instance turned out not to have, asked once, then left out. With a
+// TypeCache (the client passes its schema's) that is the cache's own record of
+// types the instance lacks (null), so clients that share a cache share it;
+// without one, it is remembered per transport.
 const absentRoots = new WeakMap<Transport, Set<string>>();
+
+interface Absent { has(root: string): boolean; add(root: string): void }
+const absentFor = (transport: Transport, types?: TypeCache): Absent => {
+  if (types) return { has: (root) => types.types.get(root) === null, add: (root) => { types.types.set(root, null); } };
+  const set = absentRoots.get(transport) ?? new Set<string>();
+  absentRoots.set(transport, set);
+  return set;
+};
 const UNKNOWN_TYPE = /^Unknown AssetType: (\S+)/;
 
-type Row = Asset & { Name?: string | null; Number?: string; AssetState?: AssetStateValue | null };
+type Row = Asset & { Name?: string | null; Number?: string; AssetState?: unknown };
 
-async function askRoots(transport: Transport, numbers: string[]): Promise<Row[]> {
-  const absent = absentRoots.get(transport) ?? new Set<string>();
-  absentRoots.set(transport, absent);
+async function askRoots(transport: Transport, numbers: string[], types?: TypeCache): Promise<Row[]> {
+  const absent = absentFor(transport, types);
   for (let attempt = 0; ; attempt += 1) {
     const roots = Object.keys(NUMBER_ROOTS).filter((r) => !absent.has(r));
     try {
@@ -108,7 +119,7 @@ async function askRoots(transport: Transport, numbers: string[]): Promise<Row[]>
 }
 
 /** Resolve asset numbers in one request per hundred numbers. Not found is not an error: it is `missing`. */
-export async function resolveNumbers(transport: Transport, numbers: readonly string[]): Promise<Resolution> {
+export async function resolveNumbers(transport: Transport, numbers: readonly string[], options: { types?: TypeCache } = {}): Promise<Resolution> {
   const firsts = new Map<string, string>();
   for (const n of numbers) if (!firsts.has(n.trim().toUpperCase())) firsts.set(n.trim().toUpperCase(), n.trim());
   const asked = [...firsts.values()];
@@ -116,10 +127,10 @@ export async function resolveNumbers(transport: Transport, numbers: readonly str
   if (invalid.length) throw new TypeError(`not asset numbers (expected a prefix and digits, S-1234): ${invalid.join(", ")}`);
   const byNumber = new Map<string, ResolvedAsset>();
   for (let i = 0; i < asked.length; i += CHUNK) {
-    for (const r of await askRoots(transport, asked.slice(i, i + CHUNK))) {
+    for (const r of await askRoots(transport, asked.slice(i, i + CHUNK), options.types)) {
       if (!r.Number || byNumber.has(r.Number.toUpperCase())) continue;
       const oid = momentless(r._oid);
-      byNumber.set(r.Number.toUpperCase(), { number: r.Number, oid, type: typeOfOid(oid), name: r.Name ?? null, assetState: r.AssetState ?? null });
+      byNumber.set(r.Number.toUpperCase(), { number: r.Number, oid, type: typeOfOid(oid), name: r.Name ?? null, assetState: assetStateOf(r.AssetState) as AssetStateValue | null });
     }
   }
   return {
@@ -133,9 +144,9 @@ export async function resolveNumbers(transport: Transport, numbers: readonly str
  * used as is, no request, so `number` and `name` are null) or a number
  * (resolved; null when no root knows it). Anything else is a TypeError.
  */
-export async function resolveRef(transport: Transport, spec: string): Promise<ResolvedAsset | null> {
+export async function resolveRef(transport: Transport, spec: string, options: { types?: TypeCache } = {}): Promise<ResolvedAsset | null> {
   const text = spec.trim();
   if (isOidToken(text)) { const oid = momentless(text); return { number: null, oid, type: typeOfOid(oid), name: null, assetState: null }; }
-  if (isAssetNumber(text)) return (await resolveNumbers(transport, [text])).found[0] ?? null;
+  if (isAssetNumber(text)) return (await resolveNumbers(transport, [text], options)).found[0] ?? null;
   throw new TypeError(`"${spec}" is neither an asset number (S-1234) nor an OID token (Story:1234)`);
 }

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { RequestOptions, Transport } from "../../src/core/transport";
 import { CHUNK, NUMBER_ROOTS, isAssetNumber, resolveNumbers, resolveRef } from "../../src/services/resolve";
+import { TypeCache } from "../../src/services/schema";
 import type { MetamodelDocument } from "../../src/wire/meta";
 
 const envelope = (results: unknown[][], failures: unknown[] = []) => ({
@@ -68,6 +69,22 @@ describe("resolve", () => {
     // Remembered for this transport: the next call does not ask Okr at all.
     await resolveNumbers(t, ["S-2"]);
     expect((t.calls[2]!.body as Sent).map((q) => q.from)).toEqual(roots);
+  });
+
+  it("with a TypeCache, an absent root is the cache's record (null), so a new client and transport sharing the cache never asks it again", async () => {
+    const roots = ROOTS.filter((r) => r !== "Okr");
+    const missingOkr = envelope(roots.map(() => []), [{ "@x$auto-aliased": { from: "Okr" }, error: { message: "Unknown AssetType: Okr", sourceCommandIndex: ROOTS.indexOf("Okr") } }]);
+    const types = new TypeCache();
+    const alice = fakeTransport(missingOkr, answer({}, roots));
+    await resolveNumbers(alice, ["S-1"], { types });
+    expect(types.types.get("Okr")).toBeNull();
+    // Bob: another user, another transport, the same instance.
+    const bob = fakeTransport(answer({ Workitem: [{ _oid: "Task:1096", Name: "Template task", Number: "TK-01001", AssetState: "200" }] }, roots));
+    const found = await resolveNumbers(bob, ["TK-01001"], { types });
+    expect(bob.calls).toHaveLength(1);
+    expect((bob.calls[0]!.body as Sent).map((q) => q.from)).toEqual(roots);
+    // A template's state comes back as its code; it reads by name.
+    expect(found.found[0]!.assetState).toBe("Template");
   });
 
   it("any other failure is the caller's to see", async () => {

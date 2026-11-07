@@ -99,8 +99,8 @@ export class AgilityApiClient {
    * as is.
    */
   readonly resolve = {
-    numbers: (numbers: readonly string[]) => resolve.resolveNumbers(this.transport, numbers),
-    ref: (spec: string) => resolve.resolveRef(this.transport, spec)
+    numbers: (numbers: readonly string[]) => resolve.resolveNumbers(this.transport, numbers, { types: this.schema.cache }),
+    ref: (spec: string) => resolve.resolveRef(this.transport, spec, { types: this.schema.cache })
   };
 
   /**

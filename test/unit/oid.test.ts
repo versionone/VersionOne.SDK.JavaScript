@@ -25,3 +25,14 @@ describe("oid", () => {
     expect(momentless("@story")).toBe("@story");
   });
 });
+
+import { assetStateOf } from "../../src/types/asset";
+describe("assetStateOf", () => {
+  it("reads a state by name however the endpoint spelled it: a name as is, a code (string or number) as its name, an unknown code as sent", () => {
+    expect(assetStateOf("Closed")).toBe("Closed");
+    expect(assetStateOf("200")).toBe("Template");
+    expect(assetStateOf(128)).toBe("Closed");
+    expect(assetStateOf("199")).toBe("199");
+    expect(assetStateOf(null)).toBeNull();
+  });
+});
