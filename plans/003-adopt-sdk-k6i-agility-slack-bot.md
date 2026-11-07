@@ -25,7 +25,7 @@ hand-decoding and rest-1 write path go.
   `findAssets` (rest-1 `find`/`findin`, `page` up to 200),
   `fetchLocalizations` (loc-2), and `queryFor*` helpers built on
   `lib/queries.js`. `test/v1-service.test.js` stubs global `fetch`.
-- **S1–S4 are not done yet**: `jsconfig.json` still says `commonJS`/`es6`;
+- **S1–S4 were not done yet** (then; all merged since): `jsconfig.json` still says `commonJS`/`es6`;
   query bodies have no explicit page; `axios`, `botkit*`, `botbuilder-*` are
   still dependencies and `lib/v1api.js` still exists. These come first.
 
