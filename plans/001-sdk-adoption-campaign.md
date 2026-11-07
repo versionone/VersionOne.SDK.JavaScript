@@ -484,5 +484,5 @@ ESM" here means finishing the edges:
 - [x] C1 gh-v1 seam swap — versionone/gh-v1#33, with the vendored SDK's hashes, CI and Node 22 floor in #35
 - [x] C2 gh-v1 rows translated through the schema; `isTrue`/`oidOf` gone — versionone/gh-v1#36
 - [x] C3 gh-v1 resolve and batch on `client.resolve`/`client.batch` — versionone/gh-v1#37 (with the SDK fixes from #43)
-- [ ] C4 gh-v1 attachments on `client.attachments` (unblocked: A7 done); `raw` stays CLI-local
+- [x] C4 gh-v1 `gh v1 attach` on `client.attachments`, `blob` removed — versionone/gh-v1#38 (re-vendored at `d51fb16`; small files now upload inline); `raw` stays CLI-local
 - [ ] D1–D4 agility-rooms
