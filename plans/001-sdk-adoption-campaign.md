@@ -468,7 +468,8 @@ ESM" here means finishing the edges:
 - [x] S1–S4 slack-bot migrations — digital-ai/k6i-agility-slack-bot#21–#24 (on `bolt-migration`)
 - [x] B1 slack bot client swap — digital-ai/k6i-agility-slack-bot#29
 - [x] B2 slack bot decodes deleted; reads through `client.queryV1` with a schema — digital-ai/k6i-agility-slack-bot#30
-- [ ] B3–B4 slack bot writes on api/asset, number resolution — brief: `docs/handoffs/slack-bot-sdk-b3-b4.md` in the bot repo
+- [x] B3 slack bot writes on `client.assets.send` (rest-1 writes gone) — digital-ai/k6i-agility-slack-bot#32
+- [x] B4 slack bot number lookups on `client.resolve.numbers` — digital-ai/k6i-agility-slack-bot#34 (SDK #44 adopted in #33: pin `785b4c9`, a `TypeCache` per instance)
 - [x] C0 gh-v1 surveyed (2026-11-04)
 - [x] C1 gh-v1 seam swap — versionone/gh-v1#33, with the vendored SDK's hashes, CI and Node 22 floor in #35
 - [x] C2 gh-v1 rows translated through the schema; `isTrue`/`oidOf` gone — versionone/gh-v1#36
