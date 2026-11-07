@@ -63,6 +63,24 @@ API reference: https://docs.digital.ai/agility-api/
 
 No registry package yet. Pin a commit: `npm install github:versionone/VersionOne.SDK.JavaScript#<sha>` builds `dist` on install (the `prepare` script). CI also uploads an `npm pack` tarball on every run.
 
+## Releasing
+
+Versions are published to npmjs by `.github/workflows/publish.yml` when a
+tag `v<version>` is pushed; the tag must equal `package.json`'s version. A
+prerelease (`1.0.0-alpha.0`, `-beta.N`, `-rc.N`) goes out on its own
+dist-tag (`alpha`, `beta`, `rc`), so `latest` is never a prerelease.
+
+```bash
+npm version 1.0.0-alpha.1 --no-git-tag-version   # bump, commit, merge
+git tag v1.0.0-alpha.1 && git push origin v1.0.0-alpha.1
+```
+
+Authentication is npm trusted publishing: on npmjs, the package's settings
+link this repository and `publish.yml`, and no token is stored. A package
+must exist before it can be linked, so the very first version is published
+once by hand by an `@versionone` org member (`npm publish --access public
+--tag alpha` from a clean checkout of the tagged commit), then linked.
+
 ## Before PR
 
 - Run `npm run verify` to validate typecheck, build, and tests before opening a pull request.
