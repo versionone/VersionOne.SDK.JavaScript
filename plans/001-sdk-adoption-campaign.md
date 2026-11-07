@@ -224,10 +224,11 @@ moves.
   snapshot, reverseOf — a receipt as data; writing it to disk stays in
   gh-v1). gh-v1's tests for these move with them, rewritten against recorded
   responses.
-- **A6 CI and packaging** — GitHub Actions running `npm run verify` on PRs;
-  publish prereleases (`0.x`, `next` tag) to GitHub Packages under the
-  `@versionone` scope (or npmjs — decision below). Until then consumers pin a
-  git SHA or a tarball from `npm pack`.
+- **A6 CI and packaging** — done: CI runs `npm run verify` on Linux (Node
+  20/22/24) and Windows (Node 24); `@versionone/agility-sdk` is on npmjs
+  (`1.0.0-alpha.0`, `alpha` dist-tag); `publish.yml` publishes later
+  versions from a `v*` tag through npm trusted publishing, gated by the
+  GitHub environment `npm` (an approval). Consumers install from npmjs.
 - **A7 Attachments and embedded images** — gap 5's `attachment`/
   `EmbeddedImage`, as part of the asset-update abstraction, not a side
   channel. Two consumers to serve: gh-v1's `gh v1 attach` (list, get, add,
@@ -361,13 +362,17 @@ Strangler, starting below the call sites so nothing user-visible moves:
   delegates to rooms' current axios instance (keeps the SSO refresh
   interceptor and snackbar). Point `bulkApiService.tsx` at
   `client.assets.*`. Rows arrive translated, so `getApiResults`' `IsReadOnly`
-  patch goes. This is the whole first PR. Needs A2 for parity of the
-  command-failure snackbar.
+  patch goes. This is the whole first PR. (A2 is done:
+  `CommandFailureError` carries what the snackbar needs.)
 - **D2 Domain by domain.** Start with `src/domains/ai` (it already has
-  adapters and architecture tests), then retire string-boolean decodes per
-  feature (48 today). Jest + Playwright gate each PR.
+  adapters, architecture tests, and the injected `IHttpClient` /
+  `FakeHttpClient` seam), then retire string-boolean decodes per feature
+  (46 at the 2026-11-07 survey). Attachments and embedded images move to
+  `client.attachments` / `client.embeddedImages` (A7). Jest + Playwright
+  gate each PR.
 - **D3 Native transport.** Swap the axios-backed Transport for
-  `createFetchTransport` with `credentials` + `onUnauthorized` (needs A1).
+  `createFetchTransport` with `credentials` + `onUnauthorized` (A1 is
+  done).
 - **D4 Schema convergence.** Evaluate replacing parts of
   `src/metaAssetStore/` field knowledge with the SDK `schema` service.
 
@@ -419,11 +424,11 @@ ESM" here means finishing the edges:
   captured from the local dev instance (spec 000 §2a: fakes send what the
   server sends — api/asset spells `"True"`, not `true`).
 
-**agility-rooms** (slow; no handoff yet)
+**agility-rooms** (slow; brief: `plans/004-adopt-sdk-agility-rooms.md`)
 
-- **R1** Narrow the axios surface: route the 67 axios importers through
-  `utils/bulkApiService.tsx` and a small set of helpers, so D1 swaps one
-  module. Start when Track A2 lands; write the handoff then.
+- **R1** Narrow the axios surface: route the axios importers (88 production
+  files at the 2026-11-07 survey) through `utils/bulkApiService.tsx` and a
+  small set of helpers, so D1 swaps one module.
 
 ## Operating model for the campaign
 
@@ -487,4 +492,4 @@ ESM" here means finishing the edges:
 - [x] C2 gh-v1 rows translated through the schema; `isTrue`/`oidOf` gone — versionone/gh-v1#36
 - [x] C3 gh-v1 resolve and batch on `client.resolve`/`client.batch` — versionone/gh-v1#37 (with the SDK fixes from #43)
 - [x] C4 gh-v1 `gh v1 attach` on `client.attachments`, `blob` removed — versionone/gh-v1#38 (re-vendored at `d51fb16`; small files now upload inline); `raw` stays CLI-local
-- [ ] D1–D4 agility-rooms
+- [ ] D1–D4 agility-rooms — brief: `plans/004-adopt-sdk-agility-rooms.md` (first: decide rooms' rest-1 writes and Copy)
