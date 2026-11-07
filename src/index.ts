@@ -15,7 +15,8 @@ export type { AssetType, AttributeDefinition, AttributeLookup, AttributeType, At
 export type * from "./types/assets/index";
 
 // The wire layer: one module per endpoint.
-export { assetApi, rest1, meta, loc2, queryV1 } from "./wire";
+export { assetApi, rest1, meta, loc2, queryV1, attachment } from "./wire";
+export type { Bytes, EmbeddedImage } from "./wire/attachment";
 export * as select from "./wire/select";
 export type { AssetApiResponse, Command, CommandBody, CommandFailureDetail, Outcome, CommandValue, CreateBody, ExecuteBody, QueryBody, UpdateBody, ReadOptions, RowContext, SendOptions } from "./wire/assetApi";
 export { CommandFailureError } from "./wire/assetApi";
@@ -24,6 +25,8 @@ export type { Localizations, LocalizeOptions } from "./wire/loc2";
 
 // Services: what to do.
 export { Schema, TypeCache } from "./services/schema";
+export { AttachmentUploadError, INLINE_LIMIT } from "./services/attachments";
+export type { AddOptions as AttachmentAddOptions, AttachmentInfo } from "./services/attachments";
 export { CHUNK as RESOLVE_CHUNK, NUMBER_ROOTS, isAssetNumber, resolveNumbers, resolveRef } from "./services/resolve";
 export type { Resolution, ResolvedAsset } from "./services/resolve";
 export { UNGUARDABLE_TYPES, UnguardableError, guard, sendGuarded, stampsOf, touchedBy, unguardable } from "./services/guard";

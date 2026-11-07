@@ -1,6 +1,7 @@
 import type { ClientConfig } from "./core/clientConfig";
 import { createFetchTransport } from "./core/fetchTransport";
 import type { Transport } from "./core/transport";
+import * as attachments from "./services/attachments";
 import * as batch from "./services/batch";
 import * as guard from "./services/guard";
 import * as resolve from "./services/resolve";
@@ -8,6 +9,7 @@ import { Schema, type TypeCache } from "./services/schema";
 import type { Asset } from "./types/asset";
 import type { Metamodel } from "./types/metamodel";
 import * as assetApi from "./wire/assetApi";
+import * as attachment from "./wire/attachment";
 import * as loc2 from "./wire/loc2";
 import * as meta from "./wire/meta";
 import * as queryV1 from "./wire/queryV1";
@@ -112,6 +114,33 @@ export class AgilityApiClient {
   readonly batch = {
     run: (commands: assetApi.Command[], options?: batch.BatchOptions) => batch.runBatch(this.transport, this.schema, commands, options),
     reversible: (receipt: Pick<batch.Receipt, "reverse" | "after">, options?: { force?: boolean }) => batch.reversible(this.transport, receipt, options)
+  };
+
+  /**
+   * The files attached to assets: metadata on Attachment assets, bytes
+   * through attachment.img. `add` sends a small file inline (one request)
+   * and a large one in two steps; `url` is where a browser opens one.
+   */
+  readonly attachments = {
+    list: (asset: string, options?: { page?: { size: number; start: number } }) => attachments.list(this.transport, asset, options),
+    info: (id: string | number) => attachments.info(this.transport, id),
+    get: (id: string | number) => attachments.get(this.transport, id),
+    add: (asset: string, data: attachment.Bytes, options: attachments.AddOptions) => attachments.add(this.transport, asset, data, options),
+    put: (id: string | number, data: attachment.Bytes, contentType?: string) => attachments.put(this.transport, id, data, contentType),
+    remove: (id: string | number) => attachments.remove(this.transport, id),
+    url: (id: string | number) => attachment.attachmentUrl(this.config.baseUrl, id)
+  };
+
+  /**
+   * Images embedded in an asset's rich text (Description and other long
+   * text). `upload` returns the URL to put in an <img src>; `normalize`
+   * rewrites every embedded.img reference in some HTML to this instance's
+   * absolute URL, as Agility's own editor stores it. They cannot be deleted.
+   */
+  readonly embeddedImages = {
+    upload: (asset: string, data: attachment.Bytes, options?: { filename?: string; contentType?: string }) => attachment.uploadEmbeddedImage(this.transport, asset, data, options),
+    url: (id: string | number) => attachment.embeddedImageUrl(this.config.baseUrl, id),
+    normalize: (html: string) => attachment.normalizeEmbeddedImageUrls(html, this.config.baseUrl)
   };
 
   /** rest-1.v1: bounded reads, one asset, history. */
