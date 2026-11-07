@@ -65,4 +65,18 @@ describeInstance("batch (live)", () => {
     expect(commands).toEqual([]);
     expect((await client.batch.reversible(receipt, { force: true })).commands).toEqual([{ from: b, update: { Estimate: null } }]);
   });
+  it("a batch of only an aliased execute, sent with guard off, really runs, and its receipt names the asset (gh-v1 apply's case)", async () => {
+    // Its own Story, so the round trip leaves a and b alone.
+    const res = await assetApi.send(t, [{ AssetType: "Story", Name: fixtureName("batch aliased"), Scope: { _oid: "Scope:0" } }], { throwOnFailure: true });
+    const story = assetApi.momentless(res.assetsCreated.oidTokens[0]!);
+    created.push(story);
+    const receipt = await client.batch.run([{ "@close": { from: story, execute: "QuickClose" } }], { guard: false });
+    expect(receipt.sent).toBe(true);
+    expect(receipt.outcome!.failures).toEqual([]);
+    expect(receipt.described.deferred).toEqual([{ index: 0, alias: "@close", from: story, kind: "execute" }]);
+    expect(receipt.touched).toEqual([expect.objectContaining({ oid: story, name: expect.stringContaining("batch aliased") })]);
+    expect(receipt.after[story]).toMatch(/^\d{4}-/);
+    const [row] = await assetApi.query<{ _oid: string; AssetState: string }>(t, { from: story, select: ["AssetState"], page: { size: 1, start: 0 } });
+    expect(row!.AssetState).toBe("Closed");
+  });
 });

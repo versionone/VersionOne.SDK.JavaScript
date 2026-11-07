@@ -31,7 +31,7 @@ export interface RetrospectiveTopic extends Asset {
   readonly Key?: string | null; // read-only
   readonly Moment?: string | null; // read-only
   readonly Now?: Ref<RetrospectiveTopic> | null; // read-only
-  Order?: string | null;
+  Order?: number | null;
   readonly Prior?: Ref<RetrospectiveTopic> | null; // read-only
   readonly RetireComment?: string | null; // read-only
   readonly RetireDate?: DateString | null; // read-only

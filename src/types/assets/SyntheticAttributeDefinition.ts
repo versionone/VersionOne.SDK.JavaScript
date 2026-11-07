@@ -11,5 +11,5 @@ export interface SyntheticAttributeDefinition extends Asset {
   readonly Key?: string | null; // read-only
   readonly Moment?: string | null; // read-only
   readonly Now?: Ref<SyntheticAttributeDefinition> | null; // read-only
-  Order?: string | null;
+  Order?: number | null;
 }

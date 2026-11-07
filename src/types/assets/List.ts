@@ -35,7 +35,7 @@ export interface List extends Asset {
   readonly Moment?: string | null; // read-only
   Name: string; // required
   readonly Now?: Ref<List> | null; // read-only
-  Order?: string | null;
+  Order?: number | null;
   readonly Prior?: Ref<List> | null; // read-only
   readonly RetireComment?: string | null; // read-only
   readonly RetireDate?: DateString | null; // read-only

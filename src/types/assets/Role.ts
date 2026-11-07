@@ -26,7 +26,7 @@ export interface Role extends Asset {
   readonly Moment?: string | null; // read-only
   readonly Name?: string | null; // read-only
   readonly Now?: Ref<Role> | null; // read-only
-  Order?: string | null;
+  Order?: number | null;
   readonly Prior?: Ref<Role> | null; // read-only
   readonly PrivilegesMask?: number | null; // read-only
   readonly RetireComment?: string | null; // read-only

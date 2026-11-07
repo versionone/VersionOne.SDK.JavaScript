@@ -10,5 +10,5 @@ export interface BusinessRule extends Asset {
   readonly Key?: string | null; // read-only
   readonly Moment?: string | null; // read-only
   readonly Now?: Ref<BusinessRule> | null; // read-only
-  Order?: string | null;
+  Order?: number | null;
 }

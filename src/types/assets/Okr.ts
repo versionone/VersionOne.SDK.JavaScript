@@ -19,5 +19,5 @@ export interface Okr extends BaseAsset {
   readonly Moment?: string | null; // read-only
   readonly Now?: Ref<Okr> | null; // read-only
   readonly Number?: string | null; // read-only
-  Order?: string | null;
+  Order?: number | null;
 }

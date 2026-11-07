@@ -43,6 +43,15 @@ const liveRow = {
 const emptyRow = { _oid: "Story:2356", Name: "Assign help tickets to Tags", Estimate: null, IsReadOnly: "False", Status: [], Super: [], Scope: { _oid: "Scope:0" }, Owners: [], "Owners.Name": [], "Owners.@Count": "0", Custom_Flag: "True", Unknown: "x" };
 
 describe("translate: a row into the model, by schema", () => {
+  it("an unset single relation, which the endpoint sends as { _oid: \"NULL\" }, is null — with a schema and without (seen live on TeamRoom.Team, 2026-11-06)", () => {
+    const wire = { _oid: "TeamRoom:17033", Name: "Team Room1", Team: { _oid: "NULL" } };
+    expect(fromWireRow(wire, { lookup: schema, type: "TeamRoom" })).toEqual({ _oid: "TeamRoom:17033", Name: "Team Room1", Team: null });
+    expect(fromWireRow(wire)).toEqual({ _oid: "TeamRoom:17033", Name: "Team Room1", Team: null });
+    // A set one is still a Ref; a multi-value relation never carries a NULL entry.
+    expect((fromWireRow({ _oid: "TeamRoom:57394", Team: { _oid: "Team:4094" } }, { lookup: schema, type: "TeamRoom" }) as unknown as Record<string, unknown>).Team).toEqual({ _oid: "Team:4094" });
+    expect((fromWireRow({ _oid: "Story:1", Owners: [{ _oid: "NULL" }, { _oid: "Member:20" }] }, { lookup: schema, type: "Story" }) as unknown as Record<string, unknown>).Owners).toEqual([{ _oid: "Member:20" }]);
+  });
+
   it("numbers become numbers, booleans booleans, a sub-selected single relation one Ref, a bare one stays a Ref, aggregates numbers, dates and states as sent", () => {
     const row = fromWireRow<Story>(liveRow, { lookup: schema, type: "Story" });
     expect(row._oid).toBe("Story:1226");
@@ -53,8 +62,8 @@ describe("translate: a row into the model, by schema", () => {
     expect(row.IsClosed).toBe(true);
     expect(row.AssetState).toBe("Closed");
     expect(row.CreateDate).toBe("2026-06-27T12:28:29.137");
-    expect(row.Order).toBe("-1989738965"); // Rank is opaque: a string in the model
-    expect(row.Status).toEqual({ _oid: "StoryStatus:2191", Name: "Accepted", Order: "3" }); // [x] -> x; the nested row is translated by StoryStatus (Order is Rank there too)
+    expect(row.Order).toBe(-1989738965); // Rank: a 32-bit integer sent as a string, a number in the model
+    expect(row.Status).toEqual({ _oid: "StoryStatus:2191", Name: "Accepted", Order: 3 }); // [x] -> x; the nested row is translated by StoryStatus (Order is Rank there too)
     expect(row.Super).toEqual({ _oid: "Epic:1185", Name: "Order Entry" });
     expect(row.Scope).toEqual({ _oid: "Scope:1308" });
     expect(row.Owners).toEqual([{ _oid: "Member:1039", Name: "Danny Developer", IsInactive: false }]); // nested rows translated by Member
@@ -125,7 +134,7 @@ describe("translate: through send and the client", () => {
     const [row] = await client.assets.query<Story>({ from: "Story", select: ["Estimate", { from: "Status", select: ["Name"] }], page: { size: 1, start: 0 } });
     expect(t.calls.map((c) => c.path)).toEqual(["/meta.v1/Story", "/meta.v1/StoryStatus", "/api/asset"]);
     expect(row!.Estimate).toBe(5);
-    expect(row!.Status).toEqual({ _oid: "StoryStatus:2191", Name: "Accepted", Order: "3" });
+    expect(row!.Status).toEqual({ _oid: "StoryStatus:2191", Name: "Accepted", Order: 3 });
     // A seeded client fetches no meta at all.
     const seeded = new AgilityApiClient({ baseUrl: "http://x" }, { transport: fakeTransport(envelope([[liveRow]])), metamodel });
     const [again] = await seeded.assets.query<Story>({ from: "Story", select: ["Estimate"], page: { size: 1, start: 0 } });

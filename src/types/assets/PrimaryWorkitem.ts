@@ -43,7 +43,7 @@ export interface PrimaryWorkitem extends Workitem {
   readonly Moment?: string | null; // read-only
   readonly Now?: Ref<PrimaryWorkitem> | null; // read-only
   readonly OpenEstimate?: number | null; // read-only
-  Order?: string | null;
+  Order?: number | null;
   Priority?: Ref<WorkitemPriority> | null;
   Release?: Ref<Release> | null;
   Requests: Ref<Request>[];

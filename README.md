@@ -25,7 +25,7 @@ npm test
   - `queryV1.query` / `queryV1.queries` - reads through query.v1: the same query bodies as `assets.query`, rows translated the same way, but the endpoint is read-only and answers with rows alone, so it is the safe place to explore a query
   - `resolve.numbers` / `resolve.ref` - asset numbers and OID tokens to assets, in one request
   - `assets.sendGuarded` - a batch as a compare-and-set on each asset's ChangeDate; changed assets come back `skipped`
-  - `batch.run` / `batch.reversible` - preview, snapshot, (confirm,) send guarded, and a receipt with a reverse batch
+  - `batch.run` / `batch.reversible` - preview, snapshot, (confirm,) send guarded, and a receipt with a reverse batch. `confirm` sees the touched assets' names; aliased updates/executes are sent as written with `guard: false`; a failure after the send throws `BatchRecordError` carrying the receipt
 - `createFetchTransport` - configurable HTTP transport: `credentials` for same-origin cookie auth, `onUnauthorized` to re-authenticate on a 401 (resends idempotent requests once), and a per-request `signal`; `client.withSignal(signal)` ties a whole client to one
 - `ApiError` - typed API error; `CommandFailureError` - an api/asset batch in which commands failed (`failures` by index, plus the `response`)
 

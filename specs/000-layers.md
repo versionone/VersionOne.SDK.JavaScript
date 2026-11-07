@@ -61,11 +61,13 @@ one, is not decidable from the value: it takes the attribute's definition.
 So the `assetApi` wire module translates a row against an `AttributeLookup`
 (`src/types/metamodel.ts`): each key is a select path resolved hop by hop
 (`src/wire/select.ts` — dotted paths, `:Downcast`, `[filter]`, `@Count`)
-to the attribute it lands on; Numeric and LongInt become numbers, Boolean
-booleans, a single relation one Ref or null, an aggregate a number, and a
+to the attribute it lands on; Numeric, LongInt and Rank become numbers, Boolean
+booleans, a single relation one Ref or null (the endpoint sends an unset
+one as `{ _oid: "NULL" }`), an aggregate a number, and a
 sub-select's rows are translated by their own type. A key the schema does
 not know is left as sent. Without a lookup the row keeps the endpoint's
-spelling, OIDs normalised — never silently guessed.
+spelling, OIDs normalised and a `NULL` relation null — never silently
+guessed.
 
 The lookup is the `schema` service: the instance's types, loaded from
 meta.v1 one type at a time as queries need them (in-flight requests shared,

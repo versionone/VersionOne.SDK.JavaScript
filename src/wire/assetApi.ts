@@ -119,8 +119,9 @@ export interface RowContext { lookup: AttributeLookup; type: AssetTypeToken }
  * A query row as the model carries it. The endpoint spells every scalar as a
  * string ("5", "False") and a single relation selected with a sub-select as
  * a one-element list ([{ _oid }], or [] when unset); with a schema each key
- * is resolved to its attribute and translated — Numeric and LongInt to
- * number, Boolean to boolean, [x] to x and [] to null on a single relation,
+ * is resolved to its attribute and translated — Numeric, LongInt and Rank
+ * to number, Boolean to boolean, [x] to x and [] to null on a single
+ * relation, { _oid: "NULL" } (an unset single relation) to null,
  * an @Count to number, and a sub-select's rows recursively by their own
  * type. Everywhere, OIDs lose their moment. A key the schema cannot resolve
  * is left as sent.
@@ -133,7 +134,15 @@ export function fromWireRow<Row extends Asset = Asset>(row: Record<string, unkno
   }
   return out as Row;
 }
+/**
+ * An unset single relation selected without a sub-select: the endpoint
+ * sends { _oid: "NULL" } (seen live on TeamRoom.Team, 2026-11-06). The
+ * model reads it as null, never as a Ref to an asset called NULL.
+ */
+const isNullRef = (value: unknown): boolean => isRef(value) && value._oid === "NULL";
+
 function fromWireValue(value: unknown): unknown {
+  if (isNullRef(value)) return null;
   if (isRef(value)) return { ...value, _oid: momentless(value._oid) };
   if (Array.isArray(value)) return value.map(fromWireValue);
   return value;
@@ -145,8 +154,8 @@ function translate(value: unknown, resolution: PathResolution, lookup: Attribute
   const definition = resolution.definition!;
   if (definition.AttributeType === "Relation") {
     const context = resolution.valueType ? { lookup, type: resolution.valueType } : undefined;
-    const one = (x: unknown): unknown => (isRef(x) ? fromWireRow(x as Record<string, unknown>, context) : fromWireValue(x));
-    if (resolution.multi) return Array.isArray(value) ? value.map(one) : value == null ? [] : [one(value)];
+    const one = (x: unknown): unknown => (isNullRef(x) ? null : isRef(x) ? fromWireRow(x as Record<string, unknown>, context) : fromWireValue(x));
+    if (resolution.multi) return (Array.isArray(value) ? value : value == null ? [] : [value]).filter((x) => !isNullRef(x)).map(one);
     if (Array.isArray(value)) return value.length ? one(value[0]) : null;
     return value == null ? null : one(value);
   }
@@ -160,6 +169,7 @@ function scalar(value: unknown, type: AttributeType): unknown {
   switch (type) {
     case "Numeric":
     case "LongInt":
+    case "Rank": // a 32-bit integer sent as a string ("-2000000000"); sorts as a number
       return toNumber(value);
     case "Boolean":
       return value === true || value === "True" || value === "true" ? true : value === false || value === "False" || value === "false" ? false : value;

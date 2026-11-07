@@ -31,7 +31,7 @@ export interface ExternalAction extends Asset {
   readonly Moment?: string | null; // read-only
   Name: string; // required
   readonly Now?: Ref<ExternalAction> | null; // read-only
-  Order?: string | null;
+  Order?: number | null;
   Payload: string; // required
   readonly Prior?: Ref<ExternalAction> | null; // read-only
   readonly RetireComment?: string | null; // read-only

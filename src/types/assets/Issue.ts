@@ -35,7 +35,7 @@ export interface Issue extends BaseAsset {
   readonly Moment?: string | null; // read-only
   readonly Now?: Ref<Issue> | null; // read-only
   readonly Number?: string | null; // read-only
-  Order?: string | null;
+  Order?: number | null;
   Owner?: Ref<Member> | null;
   PrimaryWorkitems: Ref<PrimaryWorkitem>[];
   Priority?: Ref<IssuePriority> | null;
