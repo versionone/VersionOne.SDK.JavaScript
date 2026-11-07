@@ -374,9 +374,18 @@ ESM" here means finishing the edges:
 
 ## Decisions needed
 
-- Publish target: GitHub Packages (`@versionone` scope, org auth required
-  for consumers in CI) vs. npmjs public. Rooms and slack both build in GitHub
-  Actions under `digital-ai`, so cross-org package read access matters.
+- ~~Publish target~~ — decided 2026-11-07: public npmjs, as
+  `@versionone/sdk` (the `@versionone` org already publishes there), starting
+  at `1.0.0-alpha.0` on the `alpha` dist-tag so `latest` is never a
+  prerelease. Not `v1sdk` 3.x: the 2.x package (`v1sdk`, last published
+  2022) stays as it is, because a new major of the same name would imply a
+  compatibility this SDK does not aim for. Publishing needs an `@versionone`
+  org owner to set up a token or trusted publisher.
+- Dependency audit before the first publish — done 2026-11-07: no runtime
+  dependencies, and the built bundle imports nothing. `npm audit` found 13
+  issues, all in dev tooling (vitest/vite, tinypool, tsup/esbuild,
+  rimraf/glob); fixed by in-range updates plus vitest 3 → 5 and tsup 8 → 9.
+  `npm audit` is clean; unit and integration tiers pass on the new tools.
 - ~~Live instance for the integration tier from a cloud session~~ — done
   2026-11-04: `V1_URL`/`V1_ACCESS_TOKEN` point at the API-testing instance
   `https://www14.v1host.com/v1sdktesting`; `npm run test:integration` is
@@ -390,7 +399,7 @@ ESM" here means finishing the edges:
 - [x] A4 slack-shaped reads — `queryV1` wire module, `client.queryV1.query`/`queries` (read-only, idempotent, same row translation as api/asset)
 - [x] A5 services port from gh-v1 — `resolve` (`client.resolve.numbers`/`.ref`), `guard` (`client.assets.sendGuarded`), `batch` (`client.batch.run`/`.reversible`)
 - [ ] A7 attachments and embedded images (`attachment` wire module, `client.attachments`; survey rooms first)
-- [ ] A6 CI + prerelease publish — CI (`.github/workflows/ci.yml`: verify on Node 20/22/24, `npm pack` artifact) and git-SHA installs (`prepare`) done; publish waits on the registry decision
+- [ ] A6 CI + prerelease publish — CI (`.github/workflows/ci.yml`: verify on Node 20/22/24, `npm pack` artifact), git-SHA installs (`prepare`) and the dependency audit done; publish `@versionone/sdk@1.0.0-alpha.0` to npmjs with `--tag alpha` next (needs an org owner's token or trusted publisher)
 - [x] G0–G3 gh-v1 migrations — versionone/gh-v1#29–#32
 - [x] S1–S4 slack-bot migrations — digital-ai/k6i-agility-slack-bot#21–#24 (on `bolt-migration`)
 - [ ] B1–B4 slack bot SDK swap — brief: `plans/003-adopt-sdk-k6i-agility-slack-bot.md` (unblocked: S2, S3 and SDK #42 merged)
