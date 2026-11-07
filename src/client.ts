@@ -123,6 +123,7 @@ export class AgilityApiClient {
    */
   readonly attachments = {
     list: (asset: string, options?: { page?: { size: number; start: number } }) => attachments.list(this.transport, asset, options),
+    page: (asset: string, options?: { page?: { size: number; start: number } }) => attachments.page(this.transport, asset, options),
     info: (id: string | number) => attachments.info(this.transport, id),
     get: (id: string | number) => attachments.get(this.transport, id),
     add: (asset: string, data: attachment.Bytes, options: attachments.AddOptions) => attachments.add(this.transport, asset, data, options),

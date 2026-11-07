@@ -92,6 +92,24 @@ export async function getBytes(transport: Transport, id: Oid | string | number):
   }
 }
 
+/** An attachment's bytes with the type and filename the server sent them with (Content-Type, Content-Disposition), when it did. */
+export async function getFile(transport: Transport, id: Oid | string | number): Promise<{ bytes: Uint8Array; contentType: string | null; filename: string | null }> {
+  const n = numericId(id);
+  let contentType: string | null = null, filename: string | null = null;
+  const onResponse = ({ headers }: { headers: { get(name: string): string | null } }) => {
+    contentType = headers.get("content-type");
+    const disposition = headers.get("content-disposition") ?? "";
+    const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+    filename = encoded ? decodeURIComponent(encoded) : /filename="?([^";]+)"?/i.exec(disposition)?.[1] ?? null;
+  };
+  try {
+    const bytes = await transport.request<Uint8Array>({ method: "GET", path: `/attachment.img/${n}`, responseType: "bytes", onResponse });
+    return { bytes, contentType, filename };
+  } catch (error) {
+    throw named(error, `attachment ${n}`);
+  }
+}
+
 /** Replace an attachment's bytes. The Attachment asset (name, filename, content type) is unchanged. */
 export async function putBytes(transport: Transport, id: Oid | string | number, data: Bytes, contentType = "application/octet-stream"): Promise<void> {
   const n = numericId(id);

@@ -3,8 +3,9 @@ import { AgilityApiClient } from "../../src/client";
 import { ApiError } from "../../src/core/errors";
 import { createFetchTransport } from "../../src/core/fetchTransport";
 import type { RequestOptions, Transport } from "../../src/core/transport";
-import { AttachmentUploadError, add, list } from "../../src/services/attachments";
-import { fromBase64, getBytes, normalizeEmbeddedImageUrls, numericId, toBase64, uploadEmbeddedImage } from "../../src/wire/attachment";
+import { AttachmentUploadError, add, list, page } from "../../src/services/attachments";
+import { queryPage } from "../../src/wire/assetApi";
+import { fromBase64, getBytes, getFile, normalizeEmbeddedImageUrls, numericId, toBase64, uploadEmbeddedImage } from "../../src/wire/attachment";
 
 const envelope = (over: Record<string, unknown> = {}) => ({
   requestId: "r", assetsCreated: { oidTokens: [], count: 0 }, assetsModified: { oidTokens: [], count: 0 }, assetsOperatedOn: { oidTokens: [], count: 0 },
@@ -101,5 +102,36 @@ describe("attachments service", () => {
     const client = new AgilityApiClient({ baseUrl: "https://www14.v1host.com/v1sdktesting/" }, { transport: fake() });
     expect(client.attachments.url("Attachment:5")).toBe("https://www14.v1host.com/v1sdktesting/attachment.img/5");
     expect(client.embeddedImages.url(12)).toBe("https://www14.v1host.com/v1sdktesting/embedded.img/12");
+  });
+});
+
+describe("attachment gaps from gh-v1's C4", () => {
+  it("the fetch transport hands onResponse the headers of a successful response", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(new Uint8Array([1]), { status: 200, headers: { "content-type": "image/png", "content-disposition": 'inline; filename="a b.png"' } }));
+    const seen: (string | null)[] = [];
+    await createFetchTransport({ baseUrl: "https://x", fetchImpl }).request({ method: "GET", path: "/attachment.img/5", responseType: "bytes", onResponse: ({ headers }) => seen.push(headers.get("content-type")) });
+    expect(seen).toEqual(["image/png"]);
+  });
+
+  it("getFile returns the bytes with the served Content-Type and the filename from Content-Disposition", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(new Uint8Array([1, 2]), { status: 200, headers: { "content-type": "text/plain", "content-disposition": 'inline; filename="inline.txt"' } }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([3]), { status: 200, headers: { "content-type": "image/png", "content-disposition": "attachment; filename*=UTF-8''caf%C3%A9.png" } }));
+    const t = createFetchTransport({ baseUrl: "https://x", fetchImpl });
+    expect(await getFile(t, "Attachment:5")).toEqual({ bytes: new Uint8Array([1, 2]), contentType: "text/plain", filename: "inline.txt" });
+    expect((await getFile(t, 6)).filename).toBe("café.png");
+  });
+
+  it("queryPage asks for the total and says whether more pages follow; attachments.page uses it", async () => {
+    // resultMetaData as api/asset sends it with needTotal (v1sdktesting, 2026-11-07).
+    const withTotal = (rows: unknown[], total: number | null) => envelope({ queryResult: { results: [rows], resultMetaData: [{ page: { start: 0, size: 2 }, total }], count: 1 } });
+    const t = fake(withTotal([{ _oid: "Story:1" }, { _oid: "Story:2" }], 17093));
+    const p = await queryPage(t, { from: "Story", select: ["Name"], page: { size: 2, start: 0 } });
+    expect((t.calls[0]!.body as Record<string, unknown>[])[0]!.needTotal).toBe(true);
+    expect(p).toMatchObject({ total: 17093, more: true });
+    const last = await queryPage(fake(withTotal([{ _oid: "Story:3" }], 3)), { from: "Story", select: ["Name"], page: { size: 2, start: 2 } });
+    expect(last).toMatchObject({ total: 3, more: false });
+    const a = await page(fake(withTotal([{ _oid: "Attachment:5", Name: "n" }], 1)), "Story:1");
+    expect(a).toMatchObject({ total: 1, more: false, attachments: [{ oid: "Attachment:5", id: "5" }] });
   });
 });

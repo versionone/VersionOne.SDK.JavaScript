@@ -39,6 +39,11 @@ describeInstance("attachments (live)", () => {
     expect(got).toMatchObject({ filename: "sdk-integration large.txt", contentType: "text/plain", description: "two-step" });
     const listed = await client.attachments.list(story);
     expect(listed.map((a) => a.oid).sort()).toEqual([small.oid, large.oid].sort());
+    // The type the server served the bytes with, and a page with its total.
+    expect((await client.attachments.get(small.id)).contentType).toMatch(/^text\/plain/);
+    const first = await client.attachments.page(story, { page: { size: 1, start: 0 } });
+    expect(first).toMatchObject({ total: 2, more: true });
+    expect(first.attachments).toHaveLength(1);
   });
 
   it("put replaces the bytes; remove deletes the attachment; a missing one is NOT_FOUND", async () => {

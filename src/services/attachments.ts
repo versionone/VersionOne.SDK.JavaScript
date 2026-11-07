@@ -20,7 +20,7 @@ import type { Transport } from "../core/transport";
 import type { Oid } from "../types/asset";
 import { momentless } from "../types/oid";
 import * as assetApi from "../wire/assetApi";
-import { getBytes, numericId, putBytes, toBase64, toUint8Array, type Bytes } from "../wire/attachment";
+import { getFile, numericId, putBytes, toBase64, toUint8Array, type Bytes } from "../wire/attachment";
 
 /** Files up to this size go inline by default; larger ones in two steps. */
 export const INLINE_LIMIT = 1_000_000;
@@ -44,7 +44,13 @@ const infoOf = (r: Row): AttachmentInfo => {
   return { oid, id: numericId(oid), name: r.Name ?? null, filename: r.Filename ?? null, contentType: r.ContentType ?? null, description: r.Description ?? null, createDate: r.CreateDate ?? null, createdBy: r["CreatedBy.Name"] ?? null };
 };
 
-/** The files attached to an asset, newest first, metadata only. */
+/** One page of the files attached to an asset, newest first, metadata only, with the total and whether more pages follow. */
+export async function page(transport: Transport, asset: Oid, options: { page?: { size: number; start: number } } = {}): Promise<{ attachments: AttachmentInfo[]; total: number | null; more: boolean }> {
+  const { rows, total, more } = await assetApi.queryPage(transport, { from: "Attachment", select: SELECT, filter: ["Asset=$asset"], with: { $asset: momentless(asset) }, sort: ["-CreateDate"], page: options.page ?? { size: 50, start: 0 } });
+  return { attachments: rows.map((r) => infoOf(r as unknown as Row)), total, more };
+}
+
+/** The files attached to an asset, newest first, metadata only (one page; `page` also gives the total). */
 export async function list(transport: Transport, asset: Oid, options: { page?: { size: number; start: number } } = {}): Promise<AttachmentInfo[]> {
   const rows = await assetApi.query(transport, { from: "Attachment", select: SELECT, filter: ["Asset=$asset"], with: { $asset: momentless(asset) }, sort: ["-CreateDate"], page: options.page ?? { size: 50, start: 0 } });
   return rows.map((r) => infoOf(r as unknown as Row));
@@ -56,11 +62,16 @@ export async function info(transport: Transport, id: Oid | string | number): Pro
   return row ? infoOf(row as unknown as Row) : null;
 }
 
-/** One attachment: its metadata and its bytes. */
-export async function get(transport: Transport, id: Oid | string | number): Promise<AttachmentInfo & { bytes: Uint8Array }> {
+/**
+ * One attachment: its metadata and its bytes. `contentType` is the type the
+ * server sent the bytes with, falling back to the Attachment's recorded
+ * one; `recordedContentType` is always the latter.
+ */
+export async function get(transport: Transport, id: Oid | string | number): Promise<AttachmentInfo & { bytes: Uint8Array; recordedContentType: string | null }> {
   const meta = await info(transport, id);
   if (!meta) throw new ApiError(`attachment ${numericId(id)}: not found`, 404, "NOT_FOUND");
-  return { ...meta, bytes: await getBytes(transport, meta.id) };
+  const file = await getFile(transport, meta.id);
+  return { ...meta, bytes: file.bytes, contentType: file.contentType ?? meta.contentType, recordedContentType: meta.contentType };
 }
 
 export interface AddOptions {
