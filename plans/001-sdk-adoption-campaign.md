@@ -251,6 +251,16 @@ moves.
   Integration tests on v1sdktesting with `sdk-integration` fixtures,
   deleted by OID.
 
+  Verified live (2026-11-07): an Attachment create **requires** `Content`
+  (empty is allowed; absent is `Violation'Required'…'Content'`); Base64
+  `Content` in the create stores the bytes in one request; `attachment.img`
+  GET answers the bytes with their type and `Content-Disposition`, 404 when
+  missing, and POST replaces them. `EmbeddedImage.mvc/Upload` accepts token
+  auth and answers `<textarea>{"Url":…,"Key":"EmbeddedImage:<id>"}</textarea>`.
+  **An EmbeddedImage cannot be deleted** (`Unknown Operation
+  'EmbeddedImage.Delete'`), so its live test is opt-in
+  (`SDK_TEST_EMBEDDED_IMAGES=1`) and leaves one image per run.
+
   What rooms does today (survey 2026-11-07), which A7 must cover:
   - **Upload** is one api/asset create with the bytes inline: `{ AssetType:
     "Attachment", Asset, ContentType, Filename, Name, Content: <Base64> }`
@@ -462,7 +472,7 @@ ESM" here means finishing the edges:
 - [x] A3 loc2 (`loc2.localize`, `client.localize`; GET, POST past 2000 encoded chars, culture via Accept-Language)
 - [x] A4 slack-shaped reads — `queryV1` wire module, `client.queryV1.query`/`queries` (read-only, idempotent, same row translation as api/asset)
 - [x] A5 services port from gh-v1 — `resolve` (`client.resolve.numbers`/`.ref`), `guard` (`client.assets.sendGuarded`), `batch` (`client.batch.run`/`.reversible`)
-- [ ] A7 attachments and embedded images (`attachment` wire module, `client.attachments`; survey rooms first)
+- [x] A7 attachments and embedded images — `attachment` wire module (`attachment.img` bytes, `EmbeddedImage.mvc/Upload`, URL helpers, browser-safe Base64), `client.attachments` (list/info/get/add/put/remove/url; inline up to `INLINE_LIMIT`, two-step above) and `client.embeddedImages` (upload/url/normalize)
 - [ ] A6 CI + prerelease publish — CI (`.github/workflows/ci.yml`: verify on Node 20/22/24, `npm pack` artifact), git-SHA installs (`prepare`) and the dependency audit done; publish `@versionone/sdk@1.0.0-alpha.0` to npmjs with `--tag alpha` next (needs an org owner's token or trusted publisher)
 - [x] G0–G3 gh-v1 migrations — versionone/gh-v1#29–#32
 - [x] S1–S4 slack-bot migrations — digital-ai/k6i-agility-slack-bot#21–#24 (on `bolt-migration`)
@@ -474,5 +484,5 @@ ESM" here means finishing the edges:
 - [x] C1 gh-v1 seam swap — versionone/gh-v1#33, with the vendored SDK's hashes, CI and Node 22 floor in #35
 - [x] C2 gh-v1 rows translated through the schema; `isTrue`/`oidOf` gone — versionone/gh-v1#36
 - [x] C3 gh-v1 resolve and batch on `client.resolve`/`client.batch` — versionone/gh-v1#37 (with the SDK fixes from #43)
-- [ ] C4 gh-v1 attachments on `client.attachments` (after A7); `raw` stays CLI-local
+- [ ] C4 gh-v1 attachments on `client.attachments` (unblocked: A7 done); `raw` stays CLI-local
 - [ ] D1–D4 agility-rooms

@@ -89,6 +89,8 @@ function encodeBody(body: RequestBody | undefined, contentType: string | undefin
   }
   // A form is handed to fetch as is: it writes the multipart boundary itself.
   if (typeof FormData !== "undefined" && body instanceof FormData) return { body };
+  // A Blob (a browser File, say) is bytes with a type of its own.
+  if (typeof Blob !== "undefined" && body instanceof Blob) return { body, contentType: contentType ?? (body.type || "application/octet-stream") };
   return { body: JSON.stringify(body), contentType: contentType ?? "application/json" };
 }
 
