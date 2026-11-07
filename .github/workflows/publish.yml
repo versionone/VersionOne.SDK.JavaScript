@@ -1,0 +1,60 @@
+name: Publish
+
+# Publishes @versionone/agility-sdk to npmjs when a version tag is pushed:
+#   git tag v1.0.0-alpha.0 && git push origin v1.0.0-alpha.0
+#
+# A prerelease (1.0.0-alpha.0, -beta.1, -rc.2) goes out on its own dist-tag
+# (alpha, beta, rc), so `npm install @versionone/agility-sdk` never picks it
+# up; only a plain version moves `latest`.
+#
+# Authentication is npm trusted publishing (OIDC): link this repository and
+# this workflow file on the package's npmjs settings page, and no token is
+# stored anywhere. The package must exist before it can be linked, so the
+# very first version may need one manual publish (see the README's
+# "Releasing" section); an NPM_TOKEN secret, if set, is used as a fallback.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write # OIDC for trusted publishing and provenance
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or later.
+      - run: npm install -g npm@^11.5.1
+      - run: npm ci
+      - name: The tag names the version in package.json
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package.json version ${version}" >&2
+            exit 1
+          fi
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+      - run: npm run verify
+      - name: Choose the dist-tag
+        run: |
+          case "${VERSION}" in
+            *-*) tag="$(echo "${VERSION#*-}" | sed 's/[.0-9]*$//')" ;;
+            *) tag=latest ;;
+          esac
+          if [ -z "${tag}" ]; then tag=next; fi
+          echo "DIST_TAG=${tag}" >> "$GITHUB_ENV"
+          echo "Publishing ${VERSION} with dist-tag ${tag}"
+      - run: npm publish --provenance --access public --tag "${DIST_TAG}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

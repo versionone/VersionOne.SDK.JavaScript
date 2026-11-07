@@ -8,9 +8,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 /**
  * CommonJS consumers (gh-v1 is `require`-based) load the package through
  * the "require" condition of its exports map. This builds the CJS bundle
- * the way the package does, installs it under node_modules/@versionone/sdk
+ * the way the package does, installs it under node_modules/@versionone/agility-sdk
  * in a temp directory with the real package.json, and has a plain .cjs
- * script `require("@versionone/sdk")` and use it — so a bundle that only
+ * script `require("@versionone/agility-sdk")` and use it — so a bundle that only
  * works as ESM (top-level await, import.meta, an ESM-only dependency) or an
  * exports map that points nowhere fails here, not in a consumer.
  */
@@ -20,8 +20,11 @@ let dir = "";
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "sdk-cjs-"));
-  const installed = join(dir, "node_modules", "@versionone", "sdk");
-  await build({ config: false, entry: [join(root, "src", "index.ts")], format: ["cjs"], outDir: join(installed, "dist"), target: "node18", dts: false, sourcemap: false, silent: true });
+  const installed = join(dir, "node_modules", "@versionone", "agility-sdk");
+  // tsup reads entries as glob patterns, where "\\" is an escape: on Windows an
+  // absolute path (D:\\source\\…) matches nothing. Forward slashes work everywhere.
+  const entry = join(root, "src", "index.ts").replace(/\\/g, "/");
+  await build({ config: false, entry: [entry], format: ["cjs"], outDir: join(installed, "dist"), target: "node18", dts: false, sourcemap: false, silent: true });
   copyFileSync(join(root, "package.json"), join(installed, "package.json"));
 }, 30_000);
 afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }); });
@@ -29,7 +32,7 @@ afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }); });
 // The consumer: CommonJS, no transpiler, a fake fetch standing in for the server.
 const CONSUMER = String.raw`
 const assert = require("node:assert/strict");
-const sdk = require("@versionone/sdk");
+const sdk = require("@versionone/agility-sdk");
 for (const name of ["AgilityApiClient", "createFetchTransport", "ApiError", "CommandFailureError", "assetApi", "rest1", "meta", "loc2", "Schema", "parseOid", "momentless"]) {
   assert.ok(sdk[name], "missing export " + name);
 }
@@ -55,7 +58,7 @@ const fetchImpl = async (url) => {
 `;
 
 describe("CommonJS consumers", () => {
-  it("require('@versionone/sdk') resolves through the exports map and the bundle works with no ESM in sight", () => {
+  it("require('@versionone/agility-sdk') resolves through the exports map and the bundle works with no ESM in sight", () => {
     const script = join(dir, "consumer.cjs");
     writeFileSync(script, CONSUMER);
     const r = spawnSync(process.execPath, [script], { cwd: dir, encoding: "utf8" });

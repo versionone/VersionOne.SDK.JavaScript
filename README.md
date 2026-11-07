@@ -1,8 +1,25 @@
-# VersionOne SDK (TypeScript starter)
+# @versionone/agility-sdk
 
-Minimal TypeScript SDK starter for building JavaScript bindings to external APIs.
+TypeScript SDK for the Digital.ai Agility (formerly VersionOne) API. It works in Node (ESM or CommonJS) and the browser, ships its own types, and has no runtime dependencies.
 
-## Quick start
+Not to be confused with `v1sdk`, the 2.x JavaScript SDK: this is a new API, not a compatible successor.
+
+## Install
+
+Alpha releases are for feedback; the API may change between them.
+
+```bash
+npm install @versionone/agility-sdk@alpha
+```
+
+```ts
+import { AgilityApiClient } from "@versionone/agility-sdk";
+
+const client = new AgilityApiClient({ baseUrl: "https://www14.v1host.com/v1sdktesting", accessToken: process.env.V1_ACCESS_TOKEN });
+const stories = await client.queryV1.query({ from: "Story", select: ["Name", "Estimate"], page: { size: 10, start: 0 } });
+```
+
+## Working on the SDK
 
 ```bash
 npm install
@@ -25,7 +42,7 @@ npm test
   - `queryV1.query` / `queryV1.queries` - reads through query.v1: the same query bodies as `assets.query`, rows translated the same way, but the endpoint is read-only and answers with rows alone, so it is the safe place to explore a query
   - `resolve.numbers` / `resolve.ref` - asset numbers and OID tokens to assets, in one request
   - `assets.sendGuarded` - a batch as a compare-and-set on each asset's ChangeDate; changed assets come back `skipped`
-  - `attachments.list` / `info` / `get` / `add` / `put` / `remove` / `url` - files attached to an asset: metadata on the Attachment asset, bytes through attachment.img; `add` sends a small file inline (Base64, one request) and a large one in two steps (create, then upload), and a failed upload throws `AttachmentUploadError` naming the empty attachment it left
+  - `attachments.list` / `page` / `info` / `get` / `add` / `put` / `remove` / `url` - files attached to an asset: metadata on the Attachment asset, bytes through attachment.img; `page` adds the total and whether more pages follow; `get`'s `contentType` is the type the server sent the bytes with; `add` sends a small file inline (Base64, one request) and a large one in two steps (create, then upload), and a failed upload throws `AttachmentUploadError` naming the empty attachment it left
   - `embeddedImages.upload` / `url` / `normalize` - images in rich text: upload returns the `<img src>` URL; `normalize` rewrites `embedded.img` references to this instance's URL. They cannot be deleted
   - `batch.run` / `batch.reversible` - preview, snapshot, (confirm,) send guarded, and a receipt with a reverse batch. Undo (`batch.reversible`) reactivates a closed asset before deleting it, and a second command on one asset is sent as a second guarded pass. `confirm` sees the touched assets' names; aliased updates/executes are sent as written with `guard: false`; a failure after the send throws `BatchRecordError` carrying the receipt
 - `TypeCache` - one instance's loaded type definitions, shared by many clients (`new AgilityApiClient(config, { types })`): a server that builds a client per user fetches each type once
@@ -45,6 +62,24 @@ API reference: https://docs.digital.ai/agility-api/
 ## Installing before a release
 
 No registry package yet. Pin a commit: `npm install github:versionone/VersionOne.SDK.JavaScript#<sha>` builds `dist` on install (the `prepare` script). CI also uploads an `npm pack` tarball on every run.
+
+## Releasing
+
+Versions are published to npmjs by `.github/workflows/publish.yml` when a
+tag `v<version>` is pushed; the tag must equal `package.json`'s version. A
+prerelease (`1.0.0-alpha.0`, `-beta.N`, `-rc.N`) goes out on its own
+dist-tag (`alpha`, `beta`, `rc`), so `latest` is never a prerelease.
+
+```bash
+npm version 1.0.0-alpha.1 --no-git-tag-version   # bump, commit, merge
+git tag v1.0.0-alpha.1 && git push origin v1.0.0-alpha.1
+```
+
+Authentication is npm trusted publishing: on npmjs, the package's settings
+link this repository and `publish.yml`, and no token is stored. A package
+must exist before it can be linked, so the very first version is published
+once by hand by an `@versionone` org member (`npm publish --access public
+--tag alpha` from a clean checkout of the tagged commit), then linked.
 
 ## Before PR
 

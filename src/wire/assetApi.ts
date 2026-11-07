@@ -50,6 +50,8 @@ export interface QueryBody {
   find?: string;
   findin?: string[];
   asof?: string;
+  /** Ask api/asset for the total number of matches (query.v1 ignores it); read it with queryPage. */
+  needTotal?: boolean;
   /** Group the rows by a relation: each result row is then a group, its rows under `_children` (translated like any row of `from`). */
   group?: (string | { from: string; [key: string]: unknown })[];
 }
@@ -406,6 +408,20 @@ export async function sendYaml<Row extends Asset = Asset>(transport: Transport, 
 export async function query<Row extends Asset = Asset>(transport: Transport, q: QueryBody, options: ReadOptions = {}): Promise<Row[]> {
   const [rows] = await queries<Row>(transport, [q], options);
   return rows ?? [];
+}
+
+/**
+ * One page of a query, with the total number of matches (api/asset reports
+ * it when asked with needTotal; `total` is null when it does not) and
+ * whether more pages follow.
+ */
+export async function queryPage<Row extends Asset = Asset>(transport: Transport, q: QueryBody, options: ReadOptions = {}): Promise<{ rows: Row[]; total: number | null; more: boolean }> {
+  if (!q.page) throw new Error(`query of ${q.from} without a page: every api/asset read must be bounded`);
+  const response = await send<Row>(transport, [{ ...q, needTotal: true }], { ...options, throwOnFailure: true });
+  const rows = response.queryResult.results[0] ?? [];
+  const reported = (response.queryResult as { resultMetaData?: { total?: unknown }[] }).resultMetaData?.[0]?.total;
+  const total = typeof reported === "number" ? reported : null;
+  return { rows, total, more: total === null ? rows.length === q.page.size : q.page.start + rows.length < total };
 }
 
 /**

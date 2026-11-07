@@ -184,7 +184,10 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
         }
 
         try {
-          if (response.ok) return (await readBody(response, responseType)) as T;
+          if (response.ok) {
+            options.onResponse?.({ status: response.status, headers: response.headers });
+            return (await readBody(response, responseType)) as T;
+          }
 
           // An answer, not a failure to get one. 5xx may be retried when
           // idempotent; anything else is final.

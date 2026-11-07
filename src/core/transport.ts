@@ -29,6 +29,12 @@ export interface RequestOptions {
    * still to come) with an ApiError coded ABORTED. Never retried.
    */
   signal?: AbortSignal;
+  /**
+   * Called with a successful response's status and headers before its body
+   * is read — for what the body alone does not say (an attachment's
+   * Content-Type, say). A transport that cannot see headers may skip it.
+   */
+  onResponse?: (response: { status: number; headers: { get(name: string): string | null } }) => void;
 }
 
 export interface Transport {

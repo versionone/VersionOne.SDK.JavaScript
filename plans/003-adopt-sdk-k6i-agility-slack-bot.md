@@ -1,4 +1,4 @@
-# Plan 003: k6i-agility-slack-bot adopts `@versionone/sdk` (Track B)
+# Plan 003: k6i-agility-slack-bot adopts `@versionone/agility-sdk` (Track B)
 
 Brief for a session on `digital-ai/k6i-agility-slack-bot`. Start once the
 SDK PR that adds this file has merged into `proposed_type_script_api_version`.
@@ -7,7 +7,7 @@ Source plan: `plans/001-sdk-adoption-campaign.md`, Track B. Work on
 
 ## Goal
 
-`services/v1.js`'s `createV1Client` runs on `@versionone/sdk`, with the same
+`services/v1.js`'s `createV1Client` runs on `@versionone/agility-sdk`, with the same
 exported surface, so listeners and features do not change. The bot's
 hand-decoding and rest-1 write path go.
 
@@ -27,9 +27,9 @@ hand-decoding and rest-1 write path go.
 ## Dependency
 
 No registry package yet. Pin a commit:
-`"@versionone/sdk": "github:versionone/VersionOne.SDK.JavaScript#<merge sha>"`.
+`"@versionone/agility-sdk": "github:versionone/VersionOne.SDK.JavaScript#<merge sha>"`.
 The SDK's `prepare` script builds `dist` on install. The bot is ESM, so
-`import { AgilityApiClient } from "@versionone/sdk"`.
+`import { AgilityApiClient } from "@versionone/agility-sdk"`.
 
 ## Steps, one PR each
 

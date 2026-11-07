@@ -8,7 +8,7 @@ in `versionone/VersionOne.SDK.JavaScript` (branch
 ---
 
 Context: after the Bolt migration, `services/v1.js` (`createV1Client`) will
-be re-implemented on `@versionone/sdk`, the TypeScript rewrite of the
+be re-implemented on `@versionone/agility-sdk`, the TypeScript rewrite of the
 Agility JS SDK, keeping its exported surface. These four migrations come
 first, so that swap is one file. Work on (or branch from) `bolt-migration`,
 not `main`. One PR each, `npm test` green, and follow AGENTS.md and
@@ -51,5 +51,5 @@ https://docs.digital.ai/agility-api/apis/asset-bulk/updating-assets
 API reference for all of this: https://docs.digital.ai/agility-api/ (the
 whole site as text: https://docs.digital.ai/agility-api/llms-full.txt).
 
-Do not add `@versionone/sdk` yet (milestone B1, run from the SDK session
+Do not add `@versionone/agility-sdk` yet (milestone B1, run from the SDK session
 after S2 and S3 merge). Report back with the PR links.

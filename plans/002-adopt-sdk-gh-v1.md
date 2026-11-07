@@ -1,4 +1,4 @@
-# Plan 002: gh-v1 adopts `@versionone/sdk` (Track C)
+# Plan 002: gh-v1 adopts `@versionone/agility-sdk` (Track C)
 
 Brief for a session on `versionone/gh-v1`. Start once the SDK PR that adds
 this file has merged into `proposed_type_script_api_version`. Source plan:
@@ -6,7 +6,7 @@ this file has merged into `proposed_type_script_api_version`. Source plan:
 
 ## Goal
 
-gh-v1 talks to Agility only through `@versionone/sdk`. CLI behaviour and
+gh-v1 talks to Agility only through `@versionone/agility-sdk`. CLI behaviour and
 output stay the same; the code that duplicates the SDK goes.
 
 ## Where things stand (checked 2026-11-06, gh-v1 `2c58c7e`)
@@ -34,7 +34,7 @@ runtime dependency, but its code ships inside the repo:
 - `vendor/versionone-sdk/` holds the SDK's ESM build (`index.js`, which
   imports nothing) and types (`index.d.ts`), plus `SOURCE.json` naming
   the commit they came from. `lib/api.js` imports from there.
-- `package.json` lists `@versionone/sdk` under `devDependencies`, pinned
+- `package.json` lists `@versionone/agility-sdk` under `devDependencies`, pinned
   to a full commit, so the lockfile records exactly what was vendored.
 - To move the pin: change it in `package.json`, then
   `npm install && npm run vendor:sdk`, and commit the copy.
