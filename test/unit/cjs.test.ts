@@ -21,7 +21,10 @@ let dir = "";
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "sdk-cjs-"));
   const installed = join(dir, "node_modules", "@versionone", "agility-sdk");
-  await build({ config: false, entry: [join(root, "src", "index.ts")], format: ["cjs"], outDir: join(installed, "dist"), target: "node18", dts: false, sourcemap: false, silent: true });
+  // tsup reads entries as glob patterns, where "\\" is an escape: on Windows an
+  // absolute path (D:\\source\\…) matches nothing. Forward slashes work everywhere.
+  const entry = join(root, "src", "index.ts").replace(/\\/g, "/");
+  await build({ config: false, entry: [entry], format: ["cjs"], outDir: join(installed, "dist"), target: "node18", dts: false, sourcemap: false, silent: true });
   copyFileSync(join(root, "package.json"), join(installed, "package.json"));
 }, 30_000);
 afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }); });

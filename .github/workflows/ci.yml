@@ -10,10 +10,17 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         node: [20, 22, 24]
+        # Windows too: tools that read paths as globs (tsup's entries) break
+        # on backslashes, and people develop the SDK there.
+        include:
+          - os: windows-latest
+            node: 24
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,10 +31,10 @@ jobs:
       # Unit tier only: the integration tier needs a testing instance and writes fixtures.
       - run: npm run verify
       - name: Pack
-        if: matrix.node == 24
+        if: matrix.node == 24 && matrix.os == 'ubuntu-latest'
         run: npm pack
       - uses: actions/upload-artifact@v4
-        if: matrix.node == 24
+        if: matrix.node == 24 && matrix.os == 'ubuntu-latest'
         with:
-          name: versionone-sdk-tarball
-          path: versionone-sdk-*.tgz
+          name: versionone-agility-sdk-tarball
+          path: versionone-agility-sdk-*.tgz
