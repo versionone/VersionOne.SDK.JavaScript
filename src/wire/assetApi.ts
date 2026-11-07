@@ -53,7 +53,22 @@ export interface QueryBody {
   /** Group the rows by a relation: each result row is then a group, its rows under `_children` (translated like any row of `from`). */
   group?: (string | { from: string; [key: string]: unknown })[];
 }
+/**
+ * An update. Each key of `update` is an attribute; its value replaces a
+ * scalar or a single relation (null clears it). A multi-value relation is
+ * changed with `{ add: [...], remove: [...] }`. A plain list does NOT
+ * replace a multi-value relation: the server ADDS its members, like rest-1's
+ * `act: "add"` (seen live on v1sdktesting, 2026-11-07). To set one exactly,
+ * remove what should go and add what should come. A change comment goes in
+ * the update node as `ChangeComment`.
+ */
 export interface UpdateBody { from: string; filter?: string[]; where?: Record<string, string>; with?: Record<string, CommandValue>; update: Record<string, CommandValue> }
+/**
+ * An operation (QuickClose, Inactivate, Reactivate, Delete, …), optionally
+ * with arguments. It cannot carry a change comment. Agility refuses to
+ * Delete a closed asset (Violation'AssetCannotDeleteClosed): Reactivate it
+ * first, as batch.reversible does.
+ */
 export interface ExecuteBody { from: string; filter?: string[]; where?: Record<string, string>; with?: Record<string, CommandValue>; execute: string | { op: string; args?: Record<string, CommandValue>; list?: Record<string, CommandValue>[] } }
 export type CommandBody = CreateBody | QueryBody | UpdateBody | ExecuteBody;
 
