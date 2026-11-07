@@ -17,13 +17,42 @@ import type { AssetType, AssetTypeToken, AttributeDefinition, AttributeLookup, M
 import * as meta from "../wire/meta";
 import { attributeOf, fromTypeOf, typesNeeded, type SelectShape } from "../wire/select";
 
-export class Schema implements AttributeLookup {
+/**
+ * The type definitions loaded from one instance, shareable by any number of
+ * schemas. A definition does not depend on who read it, so a server that
+ * builds a client per user (each with that user's token) can give them all
+ * one cache per instance: each type is fetched once, through whichever
+ * client needed it first, and concurrent loads of a type share one request.
+ */
+export class TypeCache {
   /** Loaded types; null records that the instance has no such type, so it is not asked for again. */
-  private readonly types = new Map<AssetTypeToken, AssetType | null>();
-  private readonly loading = new Map<AssetTypeToken, Promise<AssetType | null>>();
+  readonly types = new Map<AssetTypeToken, AssetType | null>();
+  readonly loading = new Map<AssetTypeToken, Promise<AssetType | null>>();
 
-  constructor(private readonly transport?: Transport, seed?: Metamodel) {
-    if (seed) for (const [token, type] of Object.entries(seed.AssetTypes)) this.types.set(token, type);
+  /** A cache seeded from a metamodel document. */
+  static fromMetamodel(metamodel: Metamodel): TypeCache {
+    const cache = new TypeCache();
+    for (const [token, type] of Object.entries(metamodel.AssetTypes)) cache.types.set(token, type);
+    return cache;
+  }
+}
+
+export class Schema implements AttributeLookup {
+  private readonly types: Map<AssetTypeToken, AssetType | null>;
+  private readonly loading: Map<AssetTypeToken, Promise<AssetType | null>>;
+  /** Where this schema keeps what it loads; pass it to another schema to share it. */
+  readonly cache: TypeCache;
+
+  constructor(private readonly transport?: Transport, seed?: Metamodel, cache: TypeCache = new TypeCache()) {
+    this.cache = cache;
+    this.types = cache.types;
+    this.loading = cache.loading;
+    if (seed) for (const [token, type] of Object.entries(seed.AssetTypes)) if (!this.types.has(token)) this.types.set(token, type);
+  }
+
+  /** The same cache, loading anything missing through another transport (another user's credentials). */
+  withTransport(transport: Transport): Schema {
+    return new Schema(transport, undefined, this.cache);
   }
 
   /** A complete schema from a metamodel document; nothing is ever fetched. */

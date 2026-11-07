@@ -34,4 +34,22 @@ describeInstance("queryV1 (live)", () => {
       message: expect.stringContaining("Story.NoSuchAttribute")
     });
   });
+  it("a group query's children are translated by the query's type, and the no-status group's key is null (the slack bot's board query)", async () => {
+    const [groups] = await client.queryV1.queries([{
+      from: "PrimaryWorkitem",
+      select: ["Name", "Number", "Status", "Team.HasProcess", "IsClosed"],
+      filter: ["AssetState!='Closed'"],
+      group: [{ from: "Status" }],
+      page: { size: 20, start: 0 }
+    }]);
+    expect(groups!.length).toBeGreaterThan(0);
+    for (const g of groups as unknown as { _oid: string | null; _children: Record<string, unknown>[] }[]) {
+      expect(g._oid === null || /^\w+Status:\d+$/.test(g._oid)).toBe(true);
+      for (const child of g._children) {
+        expect(typeof child.IsClosed).toBe("boolean");
+        expect(child.Status === null || (typeof child.Status === "object" && (child.Status as { _oid: string })._oid !== "NULL")).toBe(true);
+        expect(["boolean", "undefined"]).toContain(typeof child["Team.HasProcess"]);
+      }
+    }
+  });
 });
