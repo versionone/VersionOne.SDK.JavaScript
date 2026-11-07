@@ -66,8 +66,11 @@ runtime dependency, but its code ships inside the repo:
    `force`). Keep the CLI's UX for an unguardable batch by checking
    `unguardable()` first, then sending with `guard: false` and the existing
    note. Prompting, rendering, permalinks and receipt files stay in gh-v1.
-4. **C4 Passthrough.** `raw`/`blob` stay as they are. `lib/guard.js` stays:
-   it is CLI policy, not SDK behaviour.
+4. **C4 Attachments on the SDK** (after plan 001's A7). `gh v1 attach`
+   (`list`, `get`, `add`, `put`) moves onto `client.attachments`; `blob`
+   leaves `lib/api.js`. File I/O, `--out`, the content-type guess and the
+   CLI's messages stay in gh-v1. `raw` (the `gh v1 api` passthrough) and
+   `lib/guard.js` stay: they are CLI policy, not SDK behaviour.
 
 ## Rules
 

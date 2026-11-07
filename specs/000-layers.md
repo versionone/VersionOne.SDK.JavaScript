@@ -64,7 +64,10 @@ So the `assetApi` wire module translates a row against an `AttributeLookup`
 to the attribute it lands on; Numeric, LongInt and Rank become numbers, Boolean
 booleans, a single relation one Ref or null (the endpoint sends an unset
 one as `{ _oid: "NULL" }`), an aggregate a number, and a
-sub-select's rows are translated by their own type. A key the schema does
+sub-select's rows are translated by their own type. A `group` query's
+rows are groups (`_oid` the group key, `null` for the unset group; rows
+under `_children`), and the children translate by the query's own type,
+recursively for nested groups. A key the schema does
 not know is left as sent. Without a lookup the row keeps the endpoint's
 spelling, OIDs normalised and a `NULL` relation null — never silently
 guessed.

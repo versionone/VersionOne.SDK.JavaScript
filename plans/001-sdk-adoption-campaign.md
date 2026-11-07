@@ -11,6 +11,12 @@ tests green) to a package that three surfaces depend on:
 | Messaging | `digital-ai/k6i-agility-slack-bot` | Slack app (Node 24, plain ESM JS) | first |
 | Rooms | `digital-ai/agility-rooms` | React/Vite SPA, same-origin cookie auth | slow, later |
 
+The SDK's goal is one abstraction around every part of changing an asset —
+its attributes, its relations, its operations, and the files attached to
+it (attachments, embedded images) — so no consumer talks to an endpoint
+directly for any of them. gh-v1 (`gh v1 attach`) and agility-rooms both
+handle attachments today, each on its own.
+
 Specs (`specs/`) hold invariants; plans (`plans/`) hold sequencing and are
 allowed to go stale once done.
 
@@ -184,6 +190,28 @@ moves.
   publish prereleases (`0.x`, `next` tag) to GitHub Packages under the
   `@versionone` scope (or npmjs — decision below). Until then consumers pin a
   git SHA or a tarball from `npm pack`.
+- **A7 Attachments and embedded images** — gap 5's `attachment`/
+  `EmbeddedImage`, as part of the asset-update abstraction, not a side
+  channel. Two consumers to serve: gh-v1's `gh v1 attach` (list, get, add,
+  put) and agility-rooms' attachment handling (survey it first: where it
+  uploads, which `*.mvc` routes it uses, how rich text embeds images).
+  Shape, from the docs and gh-v1's working code:
+  - wire: `attachment.img/<id>` (and the embedded-image endpoint) — bytes
+    in and out, addressed by the numeric id, not the OID token; a body as
+    `Uint8Array`, `Blob` or `FormData` so it works in Node and the browser;
+    the endpoint's statuses (404 missing, 413 too large) as typed errors.
+  - service: `client.attachments.list(asset)` (metadata only — never
+    select `Content` across many: it Base64s every blob into one
+    response), `get(id)` → bytes + content type, `add(asset, bytes,
+    { filename, contentType, name, description })` as the docs prescribe
+    (create the Attachment with empty `Content`, then POST the bytes; on a
+    failed upload, report the created-but-empty asset rather than hide it),
+    `put(id, bytes)` to replace.
+  - batches: an Attachment create inside `assets.send`/`batch.run` stays an
+    ordinary create; the bytes are a second step the service owns, and a
+    receipt's reverse deletes the asset.
+  Integration tests on v1sdktesting with `sdk-integration` fixtures,
+  deleted by OID.
 
 ## Track B — k6i-agility-slack-bot (fast, on `bolt-migration`)
 
@@ -244,8 +272,9 @@ instance: same requests out, same rows in.
   `guard: false` (gh-v1 sent it as written with a note — keep that UX by
   checking `unguardable()` first), and its number roots are wider than
   gh-v1's list.
-- **C4 Passthrough.** `raw`/`blob` stay CLI-local unless an `attachment`
-  wire module (gap 5) is built for rooms — then `gh v1 attach` uses it.
+- **C4 Attachments on the SDK.** Once A7 lands, `gh v1 attach` moves onto
+  `client.attachments` and `blob` leaves `lib/api.js`. `raw` stays CLI-local:
+  it is the `gh v1 api` passthrough.
 
 `lib/guard.js` stays in gh-v1: it is policy for a terminal passthrough, not
 SDK behaviour.
@@ -330,7 +359,8 @@ ESM" here means finishing the edges:
   (proposed: `sdk-adoption`), never on their default branches, PRs only on
   request.
 - **Order here:** A2 → A3 → C1 → C2 → B1 → B2 → A5 → C3 → B3/B4 → A6 → A1 →
-  D1 → D2+. gh-v1 first: no framework migration, and stubbed-fetch tests
+  A7 → C4 → D1 → D2+. A7 starts with the rooms attachment survey, so
+  rooms' needs shape the module before gh-v1 moves onto it. gh-v1 first: no framework migration, and stubbed-fetch tests
   prove parity offline. A1 (browser credentials, onUnauthorized) waits for
   rooms; the bot maps `ApiError.status === 401` itself.
 - **In parallel, elsewhere:** G0–G3 in the gh-v1 session, S1–S4 in the
@@ -344,9 +374,18 @@ ESM" here means finishing the edges:
 
 ## Decisions needed
 
-- Publish target: GitHub Packages (`@versionone` scope, org auth required
-  for consumers in CI) vs. npmjs public. Rooms and slack both build in GitHub
-  Actions under `digital-ai`, so cross-org package read access matters.
+- ~~Publish target~~ — decided 2026-11-07: public npmjs, as
+  `@versionone/sdk` (the `@versionone` org already publishes there), starting
+  at `1.0.0-alpha.0` on the `alpha` dist-tag so `latest` is never a
+  prerelease. Not `v1sdk` 3.x: the 2.x package (`v1sdk`, last published
+  2022) stays as it is, because a new major of the same name would imply a
+  compatibility this SDK does not aim for. Publishing needs an `@versionone`
+  org owner to set up a token or trusted publisher.
+- Dependency audit before the first publish — done 2026-11-07: no runtime
+  dependencies, and the built bundle imports nothing. `npm audit` found 13
+  issues, all in dev tooling (vitest/vite, tinypool, tsup/esbuild,
+  rimraf/glob); fixed by in-range updates plus vitest 3 → 5 and tsup 8 → 9.
+  `npm audit` is clean; unit and integration tiers pass on the new tools.
 - ~~Live instance for the integration tier from a cloud session~~ — done
   2026-11-04: `V1_URL`/`V1_ACCESS_TOKEN` point at the API-testing instance
   `https://www14.v1host.com/v1sdktesting`; `npm run test:integration` is
@@ -359,11 +398,16 @@ ESM" here means finishing the edges:
 - [x] A3 loc2 (`loc2.localize`, `client.localize`; GET, POST past 2000 encoded chars, culture via Accept-Language)
 - [x] A4 slack-shaped reads — `queryV1` wire module, `client.queryV1.query`/`queries` (read-only, idempotent, same row translation as api/asset)
 - [x] A5 services port from gh-v1 — `resolve` (`client.resolve.numbers`/`.ref`), `guard` (`client.assets.sendGuarded`), `batch` (`client.batch.run`/`.reversible`)
-- [ ] A6 CI + prerelease publish — CI (`.github/workflows/ci.yml`: verify on Node 20/22/24, `npm pack` artifact) and git-SHA installs (`prepare`) done; publish waits on the registry decision
+- [ ] A7 attachments and embedded images (`attachment` wire module, `client.attachments`; survey rooms first)
+- [ ] A6 CI + prerelease publish — CI (`.github/workflows/ci.yml`: verify on Node 20/22/24, `npm pack` artifact), git-SHA installs (`prepare`) and the dependency audit done; publish `@versionone/sdk@1.0.0-alpha.0` to npmjs with `--tag alpha` next (needs an org owner's token or trusted publisher)
 - [x] G0–G3 gh-v1 migrations — versionone/gh-v1#29–#32
 - [x] S1–S4 slack-bot migrations — digital-ai/k6i-agility-slack-bot#21–#24 (on `bolt-migration`)
-- [ ] B1–B4 slack bot SDK swap — brief: `plans/003-adopt-sdk-k6i-agility-slack-bot.md` (unblocked: S2, S3 and SDK #42 merged)
+- [x] B1 slack bot client swap — digital-ai/k6i-agility-slack-bot#29
+- [x] B2 slack bot decodes deleted; reads through `client.queryV1` with a schema — digital-ai/k6i-agility-slack-bot#30
+- [ ] B3–B4 slack bot writes on api/asset, number resolution — brief: `docs/handoffs/slack-bot-sdk-b3-b4.md` in the bot repo
 - [x] C0 gh-v1 surveyed (2026-11-04)
 - [x] C1 gh-v1 seam swap — versionone/gh-v1#33, with the vendored SDK's hashes, CI and Node 22 floor in #35
-- [ ] C2–C4 gh-v1 — brief: `plans/002-adopt-sdk-gh-v1.md` (C2–C3 in progress in a gh-v1 session)
+- [x] C2 gh-v1 rows translated through the schema; `isTrue`/`oidOf` gone — versionone/gh-v1#36
+- [x] C3 gh-v1 resolve and batch on `client.resolve`/`client.batch` — versionone/gh-v1#37 (with the SDK fixes from #43)
+- [ ] C4 gh-v1 attachments on `client.attachments` (after A7); `raw` stays CLI-local
 - [ ] D1–D4 agility-rooms

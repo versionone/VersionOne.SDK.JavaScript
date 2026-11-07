@@ -69,3 +69,26 @@ describe("queryV1", () => {
     expect(t.calls.map((c) => c.path)).toEqual(["/query.v1"]);
   });
 });
+
+describe("queryV1: group queries", () => {
+  // Shape copied from a live response (the slack bot's board query, v1sdktesting, 2026-11-07).
+  const grouped = [[
+    { _oid: "NULL", _children: [{ _oid: "Story:10471:900", Name: "No status", Status: { _oid: "NULL" }, "Team.HasProcess": "False", Estimate: "3" }] },
+    { _oid: "StoryStatus:134", _children: [{ _oid: "Story:10472", Name: "Done", Status: { _oid: "StoryStatus:134" }, "Team.HasProcess": "True", Estimate: "5" }] }
+  ]];
+  const q = { from: "PrimaryWorkitem", select: ["Name", "Status", "Team.HasProcess", "Estimate"], group: [{ from: "Status" }], page: { size: 100, start: 0 } };
+
+  it("translates each group's _children by the query's type, and the no-status group's key reads as null", async () => {
+    const [groups] = await queries(fakeTransport(grouped), [q], { lookup: schema });
+    expect(groups).toEqual([
+      { _oid: null, _children: [{ _oid: "Story:10471", Name: "No status", Status: null, "Team.HasProcess": false, Estimate: 3 }] },
+      { _oid: "StoryStatus:134", _children: [{ _oid: "Story:10472", Name: "Done", Status: { _oid: "StoryStatus:134" }, "Team.HasProcess": true, Estimate: 5 }] }
+    ]);
+  });
+
+  it("nested groups translate all the way down", async () => {
+    const nested = [[{ _oid: "Team:1", _children: [{ _oid: "NULL", _children: [{ _oid: "Story:1", "Team.HasProcess": "True" }] }] }]];
+    const [groups] = await queries(fakeTransport(nested), [{ ...q, group: [{ from: "Team" }, { from: "Status" }] }], { lookup: schema });
+    expect(groups).toEqual([{ _oid: "Team:1", _children: [{ _oid: null, _children: [{ _oid: "Story:1", "Team.HasProcess": true }] }] }]);
+  });
+});

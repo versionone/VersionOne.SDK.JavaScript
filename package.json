@@ -46,9 +46,9 @@
   "devDependencies": {
     "@types/node": "^22.13.10",
     "rimraf": "^6.0.1",
-    "tsup": "^8.4.0",
+    "tsup": "^9.0.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.8"
+    "vitest": "^5.1.0"
   },
   "volta": {
     "node": "24.14.0"

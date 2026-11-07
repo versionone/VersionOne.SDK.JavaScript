@@ -4,7 +4,7 @@ import type { Transport } from "./core/transport";
 import * as batch from "./services/batch";
 import * as guard from "./services/guard";
 import * as resolve from "./services/resolve";
-import { Schema } from "./services/schema";
+import { Schema, type TypeCache } from "./services/schema";
 import type { Asset } from "./types/asset";
 import type { Metamodel } from "./types/metamodel";
 import * as assetApi from "./wire/assetApi";
@@ -25,6 +25,13 @@ export interface ClientOptions {
   metamodel?: Metamodel;
   /** Share an existing schema (and its cache) instead of starting a new one. */
   schema?: Schema;
+  /**
+   * Share loaded type definitions with other clients of the same instance,
+   * whatever their credentials: this client's schema keeps its types in
+   * `types` and loads anything missing through this client's transport.
+   * A server that builds a client per user keeps one TypeCache per instance.
+   */
+  types?: TypeCache;
 }
 
 /**
@@ -53,7 +60,7 @@ export class AgilityApiClient {
       unauthorizedStatuses: config.unauthorizedStatuses
     });
     this.config = config;
-    this.schema = opts.schema ?? new Schema(this.transport, opts.metamodel);
+    this.schema = opts.schema ?? new Schema(this.transport, opts.metamodel, opts.types);
   }
 
   private readonly config: ClientConfig;

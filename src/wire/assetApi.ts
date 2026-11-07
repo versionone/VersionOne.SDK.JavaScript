@@ -50,6 +50,8 @@ export interface QueryBody {
   find?: string;
   findin?: string[];
   asof?: string;
+  /** Group the rows by a relation: each result row is then a group, its rows under `_children` (translated like any row of `from`). */
+  group?: (string | { from: string; [key: string]: unknown })[];
 }
 export interface UpdateBody { from: string; filter?: string[]; where?: Record<string, string>; with?: Record<string, CommandValue>; update: Record<string, CommandValue> }
 export interface ExecuteBody { from: string; filter?: string[]; where?: Record<string, string>; with?: Record<string, CommandValue>; execute: string | { op: string; args?: Record<string, CommandValue>; list?: Record<string, CommandValue>[] } }
@@ -128,8 +130,17 @@ export interface RowContext { lookup: AttributeLookup; type: AssetTypeToken }
  */
 export function fromWireRow<Row extends Asset = Asset>(row: Record<string, unknown>, context?: RowContext): Row {
   const out: Record<string, unknown> = {};
+  // A `group` query answers with group rows: the group's key as `_oid` and
+  // the grouped rows under `_children`. The children are rows of the query's
+  // own type (or group rows again, for nested groups), so they translate
+  // with the same context. No attribute is called _children, so its presence
+  // is what marks a group row; a "NULL" key is the group of rows with the
+  // relation unset, and reads as null like any unset relation.
+  const grouped = Array.isArray(row._children);
   for (const [k, v] of Object.entries(row)) {
-    if (k === "_oid" && typeof v === "string") out[k] = momentless(v);
+    if (grouped && k === "_children") out[k] = (v as unknown[]).map((child) => (child && typeof child === "object" ? fromWireRow(child as Record<string, unknown>, context) : child));
+    else if (grouped && k === "_oid" && v === "NULL") out[k] = null;
+    else if (k === "_oid" && typeof v === "string") out[k] = momentless(v);
     else out[k] = context ? translate(v, resolvePath(context.lookup, context.type, k), context.lookup) : fromWireValue(v);
   }
   return out as Row;
