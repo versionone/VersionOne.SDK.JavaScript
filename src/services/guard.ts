@@ -21,7 +21,10 @@
  *     pattern first, so it cannot carry grammar. The ID stays a variable.
  *   - Moment is NOT a stamp: `Moment=<an earlier moment of this asset>`
  *     selects the asset as it was then (as-of), and an update scoped by it
- *     lands on the current asset. A Moment guard guards nothing.
+ *     lands on the current asset. A Moment guard guards nothing. Proven for
+ *     writes on 2026-11-11: an update filtered on a stale Moment previews as
+ *     one command and applies, overwriting the change made in between
+ *     ("why not Moment, on a write"; versionone/VersionOne.SDK.JavaScript#51).
  * Every type has ChangeDate except the Ideas product's (Idea*), which keeps
  * no history and cannot be guarded.
  *
