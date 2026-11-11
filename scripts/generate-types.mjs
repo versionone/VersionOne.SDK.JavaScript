@@ -75,7 +75,7 @@ export const META_TYPES = new Set(["AssetType", "AttributeDefinition", "Relation
  * hand-written type omits (unmodelled: information callers cannot reach).
  * Keys that are deliberately not modelled are listed in IGNORED.
  */
-const IGNORED = new Set(["HREF", "Version", "Operations", "Rules", "Description", "Name"]);
+const IGNORED = new Set(["HREF", "Version", "Rules", "Description", "Name"]);
 export function checkHandwritten(metamodel, metamodelTs) {
   const types = metamodel.AssetTypes;
   const delivered = { AssetType: new Set(), AttributeDefinition: new Set() };

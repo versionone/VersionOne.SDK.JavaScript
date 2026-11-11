@@ -70,6 +70,16 @@ export class Schema implements AttributeLookup {
     return attributeOf(this, type, name);
   }
 
+  /**
+   * Can the type do this operation (Delete, Reactivate, …)? Undefined when
+   * the type is not loaded or its definition carries no operations, so a
+   * caller can tell "no" from "don't know".
+   */
+  canOperate(type: AssetTypeToken, op: string): boolean | undefined {
+    const t = this.assetType(type);
+    return t?.Operations ? t.Operations.includes(op) : undefined;
+  }
+
   /** The tokens loaded so far. */
   get loaded(): AssetTypeToken[] {
     return [...this.types.entries()].filter(([, t]) => t !== null).map(([token]) => token);

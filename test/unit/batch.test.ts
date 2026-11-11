@@ -89,12 +89,80 @@ group("batch", () => {
   it("reverseOf restores only what the response confirms: a null scalar is restored as null, a value already present is not removed, an unknown operation is a note", () => {
     const d = describe([], [
       { "@a": { oid: "Story:2", update: { Estimate: { add: ["5"], remove: [] }, Owners: { add: ["Member:20"], remove: [] } } } },
-      { "@b": { oid: "Epic:9", execute: { op: "QuickClose", args: {} } } },
+      { "@b": { oid: "Epic:9", execute: { op: "Split", args: {} } } },
       { "@c": { oid: "Story:3", update: { Name: { add: ["x"], remove: [] } } } }
     ] as unknown as Command[]);
     const r = reverseOf(d, { "Story:2": { Estimate: null, Owners: ["Member:20"] }, "Epic:9": { AssetState: "Active" } }, { created: [], modified: ["Story:2"], operated: ["Epic:9"] });
     expect(r.commands).toEqual([{ from: "Story:2", update: { Estimate: null } }]);
-    expect(r.notes.slice(1)).toEqual(["Epic:9: QuickClose has no known inverse (was Active)"]);
+    expect(r.notes.slice(1)).toEqual(["Epic:9: Split has no known inverse (was Active)"]);
+  });
+
+  it("an asset whose command failed is failed, not also skipped as changed since the snapshot (gh-v1#21)", async () => {
+    const preview = [{ "@x": { oid: "Conversation:12", execute: { op: "Delete", args: {} } } }, { "@y": { oid: "Epic:9", execute: { op: "Inactivate", args: {} } } }] as unknown as Command[];
+    const t = server({
+      preview,
+      lookup: (q) => q.with!.$oids!.map((oid) => (q.select!.includes("Name") ? { _oid: oid } : q.select!.includes("Children") ? { _oid: oid, Children: [] } : { _oid: oid, AssetState: "Active", ChangeDate: "2026-11-11T09:00:00.1" })),
+      send: () => envelope({ assetsOperatedOn: { oidTokens: [], count: 0 }, commandFailures: { commands: [{ error: { sourceCommandIndex: 0, message: "Unknown Operation 'Conversation.Delete'" } }], count: 1 } })
+    });
+    const r = await runBatch(t, schema, [{ from: "Conversation:12", execute: "Delete" }, { from: "Epic:9", execute: "Inactivate" }]);
+    expect(r.failed).toEqual(["Conversation:12"]);
+    expect(r.skipped).toEqual(["Epic:9"]); // matched nothing: changed since the snapshot
+  });
+
+  it("reverseOf leaves out an operation the type does not have, by meta's Operations, and says so: a created Conversation is not deleted (gh-v1#21)", () => {
+    const d = describe([{ "@c": { AssetType: "Conversation" } }, { "@e": { AssetType: "Expression", BelongsTo: "@c", Content: "x" } }], []);
+    const can = (type: string, op: string) => schema.canOperate(type, op);
+    expect(can("Conversation", "Delete")).toBe(false);
+    expect(can("Expression", "Delete")).toBe(true);
+    expect(can("NoSuchType", "Delete")).toBeUndefined(); // not loaded: don't know, keep the command
+    const r = reverseOf(d, {}, { created: ["Conversation:12:300", "Expression:13:301"], modified: [], operated: [] }, { canOperate: can });
+    expect(r.commands).toEqual([{ from: "Expression:13", execute: "Delete" }]);
+    expect(r.notes.join("\n")).toMatch(/Conversation:12: Conversation has no Delete operation, so it is not deleted \(the server removes a Conversation once its last Expression is deleted\)/);
+    // Without the schema's answer, the old behaviour: delete everything created.
+    expect(reverseOf(d, {}, { created: ["Conversation:12", "Expression:13"], modified: [], operated: [] }).commands).toHaveLength(2);
+  });
+
+  it("reverseOf reopens what a close cascaded to, after the parent and top down; unread, it says what it could not reopen (gh-v1#48)", () => {
+    const d = describe([], [{ "@x": { oid: "Story:1", execute: { op: "QuickClose", args: {} } } }] as unknown as Command[]);
+    const done = { created: [], modified: [], operated: ["Story:1"] };
+    const open = { "Story:1": ["Task:5", "Test:7", "Task:6"] };
+    const r = reverseOf(d, { "Story:1": { AssetState: "Active" } }, done, { openDescendants: open, cascaded: { "Story:1": ["Task:5", "Test:7"] } });
+    expect(r.commands).toEqual([{ from: "Story:1", execute: "Reactivate" }, { from: "Task:5", execute: "Reactivate" }, { from: "Test:7", execute: "Reactivate" }]);
+    expect(r.notes.join("\n")).toMatch(/Story:1: QuickClose also closed Task:5, Test:7; reopened after it/);
+    const unread = reverseOf(d, {}, done, { openDescendants: open });
+    expect(unread.commands).toEqual([{ from: "Story:1", execute: "Reactivate" }]);
+    expect(unread.notes.join("\n")).toMatch(/Story:1: QuickClose may also have closed 3 open descendants \(Task:5, Test:7, Task:6\); they could not be read back/);
+  });
+
+  it("runBatch on a close: records the open descendants top down before, the ones the close closed after, stamps them, and reverses parent first (gh-v1#48)", async () => {
+    // Epic:9 → Story:1 → Task:5 (open) and Task:6 (closed already); Inactivate on the Epic closes Story:1 and Task:5.
+    const children: Record<string, string[]> = { "Epic:9": ["Story:1"], "Story:1": ["Task:5", "Task:6"], "Task:5": [], "Task:6": [] };
+    let state: Record<string, string> = { "Epic:9": "Active", "Story:1": "Active", "Task:5": "Active", "Task:6": "Closed" };
+    const preview = [{ "@x": { oid: "Epic:9", execute: { op: "Inactivate", args: {} } } }] as unknown as Command[];
+    const t = server({
+      preview,
+      lookup: (q) => q.with!.$oids!.map((oid) => {
+        const sel = q.select!;
+        if (sel.length === 1 && sel[0] === "Children") return { _oid: oid, Children: children[oid]!.map((c) => ({ _oid: c })) };
+        if (sel.length === 1 && sel[0] === "AssetState") return { _oid: oid, AssetState: state[oid] };
+        if (sel.length === 1 && sel[0] === "ChangeDate") return { _oid: oid, ChangeDate: `2026-11-11T10:00:00.${oid.length}` };
+        if (sel.includes("Name")) return { _oid: oid, Name: oid, Number: oid };
+        return { _oid: oid, AssetState: state[oid], ChangeDate: "2026-11-11T09:00:00.1" };
+      }),
+      send: () => { state = { ...state, "Epic:9": "Closed", "Story:1": "Closed", "Task:5": "Closed" }; return envelope({ assetsOperatedOn: { oidTokens: ["Epic:9"], count: 1 } }); }
+    });
+    const r = await runBatch(t, schema, [{ from: "Epic:9", execute: "Inactivate" }]);
+    expect(r.openDescendants).toEqual({ "Epic:9": ["Story:1", "Task:5"] }); // Task:6 was closed already: not the cascade's
+    expect(r.cascaded).toEqual({ "Epic:9": ["Story:1", "Task:5"] });
+    expect(Object.keys(r.after).sort()).toEqual(["Epic:9", "Story:1", "Task:5"]); // so a later reverse can check them for drift
+    expect(r.reverse.commands).toEqual([
+      { from: "Epic:9", execute: "Reactivate" },
+      { from: "Story:1", execute: "Reactivate" },
+      { from: "Task:5", execute: "Reactivate" }
+    ]);
+    // A preview records the open descendants too, and sends nothing.
+    state = { "Epic:9": "Active", "Story:1": "Active", "Task:5": "Active", "Task:6": "Closed" };
+    expect((await runBatch(t, schema, [{ from: "Epic:9", execute: "Inactivate" }], { dryRun: true })).openDescendants).toEqual({ "Epic:9": ["Story:1", "Task:5"] });
   });
 
   it("dryRun and a declined confirm send nothing; an unguardable batch is refused before any request unless guard is off", async () => {
