@@ -71,8 +71,8 @@ prerelease (`1.0.0-alpha.0`, `-beta.N`, `-rc.N`) goes out on its own
 dist-tag (`alpha`, `beta`, `rc`), so `latest` is never a prerelease.
 
 ```bash
-npm version 1.0.0-alpha.1 --no-git-tag-version   # bump, commit, merge
-git tag v1.0.0-alpha.1 && git push origin v1.0.0-alpha.1
+npm version 1.0.0-alpha.2 --no-git-tag-version   # bump, commit, merge
+git tag v1.0.0-alpha.2 && git push origin v1.0.0-alpha.2
 ```
 
 The workflow does not publish directly: it runs `npm stage publish`, which
