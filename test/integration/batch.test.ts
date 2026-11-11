@@ -93,4 +93,53 @@ describeInstance("batch (live)", () => {
     expect(reversed.skipped).toEqual([]);
     expect(await assetApi.query(t, { from: "Story", select: ["Name"], filter: ["ID=$s"], with: { $s: story }, page: { size: 1, start: 0 } })).toEqual([]);
   });
+
+  const stateOf = async (oid: string) => (await assetApi.query<{ _oid: string; AssetState: string }>(t, { from: oid, select: ["AssetState"], page: { size: 1, start: 0 } }))[0]?.AssetState;
+
+  for (const op of ["Inactivate", "QuickClose"] as const) {
+    it(`undoing ${op} on a Story reopens the Story and the open Tasks its close cascaded to, and leaves a Task that was closed before alone (gh-v1#48)`, async () => {
+      const res = await assetApi.send(t, [{ AssetType: "Story", Name: fixtureName(`cascade ${op}`), Scope: { _oid: "Scope:0" } }], { throwOnFailure: true });
+      const story = assetApi.momentless(res.assetsCreated.oidTokens[0]!);
+      created.push(story);
+      const tasks = await assetApi.send(t, [
+        { AssetType: "Task", Name: fixtureName("cascade open"), Parent: { _oid: story } },
+        { AssetType: "Task", Name: fixtureName("cascade closed before"), Parent: { _oid: story } }
+      ], { throwOnFailure: true });
+      const [open, closedBefore] = tasks.assetsCreated.oidTokens.map(assetApi.momentless) as [string, string];
+      created.push(open, closedBefore);
+      await assetApi.send(t, [{ from: closedBefore, execute: "QuickClose" }], { throwOnFailure: true });
+
+      const receipt = await client.batch.run([{ from: story, execute: op }]);
+      expect(receipt.outcome!.failures).toEqual([]);
+      expect(receipt.openDescendants).toEqual({ [story]: [open] });
+      expect(await stateOf(open)).toBe("Closed"); // the server's cascade, which the receipt must undo
+      expect(receipt.cascaded).toEqual({ [story]: [open] });
+      expect(receipt.reverse.commands).toEqual([{ from: story, execute: "Reactivate" }, { from: open, execute: "Reactivate" }]);
+
+      const { commands, drifted } = await client.batch.reversible(receipt);
+      expect(drifted).toEqual([]);
+      const undone = await client.batch.run(commands);
+      expect(undone.outcome!.failures).toEqual([]);
+      expect(undone.skipped).toEqual([]);
+      expect(await stateOf(story)).toBe("Active");
+      expect(await stateOf(open)).toBe("Active");
+      expect(await stateOf(closedBefore)).toBe("Closed");
+    });
+  }
+
+  it("a created Conversation is left out of the reverse with a note, and undoing the batch deletes its Expression without a failure (gh-v1#21)", async () => {
+    const receipt = await client.batch.run([
+      { "@c": { AssetType: "Conversation" } },
+      { "@e": { AssetType: "Expression", BelongsTo: "@c", Content: fixtureName("reverse conversation") } }
+    ]);
+    expect(receipt.outcome!.failures).toEqual([]);
+    const [conversation, expression] = [receipt.created[0]!.oid, receipt.created[1]!.oid];
+    expect(conversation).toMatch(/^Conversation:/);
+    expect(receipt.reverse.commands).toEqual([{ from: expression, execute: "Delete" }]);
+    expect(receipt.reverse.notes.join("\n")).toMatch(new RegExp(`${conversation}: Conversation has no Delete operation`));
+    const undone = await client.batch.run((await client.batch.reversible(receipt)).commands);
+    expect(undone.outcome!.failures).toEqual([]);
+    expect(undone.failed).toEqual([]);
+    expect(await assetApi.query(t, { from: "Expression", select: ["Content"], filter: ["ID=$e"], with: { $e: expression }, page: { size: 1, start: 0 } })).toEqual([]);
+  });
 });

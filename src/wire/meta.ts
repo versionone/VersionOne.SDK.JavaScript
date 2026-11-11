@@ -103,7 +103,8 @@ export function toAssetType(doc: AssetTypeDocument): AssetType {
     ...(doc.DefaultOrderBy ? { DefaultOrderBy: doc.DefaultOrderBy.tokenref } : {}),
     ...(doc.DefaultDisplayBy ? { DefaultDisplayBy: doc.DefaultDisplayBy.tokenref } : {}),
     ...(doc.ShortName ? { ShortName: doc.ShortName.tokenref } : {}),
-    Attributes: Object.fromEntries(Object.entries(doc.Attributes ?? {}).map(([key, value]) => [key, toAttributeDefinition(value)]))
+    Attributes: Object.fromEntries(Object.entries(doc.Attributes ?? {}).map(([key, value]) => [key, toAttributeDefinition(value)])),
+    ...(doc.Operations ? { Operations: Object.keys(doc.Operations).map((token) => token.slice(token.indexOf(".") + 1)) } : {})
   };
 }
 

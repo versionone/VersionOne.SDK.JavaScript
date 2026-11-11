@@ -60,6 +60,8 @@ export interface AssetType {
     /** The attribute that carries the short name (Number on workitems). */
     ShortName?: AttributeTokenRef;
     Attributes: Record<AttributeToken, AttributeDefinition>;
+    /** The operations the type supports, by bare name (Delete, Inactivate, …); delivered keyed by token (Story.Delete). */
+    Operations?: string[];
 }
 
 export type AssetTypeMap = Record<AssetTypeToken, AssetType>;

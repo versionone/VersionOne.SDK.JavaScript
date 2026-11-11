@@ -13,6 +13,12 @@
  * which were skipped by the guard; and a reverse batch that undoes what
  * succeeded, best effort, with a note for anything it cannot.
  *
+ * Closing a workitem cascades: Core's Inactivate and QuickClose also close
+ * its open descendants, and Reactivate reopens only the asset it names. So
+ * before a batch that closes, the receipt records each closing target's
+ * open descendants; after it, the ones the close actually closed; and the
+ * reverse reopens the parent, then those, top down.
+ *
  * The snapshot keeps the endpoint's spelling (strings, relations as OID
  * tokens) on purpose: it is what a reverse batch writes back.
  */
@@ -138,19 +144,79 @@ export async function snapshot(transport: Transport, described: Described): Prom
 // ---- undoing it --------------------------------------------------------------------
 
 /** The known inverse operations. Anything else is reported, not guessed. */
-export const INVERSE: Readonly<Record<string, string>> = { Inactivate: "Reactivate", Reactivate: "Inactivate", Delete: "Undelete", Undelete: "Delete" };
+export const INVERSE: Readonly<Record<string, string>> = { Inactivate: "Reactivate", QuickClose: "Reactivate", Reactivate: "Inactivate", Delete: "Undelete", Undelete: "Delete" };
+
+/** Operations that close an asset's open descendants along with it (Core's close cascade). */
+export const CASCADING: ReadonlySet<string> = new Set(["Inactivate", "QuickClose"]);
+
+/** How deep a cascade is followed: Epic → sub-Epic → Story → Task is four. */
+const CASCADE_DEPTH = 8;
+
+/**
+ * Each root's open descendants, top down (children, then grandchildren, …),
+ * through the Children relation of the types that have one. One bounded
+ * query per type and chunk for each level's children, and one for their
+ * states. A root whose type has no Children has none.
+ */
+export async function openDescendantsOf(transport: Transport, schema: Schema, roots: Oid[]): Promise<Record<Oid, Oid[]>> {
+  const out: Record<Oid, Oid[]> = {};
+  const rootOf = new Map<Oid, Oid>(roots.map((r) => [momentless(r), momentless(r)]));
+  const seen = new Set(rootOf.keys());
+  let frontier = [...rootOf.keys()];
+  for (let depth = 0; depth < CASCADE_DEPTH && frontier.length; depth += 1) {
+    const children = new Map<Oid, Oid>(); // child → its root
+    for (const [type, list] of byType(frontier)) {
+      await schema.load(type);
+      if (!schema.attribute(type, "Children")) continue;
+      for (const part of chunks(list)) {
+        const rows = await assetApi.query<Asset & { Children?: unknown }>(transport, { from: type, select: ["Children"], filter: ["ID=$oids"], with: { $oids: part }, page: { size: part.length, start: 0 } });
+        for (const r of rows) {
+          const parent = momentless(r._oid);
+          for (const c of ([] as unknown[]).concat(plain(r.Children) ?? [])) {
+            const child = momentless(String(c));
+            if (seen.has(child)) continue;
+            seen.add(child);
+            children.set(child, rootOf.get(parent)!);
+          }
+        }
+      }
+    }
+    const states = children.size ? await statesOf(transport, [...children.keys()]) : {};
+    frontier = [];
+    for (const [child, root] of children) {
+      if (states[child] === undefined || isClosed(states[child])) continue; // gone, or closed already: not the cascade's
+      rootOf.set(child, root);
+      (out[root] ??= []).push(child);
+      frontier.push(child);
+    }
+  }
+  return out;
+}
 
 export interface Reverse { commands: Command[]; notes: string[] }
+
+/** What reverseOf can know beyond the response, each optional. */
+export interface ReverseContext {
+  /** Per closing target, its open descendants before the batch (Receipt.openDescendants). */
+  openDescendants?: Record<Oid, Oid[]>;
+  /** Per closing target, the descendants the close closed (Receipt.cascaded); undefined when they could not be read back. */
+  cascaded?: Record<Oid, Oid[]>;
+  /** Can this type do this operation? Undefined is "don't know", and the command is kept. */
+  canOperate?: (type: AssetTypeToken, op: string) => boolean | undefined;
+}
 
 /**
  * A batch that undoes what the response says succeeded — best effort. Only
  * what the response confirms is reversed (membership in it, not command
  * index, decides): updated attributes put back from the snapshot, the
- * inverse operation where one is known, created assets deleted (newest
- * first).
+ * inverse operation where one is known (and, for a close, the descendants
+ * it closed reopened after it, top down), created assets deleted (newest
+ * first). An operation a type does not have, by `context.canOperate`, is
+ * a note rather than a command the server would refuse.
  */
-export function reverseOf(described: Described, before: Record<Oid, Record<string, unknown>>, done: { created: Oid[]; modified: Oid[]; operated: Oid[] }): Reverse {
+export function reverseOf(described: Described, before: Record<Oid, Record<string, unknown>>, done: { created: Oid[]; modified: Oid[]; operated: Oid[] }, context: ReverseContext = {}): Reverse {
   const commands: Command[] = [], notes: string[] = [];
+  const cannot = (oid: Oid, op: string) => context.canOperate?.(typeOfOid(oid), op) === false;
   const modified = new Set(done.modified.map(momentless)), operated = new Set(done.operated.map(momentless));
   for (const u of described.updates) {
     if (!modified.has(u.oid)) continue;
@@ -172,10 +238,26 @@ export function reverseOf(described: Described, before: Record<Oid, Record<strin
   for (const e of described.executes) {
     if (!operated.has(e.oid)) continue;
     const inverse = INVERSE[e.op];
-    if (inverse) commands.push({ from: e.oid, execute: inverse });
-    else notes.push(`${e.oid}: ${e.op} has no known inverse (was ${String(before[e.oid]?.AssetState ?? "?")})`);
+    if (!inverse) { notes.push(`${e.oid}: ${e.op} has no known inverse (was ${String(before[e.oid]?.AssetState ?? "?")})`); continue; }
+    if (cannot(e.oid, inverse)) { notes.push(`${e.oid}: ${typeOfOid(e.oid)} has no ${inverse} operation, so its ${e.op} is not reversed`); continue; }
+    commands.push({ from: e.oid, execute: inverse });
+    if (!CASCADING.has(e.op)) continue;
+    const open = context.openDescendants?.[e.oid] ?? [];
+    const closed = context.cascaded ? context.cascaded[e.oid] ?? [] : undefined;
+    if (closed === undefined) {
+      if (open.length) notes.push(`${e.oid}: ${e.op} may also have closed ${open.length} open descendant${open.length === 1 ? "" : "s"} (${open.join(", ")}); they could not be read back, so they are not reopened`);
+      continue;
+    }
+    for (const d of closed) {
+      if (cannot(d, "Reactivate")) notes.push(`${d}: closed with ${e.oid}, but ${typeOfOid(d)} has no Reactivate operation`);
+      else commands.push({ from: d, execute: "Reactivate" });
+    }
+    if (closed.length) notes.push(`${e.oid}: ${e.op} also closed ${closed.join(", ")}; reopened after it`);
   }
-  for (const oid of [...done.created].reverse()) commands.push({ from: momentless(oid), execute: "Delete" });
+  for (const oid of [...done.created].reverse().map(momentless)) {
+    if (cannot(oid, "Delete")) notes.push(`${oid}: ${typeOfOid(oid)} has no Delete operation, so it is not deleted${typeOfOid(oid) === "Conversation" ? " (the server removes a Conversation once its last Expression is deleted)" : ""}`);
+    else commands.push({ from: oid, execute: "Delete" });
+  }
   for (const d of described.deferred ?? []) notes.push(`command ${d.index} (${d.alias}): an aliased ${d.kind} of ${d.from}, sent as written with no snapshot; not reversed`);
   if (commands.length) notes.unshift("restores the state recorded at snapshotAt; anything that changed between then and sentAt is not reflected, and a scalar restored to null is cleared, not unset");
   return { commands, notes };
@@ -206,8 +288,14 @@ export interface Receipt {
   touched: ({ oid: Oid } & Named)[];
   /** ChangeDate of everything the batch touched, just after it: the stamp a later reverse checks for drift. */
   after: Record<Oid, string>;
-  /** Touched assets the guard left alone: changed or gone since the snapshot. */
+  /** Touched assets the guard left alone: changed or gone since the snapshot. Not the ones whose command failed: those are in `failed`. */
   skipped: Oid[];
+  /** Touched assets whose command the server reports as failed (outcome.failures says why). */
+  failed: Oid[];
+  /** Per asset the batch closes (Inactivate, QuickClose): its open descendants at the snapshot, top down. */
+  openDescendants: Record<Oid, Oid[]>;
+  /** Per asset the batch closed: the descendants the close closed with it, read back after the send. */
+  cascaded: Record<Oid, Oid[]>;
   reverse: Reverse;
   /** What the record could not do and why: a name lookup that failed, deferred commands sent unsnapshotted. */
   notes: string[];
@@ -266,12 +354,14 @@ export async function runBatch(transport: Transport, schema: Schema, commands: C
   const described = describe(commands, projected);
   const touched = touchedBy(projected);
   const names = await namesOf(transport, schema, touched, noteFailure);
-  const receipt: Receipt = { receipt: 1, request: commands, previewedAt, preview: projected, described, names: Object.fromEntries(names), before: {}, sent: false, guarded: false, created: [], touched: [], after: {}, skipped: [], reverse: { commands: [], notes: [] }, notes };
+  const receipt: Receipt = { receipt: 1, request: commands, previewedAt, preview: projected, described, names: Object.fromEntries(names), before: {}, sent: false, guarded: false, created: [], touched: [], after: {}, skipped: [], failed: [], openDescendants: {}, cascaded: {}, reverse: { commands: [], notes: [] }, notes };
   const nothing = !described.creates.length && !described.updates.length && !described.executes.length && !described.queries.length && !described.deferred.length;
   if (nothing) return receipt;
   for (const d of described.deferred) notes.push(`command ${d.index} (${d.alias}): an aliased ${d.kind}, which preview does not expand; sent as written, not snapshotted, not reversible`);
   receipt.snapshotAt = now();
   receipt.before = await snapshot(transport, described);
+  const closing = described.executes.filter((e) => CASCADING.has(e.op)).map((e) => e.oid);
+  if (closing.length) receipt.openDescendants = await openDescendantsOf(transport, schema, closing);
   if (options.dryRun) return receipt;
   if (options.confirm && !(await options.confirm(receipt))) return receipt;
 
@@ -309,17 +399,40 @@ export async function runBatch(transport: Transport, schema: Schema, commands: C
   const unnamed = { number: null, name: null };
   receipt.created = done.created.map((oid, i) => ({ alias: described.creates[i]?.alias ?? null, type: described.creates[i]?.type ?? typeOfOid(oid), oid, ...unnamed }));
   receipt.touched = hit.map((oid) => ({ oid, ...(names.get(oid) ?? unnamed) }));
-  receipt.skipped = useGuard ? [...new Set([...unstamped, ...touched.filter((oid) => !hit.includes(oid))])] : [];
-  receipt.reverse = reverseOf(described, receipt.before, done);
+  // A failed command names its asset in what was sent: the guard's
+  // with.$oid, or the from of a per-asset command sent as written.
+  const sentAs = receipt.sentCommands ?? [];
+  const oidOfSent = (i: number | null): Oid | null => {
+    const body = i === null ? undefined : (sentAs[i] ? bodyOf(sentAs[i]!) : undefined);
+    const id = (body?.with as { $oid?: unknown } | undefined)?.$oid ?? body?.from;
+    return typeof id === "string" && id.includes(":") ? momentless(id) : null;
+  };
+  receipt.failed = [...new Set(done.failures.map((f) => oidOfSent(f.index)).filter((oid): oid is Oid => !!oid && touched.includes(oid) && !hit.includes(oid)))];
+  receipt.skipped = useGuard ? [...new Set([...unstamped, ...touched.filter((oid) => !hit.includes(oid) && !receipt.failed.includes(oid))])] : [];
+  // What each type can do, from the definitions already loaded (or loadable):
+  // an unknown answer keeps the command, as before.
+  for (const type of new Set([...done.created, ...hit].map((oid) => typeOfOid(momentless(oid))))) await schema.load(type).catch(() => null);
+  const canOperate = (type: AssetTypeToken, op: string) => schema.canOperate(type, op);
+  const operatedNow = new Set(done.operated.map(momentless));
+  const closed = Object.keys(receipt.openDescendants).filter((oid) => operatedNow.has(oid) && receipt.openDescendants[oid]!.length);
+  // Until the cascade is read back, the reverse says what it could not reopen.
+  receipt.reverse = reverseOf(described, receipt.before, done, { openDescendants: receipt.openDescendants, cascaded: closed.length ? undefined : {}, canOperate });
 
   // Decoration, read back from the server. Names are cosmetic (a failure is
   // a note); the after stamps are not, so a failure there throws with the
   // receipt, outcome and all.
   try {
+    if (closed.length) {
+      // The descendants the close closed: open at the snapshot, closed now.
+      const states = await statesOf(transport, closed.flatMap((oid) => receipt.openDescendants[oid]!));
+      receipt.cascaded = Object.fromEntries(closed.map((oid) => [oid, receipt.openDescendants[oid]!.filter((d) => isClosed(states[d]))]));
+      receipt.reverse = reverseOf(described, receipt.before, done, { openDescendants: receipt.openDescendants, cascaded: receipt.cascaded, canOperate });
+    }
     const more = await namesOf(transport, schema, [...done.created, ...hit.filter((oid) => !names.has(oid))], noteFailure);
     receipt.created = receipt.created.map((c) => ({ ...c, ...(more.get(c.oid) ?? unnamed) }));
     receipt.touched = receipt.touched.map((t) => (names.has(t.oid) ? t : { ...t, ...(more.get(t.oid) ?? unnamed) }));
-    const all = [...done.created, ...hit];
+    // The cascade's descendants too: a later reverse reopens them, and checks them for changes first.
+    const all = [...new Set([...done.created, ...hit, ...Object.values(receipt.cascaded).flat()])];
     receipt.after = all.length ? await stampsOf(transport, all) : {};
   } catch (error) {
     throw new BatchRecordError(error, receipt);
