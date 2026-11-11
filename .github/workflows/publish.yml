@@ -7,11 +7,19 @@ name: Publish
 # (alpha, beta, rc), so `npm install @versionone/agility-sdk` never picks it
 # up; only a plain version moves `latest`.
 #
+# Staged publishing: the workflow runs `npm stage publish`, which places the
+# version in the registry where nobody can install it yet. A maintainer then
+# approves it with 2FA, and only then does it go out:
+#   npm stage approve <stage-id>        (or Approve on the package's npmjs page)
+# The stage ID is printed in the run's summary. `npm stage reject <stage-id>`
+# discards it instead. A trusted-publisher token can stage but never approve,
+# so CI alone can never put a version on npm.
+#
 # Authentication is npm trusted publishing (OIDC): on the package's npmjs
 # settings, link organization versionone, repository VersionOne.SDK.JavaScript,
-# workflow publish.yml and environment npm; no token is stored anywhere.
-# (1.0.0-alpha.0 was published by hand, as a package must exist before it
-# can be linked.) An NPM_TOKEN secret, if set, is used as a fallback.
+# workflow publish.yml and environment npm, and allow `npm stage publish`
+# (npm recommends leaving plain `npm publish` disallowed). No token is stored.
+# An NPM_TOKEN secret, if set, is used as a fallback; it, too, can only stage.
 
 on:
   push:
@@ -38,8 +46,8 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      # Trusted publishing needs npm 11.5.1 or later.
-      - run: npm install -g npm@^11.5.1
+      # `npm stage` needs npm 11.15.0 or later.
+      - run: npm install -g npm@^11.15.0
       - run: npm ci
       - name: The tag names the version in package.json
         run: |
@@ -58,7 +66,27 @@ jobs:
           esac
           if [ -z "${tag}" ]; then tag=next; fi
           echo "DIST_TAG=${tag}" >> "$GITHUB_ENV"
-          echo "Publishing ${VERSION} with dist-tag ${tag}"
-      - run: npm publish --provenance --access public --tag "${DIST_TAG}"
+          echo "Staging ${VERSION} with dist-tag ${tag}"
+      - name: Stage the release
+        run: |
+          npm stage publish --provenance --access public --tag "${DIST_TAG}" | tee stage.out
+          stage_id="$(sed -n 's/.*(staged with id \([^)]*\)).*/\1/p' stage.out | tail -n 1)"
+          {
+            echo "## Staged @versionone/agility-sdk@${VERSION} (dist-tag ${DIST_TAG})"
+            echo
+            echo "Nothing is published until a maintainer approves it with 2FA:"
+            echo
+            echo '```sh'
+            if [ -n "${stage_id}" ]; then
+              echo "npm stage view ${stage_id}       # check what was staged"
+              echo "npm stage approve ${stage_id}    # publish it"
+              echo "npm stage reject ${stage_id}     # discard it"
+            else
+              echo "npm stage list @versionone/agility-sdk   # find the stage ID"
+            fi
+            echo '```'
+            echo
+            echo "Or approve it on https://www.npmjs.com/package/@versionone/agility-sdk"
+          } >> "$GITHUB_STEP_SUMMARY"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
