@@ -71,17 +71,33 @@ prerelease (`1.0.0-alpha.0`, `-beta.N`, `-rc.N`) goes out on its own
 dist-tag (`alpha`, `beta`, `rc`), so `latest` is never a prerelease.
 
 ```bash
-npm version 1.0.0-alpha.1 --no-git-tag-version   # bump, commit, merge
-git tag v1.0.0-alpha.1 && git push origin v1.0.0-alpha.1
+npm version 1.0.0-alpha.2 --no-git-tag-version   # bump, commit, merge
+git tag v1.0.0-alpha.2 && git push origin v1.0.0-alpha.2
 ```
 
+The workflow does not publish directly: it runs `npm stage publish`, which
+puts the version in the registry where nobody can install it yet, and prints
+its stage ID in the run's summary. A maintainer then approves it with 2FA,
+which is what publishes it:
+
+```bash
+npm stage view <stage-id>      # what was staged
+npm stage approve <stage-id>   # publish it (asks for 2FA)
+npm stage reject <stage-id>    # discard it
+```
+
+or approves it on the package's page on npmjs. `npm stage` needs npm
+11.15.0 or later.
+
 Authentication is npm trusted publishing: on npmjs, the package's settings
-link this repository, `publish.yml` and the GitHub environment `npm`, and no
-token is stored. The `npm` environment (repository settings) requires an
-approval, so a pushed tag waits for a maintainer before it publishes. A package
-must exist before it can be linked, so the very first version is published
-once by hand by an `@versionone` org member (`npm publish --access public
---tag alpha` from a clean checkout of the tagged commit), then linked.
+link this repository, `publish.yml` and the GitHub environment `npm`, with
+the `npm stage publish` permission (leave plain `npm publish` off, as npm
+recommends), and no token is stored. A trusted-publisher link expires; an
+expired one must be deleted and created again, and until then the workflow
+fails with `ENEEDAUTH`. The `npm` environment (repository settings) requires
+an approval, so a pushed tag waits for a maintainer before it stages. A
+package must exist before it can be linked, so the very first version was
+published once by hand by an `@versionone` org member.
 
 ## Before PR
 
