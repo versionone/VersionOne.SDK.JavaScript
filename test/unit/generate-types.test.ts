@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 // @ts-expect-error — a plain ES module script, imported for its exports.
 import { META_TYPES, checkHandwritten, generate, model } from "../../scripts/generate-types.mjs";
+// @ts-expect-error — the same, for the metamodel pull.
+import { canned } from "../../scripts/download-metamodel.mjs";
 
 const root = join(__dirname, "..", "..");
 
@@ -91,7 +93,6 @@ describe("generate-types", () => {
 
 describe("download-metamodel: the committed metamodel is the product's", () => {
   it("strips an instance's custom list types, its custom and reciprocal attributes, and whatever still points at them; keeps canned ones", async () => {
-    const { canned } = await import("../../scripts/download-metamodel.mjs");
     const delivered = { Version: "26.3.1.13", AssetTypes: {
       List: { Token: "List", Abstract: true, Attributes: { "List.Name": { Token: "List.Name", Name: "Name", IsCustom: false, IsCanned: false } } },
       Custom_Demo_List: { Token: "Custom_Demo_List", Base: { nameref: "List" }, Attributes: { "Custom_Demo_List.ReciprocalOf_Story_Custom_Demo_Single_List": { Token: "Custom_Demo_List.ReciprocalOf_Story_Custom_Demo_Single_List", Name: "ReciprocalOf_Story_Custom_Demo_Single_List", IsCustom: true, IsCanned: false } } },
