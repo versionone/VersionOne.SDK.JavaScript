@@ -16,7 +16,8 @@ npm install @versionone/agility-sdk@alpha
 import { AgilityApiClient } from "@versionone/agility-sdk";
 
 const client = new AgilityApiClient({ baseUrl: "https://www14.v1host.com/v1sdktesting", accessToken: process.env.V1_ACCESS_TOKEN });
-const stories = await client.queryV1.query({ from: "Story", select: ["Name", "Estimate"], page: { size: 10, start: 0 } });
+const stories = await client.query({ from: "Story", select: ["Name", "Estimate"], page: { size: 10, start: 0 } });
+// stories[0].Estimate is a number | null; stories[0].Nmae does not compile
 ```
 
 ## Working on the SDK
@@ -38,16 +39,22 @@ npm test
 
 ## Public API
 
-- `AgilityApiClient` - top-level SDK client (`meta`, `data` for rest-1, `assets` for api/asset, `localize` for loc-2, `schema`), and the services on it:
-  - `queryV1.query` / `queryV1.queries` - reads through query.v1: the same query bodies as `assets.query`, rows translated the same way, but the endpoint is read-only and answers with rows alone, so it is the safe place to explore a query
+Changes between alphas are in `CHANGELOG.md`, each with its migration line.
+
+- `AgilityApiClient` - the client. One query body everywhere; the client picks the endpoint:
+  - `query` / `queries` - rows, translated (numbers as numbers, booleans as booleans, a single relation as one `Ref`), through query.v1: read-only, so a request is retried like a GET. A page is required; a refused query throws, never an empty result. Written with a literal `from`, `select` completes from the type's attributes and the rows are typed by what was selected
+  - `get(oid, select)` - one asset or null; `queryPage(q)` - rows with the total and whether more follow; `pages(q, { limit })` / `all(q, { limit })` - page by page up to a limit (default 1000); `me()` - the member the credentials belong to
+  - `assets.send` - an api/asset batch, answered as an `Outcome` (`created`, `modified`, `operated`, `failures` with parsed violations, `queryResults`); `throwOnFailure` throws a `CommandFailureError` carrying the same Outcome. `assets.preview` - the projection. `assets.sendGuarded` - a batch as a compare-and-set on each asset's ChangeDate; changed assets come back `skipped`
+  - `batch.run` / `batch.reversible` - preview, snapshot, (confirm,) send guarded, and a receipt with a reverse batch; undo reactivates a closed asset before deleting it and reopens what a close cascaded to
   - `resolve.numbers` / `resolve.ref` - asset numbers and OID tokens to assets, in one request
-  - `assets.sendGuarded` - a batch as a compare-and-set on each asset's ChangeDate; changed assets come back `skipped`
-  - `attachments.list` / `page` / `info` / `get` / `add` / `put` / `remove` / `url` - files attached to an asset: metadata on the Attachment asset, bytes through attachment.img; `page` adds the total and whether more pages follow; `get`'s `contentType` is the type the server sent the bytes with; `add` sends a small file inline (Base64, one request) and a large one in two steps (create, then upload), and a failed upload throws `AttachmentUploadError` naming the empty attachment it left
-  - `embeddedImages.upload` / `url` / `normalize` - images in rich text: upload returns the `<img src>` URL; `normalize` rewrites `embedded.img` references to this instance's URL. They cannot be deleted
-  - `batch.run` / `batch.reversible` - preview, snapshot, (confirm,) send guarded, and a receipt with a reverse batch. Undo (`batch.reversible`) reactivates a closed asset before deleting it, and a second command on one asset is sent as a second guarded pass. The reverse uses only operations the type has in meta (a created Conversation, which has no `Delete`, is a note), and undoing an `Inactivate` or `QuickClose` reopens the descendants that close cascaded to (`receipt.openDescendants`, `receipt.cascaded`), parent first. A command the server reports as failed lands in `receipt.failed`, not `skipped`. `confirm` sees the touched assets' names; aliased updates/executes are sent as written with `guard: false`; a failure after the send throws `BatchRecordError` carrying the receipt
-- `TypeCache` - one instance's loaded type definitions, shared by many clients (`new AgilityApiClient(config, { types })`): a server that builds a client per user fetches each type once
+  - `attachments.list` / `page` / `info` / `get` / `add` / `put` / `remove` - files attached to an asset; `add` sends a small file inline and a large one in two steps, and a failed upload throws `AttachmentUploadError` naming the empty attachment it left
+  - `embeddedImages.upload` / `normalize` - images in rich text; they cannot be deleted
+  - `urls.asset` / `attachment` / `embeddedImage` - where a browser opens each
+  - `data.list` / `get` / `history` - rest-1 reads, for deleted assets and history; `meta.*` - meta.v1 raw; `schema` - the translated, cached view; `localize` - loc-2 labels for tags (a violation's `tag` is one)
+- Errors: everything thrown is an `ApiError` with a `kind` (`auth`, `forbidden`, `notFound`, `invalid`, `transient`, `aborted`, `commandFailure`, `protocol`, `usage`, `unknown`). A mistake caught before any request is a `UsageError`
+- `TypeCache` - one instance's loaded type definitions, shared by many clients (`new AgilityApiClient(config, { types })`)
 - `createFetchTransport` - configurable HTTP transport: `credentials` for same-origin cookie auth, `onUnauthorized` to re-authenticate on a 401 (resends idempotent requests once), and a per-request `signal`; `client.withSignal(signal)` ties a whole client to one
-- `ApiError` - typed API error; `CommandFailureError` - an api/asset batch in which commands failed (`failures` by index, plus the `response`)
+- The wire modules (`assetApi`, `queryV1`, `rest1`, `meta`, `loc2`, `attachment`) are exported for passthroughs and transport authors; they speak the endpoints' own shapes
 
 API reference: https://docs.digital.ai/agility-api/
 

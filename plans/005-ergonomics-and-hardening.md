@@ -226,13 +226,16 @@ Checked against meta.v1's actual document (`metamodel.json`) and the code.
 ## Sequencing
 
 1. **Findings pass** — this file. Read-only, done 2026-11-12.
-2. **Breaking batch → `1.0.0-alpha.3`**, one coordinated release before
-   rooms D1: Review 1.1 (Outcome from `send`), 1.3 (one query shape; the
-   default read path), 1.4 (error kinds, `UsageError`), 1.5
-   (`queryPage`/`pages` on the client), 1.6 (`get`, `me`), 1.8 (verb set,
-   aliases), 1.9 and 2.6 (`urls`), 1.2 (typed `from`/`select`, additive).
-   CHANGELOG, handoffs for gh-v1 (re-vendor) and the bot (re-pin), spec
-   000 updated where an invariant moves.
+2. **Breaking batch → `1.0.0-alpha.3`** — done 2026-11-12, one release
+   before rooms D1: Review 1.1 (Outcome from `send`), 1.3 (one query
+   shape; `client.query` the default read path, rest-1 behind `data`),
+   1.4 (error kinds, `UsageError`, parsed violations; spec 000 §7), 1.5
+   (`queryPage`/`pages`/`all` on the client), 1.6 (`get`, `me`), 1.9 and
+   2.6 (`urls`), 1.2 (typed `from`/`select`). 1.8's verb review kept the
+   existing names: the only renames are the read path and the URL
+   builders, each with a deprecated alias for this alpha. `CHANGELOG.md`
+   carries the migration lines; handoffs: `plans/handoffs/alpha-3-gh-v1.md`
+   and `plans/handoffs/alpha-3-k6i-agility-slack-bot.md`.
 3. **Rooms D1 on `alpha.3`.** Plan 004's first decision (rest-1 writes,
    Copy, `New/{T}`) and the live friction list from writing rooms' top
    flows (board load, status change, attachment, conversation) come back
@@ -265,10 +268,27 @@ Checked against meta.v1's actual document (`metamodel.json`) and the code.
   `TypeCache` per instance. Not covered: OAuth refresh (the bot's Flow 4
   stays in the bot) and ETag caching. Enough for the three consumers;
   document it in one place.
-- **Who else:** the Agility MCP server (is it on this SDK, or should it
-  be?), ossum-ui (named in `src/types/oid.ts`), Core's gulp `v1api`
-  helper (shares the config file), and any customer integration now that
-  the package is public. The MCP server is the one to ask about first: an
-  agent-facing consumer would exercise Review 3 directly.
+- **Who else** (answered 2026-11-12): the Agility MCP server is Python, so
+  not a consumer; this SDK is the reference for updated Python bindings
+  (its layers, one-shape model, error kinds and guard are the parts worth
+  carrying over). Nearer-term TypeScript surfaces: a Microsoft Teams app
+  and a VS Code extension, both shaped like the slack bot (token per
+  user, one `TypeCache` per instance) and the CLI respectively; a Claude
+  mod is possible. Also ossum-ui (named in `src/types/oid.ts`), Core's
+  gulp `v1api` helper, and any customer integration now the package is
+  public.
+- **An API console is a surface too**, and a demanding one: it would
+  exercise the schema service, the error kinds and the typed query shape
+  directly, and surface gaps faster than an app with a fixed set of
+  queries. Two pieces exist: `src/wire/select.ts` resolves select paths
+  hop by hop against meta (dotted paths, downcasts, filters, aggregates),
+  which is the seed of a type-ahead for `select`; and api/asset's
+  `previewOnly` with `sendYaml` parses a batch server-side. The `filter`
+  grammar is not parsed client-side at all. A browser-safe parser for both
+  grammars (`V1Query.g` as the docs publish it), driven by meta, with
+  completion of attributes, operators and list values, is a candidate
+  module (`services/grammar`, say) that the console, rooms' query builders
+  and the typed-query work would share. Add it to Review 2 as 2.7 once a
+  first consumer commits to it.
 - **Still open from #51:** an exact guard stamp (Moment is not one;
   ChangeDate as a literal is). Not blocking; the guard works.
