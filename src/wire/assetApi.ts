@@ -28,6 +28,7 @@ import { ApiError, UsageError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import type { Asset, Oid, Ref } from "../types/asset";
 import type { AssetTypeToken, AttributeLookup, AttributeTokenRef, AttributeType } from "../types/metamodel";
+import type { CreateType, From, SelectPath, TypeOf } from "../types/query";
 import { momentless } from "../types/oid";
 import { fromTypeOf, resolvePath, type PathResolution } from "./select";
 
@@ -38,10 +39,15 @@ export { momentless };
 /** A value in a command as the MODEL writes it: scalars, Refs, lists of either, or a nested command. */
 export type CommandValue = string | number | boolean | null | Ref | CommandValue[] | { [key: string]: CommandValue };
 
-export interface CreateBody { AssetType: string; [attribute: string]: CommandValue }
-export interface QueryBody {
-  from: string;
-  select?: (string | QueryBody)[];
+export interface CreateBody { AssetType: CreateType; [attribute: string]: CommandValue }
+/**
+ * A query. Written with a literal `from`, `select` completes from that
+ * type's attributes and the rows come back typed by what was selected
+ * (src/types/query.ts); written from variables, it is what it always was.
+ */
+export interface QueryBody<F extends string = string> {
+  from: F | From;
+  select?: (SelectPath<TypeOf<F>> | QueryBody)[];
   filter?: string[];
   where?: Record<string, string>;
   with?: Record<string, CommandValue>;
@@ -64,14 +70,14 @@ export interface QueryBody {
  * remove what should go and add what should come. A change comment goes in
  * the update node as `ChangeComment`.
  */
-export interface UpdateBody { from: string; filter?: string[]; where?: Record<string, string>; with?: Record<string, CommandValue>; update: Record<string, CommandValue> }
+export interface UpdateBody { from: From; filter?: string[]; where?: Record<string, string>; with?: Record<string, CommandValue>; update: Record<string, CommandValue> }
 /**
  * An operation (QuickClose, Inactivate, Reactivate, Delete, …), optionally
  * with arguments. It cannot carry a change comment. Agility refuses to
  * Delete a closed asset (Violation'AssetCannotDeleteClosed): Reactivate it
  * first, as batch.reversible does.
  */
-export interface ExecuteBody { from: string; filter?: string[]; where?: Record<string, string>; with?: Record<string, CommandValue>; execute: string | { op: string; args?: Record<string, CommandValue>; list?: Record<string, CommandValue>[] } }
+export interface ExecuteBody { from: From; filter?: string[]; where?: Record<string, string>; with?: Record<string, CommandValue>; execute: string | { op: string; args?: Record<string, CommandValue>; list?: Record<string, CommandValue>[] } }
 export type CommandBody = CreateBody | QueryBody | UpdateBody | ExecuteBody;
 
 /** An alias key: "@story". */

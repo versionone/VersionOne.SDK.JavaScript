@@ -10,6 +10,7 @@ import { Schema, type TypeCache } from "./services/schema";
 import type { Asset, Oid } from "./types/asset";
 import type { Member } from "./types/assets/Member";
 import type { Metamodel } from "./types/metamodel";
+import type { From, RowOf, RowsOf, Selected, SelectPath, TypeOf } from "./types/query";
 import { momentless } from "./types/oid";
 import * as assetApi from "./wire/assetApi";
 import * as attachment from "./wire/attachment";
@@ -115,15 +116,19 @@ export class AgilityApiClient {
    * page is required; a query the server refuses throws (kind "invalid"),
    * never an empty result.
    */
-  async query<Row extends Asset = Asset>(q: assetApi.QueryBody): Promise<Row[]> {
+  query<const F extends From, const Q extends assetApi.QueryBody<F>>(q: Q & assetApi.QueryBody<F>): Promise<RowOf<Q>[]>;
+  query<Row extends Asset = Asset>(q: assetApi.QueryBody): Promise<Row[]>;
+  async query(q: assetApi.QueryBody): Promise<Asset[]> {
     await this.schema.ensureFor([q]);
-    return queryV1.query<Row>(this.transport, q, { lookup: this.schema });
+    return queryV1.query(this.transport, q, { lookup: this.schema });
   }
 
   /** Several queries in one request; one array of rows per query, in order. */
-  async queries<Row extends Asset = Asset>(qs: assetApi.QueryBody[]): Promise<Row[][]> {
+  queries<const Qs extends readonly assetApi.QueryBody[]>(qs: Qs): Promise<RowsOf<Qs>>;
+  queries<Row extends Asset = Asset>(qs: assetApi.QueryBody[]): Promise<Row[][]>;
+  async queries(qs: readonly assetApi.QueryBody[]): Promise<Asset[][]> {
     await this.schema.ensureFor(qs);
-    return queryV1.queries<Row>(this.transport, qs, { lookup: this.schema });
+    return queryV1.queries(this.transport, [...qs], { lookup: this.schema });
   }
 
   /**
@@ -131,8 +136,10 @@ export class AgilityApiClient {
    * asset has that OID. (`select` omitted: just the OID, which tells you it
    * exists.)
    */
-  async get<Row extends Asset = Asset>(oid: Oid, select?: assetApi.QueryBody["select"]): Promise<Row | null> {
-    const rows = await this.query<Row>({ from: momentless(oid), ...(select ? { select } : {}), page: { size: 1, start: 0 } });
+  get<const O extends string, const S extends readonly (SelectPath<TypeOf<O>> | assetApi.QueryBody)[]>(oid: O, select: S): Promise<Selected<TypeOf<O>, S> | null>;
+  get<Row extends Asset = Asset>(oid: Oid, select?: assetApi.QueryBody["select"]): Promise<Row | null>;
+  async get(oid: Oid, select?: assetApi.QueryBody["select"]): Promise<Asset | null> {
+    const rows = await this.query({ from: momentless(oid), ...(select ? { select } : {}), page: { size: 1, start: 0 } });
     return rows[0] ?? null;
   }
 
@@ -141,9 +148,11 @@ export class AgilityApiClient {
    * asked (query.v1 does not), so this read goes there. `total` is null
    * when the server did not say; `more` is then whether the page was full.
    */
-  async queryPage<Row extends Asset = Asset>(q: assetApi.QueryBody): Promise<Page<Row>> {
+  queryPage<const F extends From, const Q extends assetApi.QueryBody<F>>(q: Q & assetApi.QueryBody<F>): Promise<Page<RowOf<Q>>>;
+  queryPage<Row extends Asset = Asset>(q: assetApi.QueryBody): Promise<Page<Row>>;
+  async queryPage(q: assetApi.QueryBody): Promise<Page> {
     await this.schema.ensureFor([q]);
-    return assetApi.queryPage<Row>(this.transport, q, { lookup: this.schema });
+    return assetApi.queryPage(this.transport, q, { lookup: this.schema });
   }
 
   /**
@@ -153,14 +162,16 @@ export class AgilityApiClient {
    * Each page is a plain read on query.v1, so a long walk survives a
    * transient failure like any GET.
    */
-  async *pages<Row extends Asset = Asset>(q: assetApi.QueryBody, options: PagesOptions = {}): AsyncGenerator<Row[], void, undefined> {
+  pages<const F extends From, const Q extends assetApi.QueryBody<F>>(q: Q & assetApi.QueryBody<F>, options?: PagesOptions): AsyncGenerator<RowOf<Q>[], void, undefined>;
+  pages<Row extends Asset = Asset>(q: assetApi.QueryBody, options?: PagesOptions): AsyncGenerator<Row[], void, undefined>;
+  async *pages(q: assetApi.QueryBody, options: PagesOptions = {}): AsyncGenerator<Asset[], void, undefined> {
     if (!q.page) throw new UsageError(`query of ${q.from} without a page: every read must be bounded`);
     const limit = options.limit ?? DEFAULT_LIMIT;
     const size = q.page.size;
     let start = q.page.start, read = 0;
     while (read < limit) {
       const want = Math.min(size, limit - read);
-      const rows = await this.query<Row>({ ...q, page: { size: want, start } });
+      const rows = await this.query({ ...q, page: { size: want, start } });
       if (rows.length) yield rows;
       read += rows.length;
       start += rows.length;
@@ -169,9 +180,11 @@ export class AgilityApiClient {
   }
 
   /** Every row of the query up to `limit` (default 1000), read page by page. */
-  async all<Row extends Asset = Asset>(q: assetApi.QueryBody, options: PagesOptions = {}): Promise<Row[]> {
-    const out: Row[] = [];
-    for await (const page of this.pages<Row>(q, options)) out.push(...page);
+  all<const F extends From, const Q extends assetApi.QueryBody<F>>(q: Q & assetApi.QueryBody<F>, options?: PagesOptions): Promise<RowOf<Q>[]>;
+  all<Row extends Asset = Asset>(q: assetApi.QueryBody, options?: PagesOptions): Promise<Row[]>;
+  async all(q: assetApi.QueryBody, options: PagesOptions = {}): Promise<Asset[]> {
+    const out: Asset[] = [];
+    for await (const page of this.pages(q, options)) out.push(...page);
     return out;
   }
 
