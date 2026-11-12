@@ -24,6 +24,7 @@
  *   - Errors are text/plain, not JSON (a 500 "Server Error" for an element
  *     that is not a string, which the string[] signature rules out).
  */
+import { ApiError } from "../core/errors";
 import type { Transport } from "../core/transport";
 
 /** A tag-to-label map, keyed by each tag exactly as sent. */
@@ -58,7 +59,7 @@ export async function localize(transport: Transport, tags: readonly string[], op
     ? await transport.request<unknown>({ method: "GET", path: `/loc-2.v1?${encoded}`, headers, responseType: "json" })
     // A POST here is a read: safe to send again after a network failure or a 5xx.
     : await transport.request<unknown>({ method: "POST", path: "/loc-2.v1", headers, body: encoded, contentType: "application/x-www-form-urlencoded", responseType: "json", idempotent: true });
-  if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error(`loc-2.v1 answered an array of tags with ${JSON.stringify(result)?.slice(0, 100)}, not an object`);
+  if (!result || typeof result !== "object" || Array.isArray(result)) throw new ApiError(`loc-2.v1 answered an array of tags with ${JSON.stringify(result)?.slice(0, 100)}, not an object`, 200, "BAD_RESPONSE", result);
   return result as Localizations;
 }
 

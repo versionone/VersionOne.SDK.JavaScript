@@ -7,7 +7,7 @@ removes one of these changes this file in the same commit.
 ## 1. Three layers, one direction
 
 ```
-src/types      what things are        imports: nothing above it
+src/types      what things are        imports: core (its errors only)
 src/wire       endpoint envelopes     imports: types, core
 src/services   what to do             imports: types, wire, core
 src/core       transport, errors      imports: nothing above it
@@ -24,11 +24,13 @@ src/core       transport, errors      imports: nothing above it
   spells it, and the translation between that envelope and `types`.
 - **`services`** reason about assets and compose wire modules (`schema`,
   `resolve`, `guard`, `batch`, …). They know no envelope.
-- **`core`** is HTTP: `Transport`, `createFetchTransport`, `ApiError`. It
-  does not know what an asset is.
+- **`core`** is HTTP and errors: `Transport`, `createFetchTransport`,
+  `ApiError` and its kinds. It does not know what an asset is.
 
 Imports point down the table and never up. `types` never imports `wire`;
-`wire` never imports `services`; nothing imports a `test/` file.
+`wire` never imports `services`; nothing imports a `test/` file. `types`
+imports `core` for one reason: a string that is not an OID token is a
+`UsageError` like every other mistake the SDK catches.
 
 ## 2. One shape
 
@@ -181,3 +183,19 @@ first applied, guarded on the ChangeDate read just after it (a shared
 pre-batch stamp would make the second match nothing). A reverse batch
 reactivates a closed asset before deleting it, since Agility refuses to
 delete a closed asset.
+
+## 7. One error, one kind
+
+Everything the SDK throws is an `ApiError` (`src/core/errors.ts`), and
+every `ApiError` has a `kind`: `auth`, `forbidden`, `notFound`, `invalid`,
+`transient`, `aborted`, `commandFailure`, `protocol`, `usage` or
+`unknown`. `status` and `code` say what happened; `kind` says what to do.
+A mistake the SDK catches before any request (an unpaged read, an empty
+batch, a bad OID token) is a `UsageError` (`kind: "usage"`, `status: 0`),
+never a bare `Error` or `TypeError`. An error raised around another (a
+batch send that failed, an upload that failed after its create) is a
+`WrappedError` carrying the cause and the cause's kind, so the branch a
+caller wrote on `kind` still holds. api/asset's validation messages
+(`Violation'Required'AttributeDefinition'Scope'Story`) are parsed onto
+each failure as `violation` (rule, attribute token, loc-2 tag); nobody
+matches that text by hand.

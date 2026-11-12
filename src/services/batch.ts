@@ -22,6 +22,7 @@
  * The snapshot keeps the endpoint's spelling (strings, relations as OID
  * tokens) on purpose: it is what a reverse batch writes back.
  */
+import { UsageError, WrappedError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import type { Asset, Oid } from "../types/asset";
 import type { AssetTypeToken } from "../types/metamodel";
@@ -308,20 +309,20 @@ export interface Receipt {
  * receipt, and know that a reverse built from it cannot check every asset
  * for changes made since.
  */
-export class BatchRecordError extends Error {
+export class BatchRecordError extends WrappedError {
   readonly receipt: Receipt;
   constructor(cause: unknown, receipt: Receipt) {
-    super(`the batch was sent and its outcome recorded, but reading the assets back afterwards failed, so receipt.after is incomplete: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+    super(`the batch was sent and its outcome recorded, but reading the assets back afterwards failed, so receipt.after is incomplete: ${cause instanceof Error ? cause.message : String(cause)}`, "BATCH_RECORD", cause);
     this.name = "BatchRecordError";
     this.receipt = receipt;
   }
 }
 
 /** The send itself failed (a timeout, a 5xx): whether the server applied it is unknown. The receipt holds everything up to the attempt. */
-export class BatchSendError extends Error {
+export class BatchSendError extends WrappedError {
   readonly receipt: Receipt;
   constructor(cause: unknown, receipt: Receipt) {
-    super(`the batch send failed; whether the server applied it is unknown: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+    super(`the batch send failed; whether the server applied it is unknown: ${cause instanceof Error ? cause.message : String(cause)}`, "BATCH_SEND", cause);
     this.name = "BatchSendError";
     this.receipt = receipt;
   }
@@ -341,7 +342,7 @@ const now = (): string => new Date().toISOString();
 /** Preview, describe, name, snapshot, (confirm,) send, receipt. */
 export async function runBatch(transport: Transport, schema: Schema, commands: Command[], options: BatchOptions = {}): Promise<Receipt> {
   const useGuard = options.guard ?? true;
-  if (!commands.length) throw new Error("the batch is empty");
+  if (!commands.length) throw new UsageError("the batch is empty");
   const refused = unguardable(commands);
   const fatal = refused.filter((r) => r.reason.includes("rejected by the server"));
   if (fatal.length || (useGuard && refused.length)) throw new UnguardableError(useGuard ? refused : fatal);

@@ -22,6 +22,7 @@
  *     Owners.Nickname, Status.Name) uninvited; they are folded onto the Refs.
  *   - a page is required by this module: no Data read is unbounded.
  */
+import { UsageError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import { assetStateOf, type Asset, type Oid, type Ref } from "../types/asset";
 import { momentless } from "../types/oid";
@@ -115,7 +116,7 @@ export function toQuery(params: ReadParams): Record<string, string | undefined> 
 export interface ReadResult<Row extends Asset = Asset> { rows: Row[]; total: number | null; pageSize: number; pageStart: number }
 
 async function read<Row extends Asset>(transport: Transport, path: string, params: ReadParams, history: boolean): Promise<ReadResult<Row>> {
-  if (!params.page) throw new Error(`rest-1 read of ${path} without a page: every read must be bounded`);
+  if (!params.page) throw new UsageError(`rest-1 read of ${path} without a page: every read must be bounded`);
   const doc = await transport.request<AssetsDocument>({ method: "GET", path, query: toQuery(params), responseType: "json" });
   return { rows: (doc.Assets ?? []).map((a) => fromAssetDocument<Row>(a, { history })), total: typeof doc.total === "number" && doc.total >= 0 ? doc.total : null, pageSize: doc.pageSize, pageStart: doc.pageStart };
 }

@@ -32,6 +32,7 @@
  * command has advanced the ChangeDate, so a resend matches nothing — and is
  * sent marked idempotent (spec 000 §6).
  */
+import { ApiError, UsageError, WrappedError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import type { Asset, Oid } from "../types/asset";
 import type { AssetTypeToken } from "../types/metamodel";
@@ -49,7 +50,7 @@ export const UNGUARDABLE_TYPES: readonly AssetTypeToken[] = ["Idea", "IdeaChange
 export interface Unguardable { index: number; reason: string }
 
 /** A batch the guard will not send, rather than send unguarded without saying so. */
-export class UnguardableError extends Error {
+export class UnguardableError extends UsageError {
   readonly reasons: Unguardable[];
   constructor(reasons: Unguardable[]) {
     super(`cannot guard this batch: ${reasons.map((r) => `command ${r.index}: ${r.reason}`).join("; ")}`);
@@ -131,7 +132,7 @@ export function guard(projected: Command[], stamps: Readonly<Record<Oid, string>
     if (!x) { commands.push(p); continue; }
     const stamp = stamps[x.oid];
     if (stamp === undefined) { unstamped.push(x.oid); continue; }
-    if (!STAMP.test(stamp)) throw new Error(`${x.oid}: ChangeDate ${JSON.stringify(stamp)} is not a timestamp; refusing to put it in a filter`);
+    if (!STAMP.test(stamp)) throw new ApiError(`${x.oid}: ChangeDate ${JSON.stringify(stamp)} is not a timestamp; refusing to put it in a filter`, 200, "BAD_RESPONSE", { oid: x.oid, stamp });
     // The literal is deliberate: as a `with` variable a ChangeDate never compares equal (see above).
     const scope = { from: typeOfOid(x.oid), filter: ["ID=$oid", `ChangeDate='${stamp}'`], with: { $oid: x.oid } };
     commands.push(x.update ? { ...scope, update: x.update } : { ...scope, execute: x.execute as ExecuteBody["execute"] });
@@ -162,9 +163,9 @@ export function passesOf(projected: Command[]): Command[][] {
 }
 
 /** A guarded send that failed after some passes applied: `outcome` and `sent` say what did. */
-export class GuardedPassError extends Error {
-  constructor(readonly cause: unknown, readonly outcome: assetApi.Outcome, readonly sent: Command[], readonly pass: number) {
-    super(`guarded send failed in pass ${pass + 1}${pass ? " (earlier passes applied)" : ""}: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+export class GuardedPassError extends WrappedError {
+  constructor(cause: unknown, readonly outcome: assetApi.Outcome, readonly sent: Command[], readonly pass: number) {
+    super(`guarded send failed in pass ${pass + 1}${pass ? " (earlier passes applied)" : ""}: ${cause instanceof Error ? cause.message : String(cause)}`, "GUARDED_PASS", cause);
     this.name = "GuardedPassError";
   }
 }

@@ -15,6 +15,7 @@
  * token. An attribute the type defines itself has no Base; an inherited one
  * names the defining ancestor's attribute.
  */
+import { UsageError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import type { AssetType, AssetTypeToken, AttributeDefinition, AttributeTokenRef, AttributeType, Metamodel } from "../types/metamodel";
 
@@ -129,6 +130,6 @@ export async function getAssetType(transport: Transport, token: AssetTypeToken):
 
 export async function getAttributeDefinition(transport: Transport, tokenref: AttributeTokenRef): Promise<AttributeDefinition> {
   const [type, attribute] = tokenref.split(".");
-  if (!type || !attribute) throw new Error(`"${tokenref}" is not an attribute token ("Story.Name")`);
+  if (!type || !attribute) throw new UsageError(`"${tokenref}" is not an attribute token ("Story.Name")`);
   return toAttributeDefinition(await transport.request<AttributeDefinitionDocument>({ method: "GET", path: `/meta.v1/${encodeURIComponent(type)}/${encodeURIComponent(attribute)}`, responseType: "json" }));
 }

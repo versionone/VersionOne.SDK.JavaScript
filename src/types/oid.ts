@@ -5,6 +5,7 @@
  * own copy of these (agility-rooms' AssetOidHelper, ossum-ui's toMomentless,
  * gh-v1's momentless, v1sdk 2.x's Oid class); this is the one they share.
  */
+import { UsageError } from "../core/errors";
 import type { Oid } from "./asset";
 
 export interface OidParts {
@@ -24,7 +25,7 @@ export function isOidToken(value: unknown): value is Oid {
 /** The parts of an OID token. Throws on anything that is not one. */
 export function parseOid(token: string): OidParts {
   const m = OID_TOKEN.exec(token);
-  if (!m) throw new Error(`"${token}" is not an OID token (Story:1234)`);
+  if (!m) throw new UsageError(`"${token}" is not an OID token (Story:1234)`);
   return { type: m[1]!, id: Number(m[2]), moment: m[3] === undefined ? null : Number(m[3]) };
 }
 

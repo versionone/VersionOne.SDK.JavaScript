@@ -12,10 +12,10 @@ const src = join(__dirname, "..", "..", "src");
 /** The layer a src file belongs to, from its first path segment. */
 const layerOf = (file: string): string => relative(src, file).split(/[\\/]/)[0]!;
 
-/** What each layer may import. `core` and `types` import nothing above them. */
+/** What each layer may import. `core` imports nothing; `types` may use core's errors (a bad OID token is a UsageError) and nothing else. */
 const ALLOWED: Record<string, string[]> = {
   core: ["core"],
-  types: ["types"],
+  types: ["types", "core"],
   wire: ["wire", "types", "core"],
   services: ["services", "wire", "types", "core"]
 };

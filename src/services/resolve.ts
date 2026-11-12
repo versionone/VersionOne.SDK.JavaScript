@@ -17,6 +17,7 @@
  * parse; the same value as a variable does not — live, 2026-11-04). Number
  * matching on the server is case-insensitive.
  */
+import { UsageError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import { assetStateOf, type Asset, type AssetStateValue, type Oid } from "../types/asset";
 import type { TypeCache } from "./schema";
@@ -124,7 +125,7 @@ export async function resolveNumbers(transport: Transport, numbers: readonly str
   for (const n of numbers) if (!firsts.has(n.trim().toUpperCase())) firsts.set(n.trim().toUpperCase(), n.trim());
   const asked = [...firsts.values()];
   const invalid = asked.filter((n) => !isAssetNumber(n));
-  if (invalid.length) throw new TypeError(`not asset numbers (expected a prefix and digits, S-1234): ${invalid.join(", ")}`);
+  if (invalid.length) throw new UsageError(`not asset numbers (expected a prefix and digits, S-1234): ${invalid.join(", ")}`);
   const byNumber = new Map<string, ResolvedAsset>();
   for (let i = 0; i < asked.length; i += CHUNK) {
     for (const r of await askRoots(transport, asked.slice(i, i + CHUNK), options.types)) {
@@ -148,5 +149,5 @@ export async function resolveRef(transport: Transport, spec: string, options: { 
   const text = spec.trim();
   if (isOidToken(text)) { const oid = momentless(text); return { number: null, oid, type: typeOfOid(oid), name: null, assetState: null }; }
   if (isAssetNumber(text)) return (await resolveNumbers(transport, [text], options)).found[0] ?? null;
-  throw new TypeError(`"${spec}" is neither an asset number (S-1234) nor an OID token (Story:1234)`);
+  throw new UsageError(`"${spec}" is neither an asset number (S-1234) nor an OID token (Story:1234)`);
 }

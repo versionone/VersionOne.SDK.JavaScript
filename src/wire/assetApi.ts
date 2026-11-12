@@ -24,10 +24,10 @@
  *     bare query-scoped updates and executes expanded to one command per
  *     matched asset, aliased ones echoed unexpanded.
  */
-import { ApiError } from "../core/errors";
+import { ApiError, UsageError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import type { Asset, Oid, Ref } from "../types/asset";
-import type { AssetTypeToken, AttributeLookup, AttributeType } from "../types/metamodel";
+import type { AssetTypeToken, AttributeLookup, AttributeTokenRef, AttributeType } from "../types/metamodel";
 import { momentless } from "../types/oid";
 import { fromTypeOf, resolvePath, type PathResolution } from "./select";
 
@@ -225,14 +225,47 @@ function toNumber(value: unknown): unknown {
  * `where`, so match on text with care. stackTrace is never kept: only
  * internal development builds send it.
  */
-export interface CommandFailureDetail { index: number | null; message: string; echoed: Record<string, unknown> }
+export interface CommandFailureDetail {
+  index: number | null;
+  message: string;
+  echoed: Record<string, unknown>;
+  /** The message read as a validation violation, when it is one. */
+  violation: Violation | null;
+}
+
+/**
+ * A validation failure as api/asset words it: `Violation'<Rule>'<tag>`,
+ * where the rule is Required, Invalid, AssetCannotDeleteClosed, … and the
+ * rest, when present, names what was violated. The attribute form is a
+ * loc-2 tag (`AttributeDefinition'Scope'Story`, live 2026-11-12), which
+ * `client.localize` turns into the attribute's label; an older spelling is
+ * the token itself (`Epic.Scope`). Both read as `attribute: "Story.Scope"`.
+ */
+export interface Violation {
+  rule: string;
+  /** "Story.Scope" when the violation names an attribute; null otherwise. */
+  attribute: AttributeTokenRef | null;
+  /** The loc-2 tag naming what was violated, when the message carries one. */
+  tag: string | null;
+}
+
+/** The violation a failure message describes, or null when it is not one. */
+export function parseViolation(message: string): Violation | null {
+  const parts = message.trim().split("'");
+  if (parts[0] !== "Violation" || !parts[1]) return null;
+  const rule = parts[1], rest = parts.slice(2).filter((p) => p !== "");
+  if (rest[0] === "AttributeDefinition" && rest[1] && rest[2]) return { rule, attribute: `${rest[2]}.${rest[1]}`, tag: rest.join("'") };
+  const token = rest.length === 1 && /^[A-Za-z][A-Za-z0-9_]*\.[A-Za-z][A-Za-z0-9_]*$/.test(rest[0]!) ? (rest[0] as AttributeTokenRef) : null;
+  return { rule, attribute: token, tag: rest.length ? rest.join("'") : null };
+}
 
 /** The failures of a response, normalised: index and message, always both. */
 export function failuresOf<Row extends Asset = Asset>(response: AssetApiResponse<Row>): CommandFailureDetail[] {
   return (response.commandFailures?.commands ?? []).map(({ error, ...echoed }) => ({
     index: typeof error === "object" && error && typeof error.sourceCommandIndex === "number" ? error.sourceCommandIndex : null,
     message: typeof error === "string" ? error : error?.message || "command failed",
-    echoed
+    echoed,
+    violation: parseViolation(typeof error === "string" ? error : error?.message || "")
   }));
 }
 
@@ -378,7 +411,7 @@ export async function send<Row extends Asset = Asset>(transport: Transport, comm
     // misplaced row, and the failures themselves are the answer (thrown
     // with throwOnFailure, as every read asks). With no such failure, the
     // server's answer is inconsistent, and that is an error of its own.
-    if (!failures.some((f) => f.index === null)) throw new Error(`api/asset returned ${results.length} query results for ${queries.filter((q) => !failed.has(q.index)).length} queries that did not fail; cannot tell which result belongs to which query`);
+    if (!failures.some((f) => f.index === null)) throw new ApiError(`api/asset returned ${results.length} query results for ${queries.filter((q) => !failed.has(q.index)).length} queries that did not fail; cannot tell which result belongs to which query`, 200, "BAD_RESPONSE", response);
     aligned = queries.map(() => null);
   }
   const contextOf = (i: number): RowContext | undefined => {
@@ -416,7 +449,7 @@ export async function query<Row extends Asset = Asset>(transport: Transport, q: 
  * whether more pages follow.
  */
 export async function queryPage<Row extends Asset = Asset>(transport: Transport, q: QueryBody, options: ReadOptions = {}): Promise<{ rows: Row[]; total: number | null; more: boolean }> {
-  if (!q.page) throw new Error(`query of ${q.from} without a page: every api/asset read must be bounded`);
+  if (!q.page) throw new UsageError(`query of ${q.from} without a page: every api/asset read must be bounded`);
   const response = await send<Row>(transport, [{ ...q, needTotal: true }], { ...options, throwOnFailure: true });
   const rows = response.queryResult.results[0] ?? [];
   const reported = (response.queryResult as { resultMetaData?: { total?: unknown }[] }).resultMetaData?.[0]?.total;
@@ -431,7 +464,7 @@ export async function queryPage<Row extends Asset = Asset>(transport: Transport,
  * reading as [] — a failure must never look like an empty result.
  */
 export async function queries<Row extends Asset = Asset>(transport: Transport, qs: QueryBody[], options: ReadOptions = {}): Promise<Row[][]> {
-  for (const q of qs) if (!q.page) throw new Error(`query of ${q.from} without a page: every api/asset read must be bounded`);
+  for (const q of qs) if (!q.page) throw new UsageError(`query of ${q.from} without a page: every api/asset read must be bounded`);
   const response = await send<Row>(transport, qs, { ...options, throwOnFailure: true });
   return qs.map((_, i) => response.queryResult.results[i] ?? []);
 }

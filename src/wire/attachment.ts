@@ -23,7 +23,7 @@
  *     `<textarea>{"Url":"<base>/embedded.img/<id>","Key":"EmbeddedImage:<id>"}</textarea>`.
  *     An EmbeddedImage cannot be deleted (no Delete operation).
  */
-import { ApiError } from "../core/errors";
+import { ApiError, UsageError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import type { Oid } from "../types/asset";
 
@@ -54,7 +54,7 @@ export function fromBase64(text: string): Uint8Array {
 /** The numeric id from "Attachment:5678", "Attachment:5678:999" (a moment) or "5678". */
 export function numericId(spec: Oid | string | number): string {
   const m = /^(?:[A-Za-z]+:)?(\d+)(?::\d+)?$/.exec(String(spec).trim());
-  if (!m) throw new TypeError(`"${spec}" is not an asset id (5678, or an OID token such as Attachment:5678)`);
+  if (!m) throw new UsageError(`"${spec}" is not an asset id (5678, or an OID token such as Attachment:5678)`);
   return m[1]!;
 }
 

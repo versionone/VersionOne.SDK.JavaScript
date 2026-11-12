@@ -1,6 +1,7 @@
 export { AgilityApiClient } from "./client";
 export type { ClientOptions } from "./client";
-export { ApiError } from "./core/errors";
+export { ApiError, UsageError, WrappedError, kindOf } from "./core/errors";
+export type { ErrorKind } from "./core/errors";
 export { createFetchTransport } from "./core/fetchTransport";
 export type { FetchTransportConfig, UnauthorizedContext, UnauthorizedDecision } from "./core/fetchTransport";
 export type { ClientConfig } from "./core/clientConfig";
@@ -19,7 +20,8 @@ export { assetApi, rest1, meta, loc2, queryV1, attachment } from "./wire";
 export type { Bytes, EmbeddedImage } from "./wire/attachment";
 export * as select from "./wire/select";
 export type { AssetApiResponse, Command, CommandBody, CommandFailureDetail, Outcome, CommandValue, CreateBody, ExecuteBody, QueryBody, UpdateBody, ReadOptions, RowContext, SendOptions } from "./wire/assetApi";
-export { CommandFailureError } from "./wire/assetApi";
+export { CommandFailureError, parseViolation } from "./wire/assetApi";
+export type { Violation } from "./wire/assetApi";
 export type { AssetDocument, AssetsDocument, ReadParams, ReadResult } from "./wire/rest1";
 export type { Localizations, LocalizeOptions } from "./wire/loc2";
 

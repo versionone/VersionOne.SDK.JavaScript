@@ -15,7 +15,7 @@
  * every file into one response. Reading one file's bytes goes through
  * attachment.img.
  */
-import { ApiError } from "../core/errors";
+import { ApiError, WrappedError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import type { Oid } from "../types/asset";
 import { momentless } from "../types/oid";
@@ -86,9 +86,9 @@ export interface AddOptions {
 }
 
 /** An Attachment was created but its bytes could not be uploaded: it exists, empty. Remove it or upload again with `put`. */
-export class AttachmentUploadError extends Error {
+export class AttachmentUploadError extends WrappedError {
   constructor(readonly attachment: AttachmentInfo, cause: unknown) {
-    super(`${attachment.oid} was created on its asset with no content, and uploading the file failed: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+    super(`${attachment.oid} was created on its asset with no content, and uploading the file failed: ${cause instanceof Error ? cause.message : String(cause)}`, "ATTACHMENT_UPLOAD", cause);
     this.name = "AttachmentUploadError";
   }
 }

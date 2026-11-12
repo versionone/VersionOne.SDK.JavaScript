@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { UsageError } from "../../src/core/errors";
 import type { RequestOptions, Transport } from "../../src/core/transport";
 import { CHUNK, NUMBER_ROOTS, isAssetNumber, resolveNumbers, resolveRef } from "../../src/services/resolve";
 import { TypeCache } from "../../src/services/schema";
@@ -93,13 +94,13 @@ describe("resolve", () => {
     expect(t.calls).toHaveLength(1);
   });
 
-  it("resolveRef takes an OID token as is, without a request; a number by resolving it; null when nothing has that number; anything else is a TypeError", async () => {
+  it("resolveRef takes an OID token as is, without a request; a number by resolving it; null when nothing has that number; anything else is a UsageError", async () => {
     const none = fakeTransport();
     expect(await resolveRef(none, " Story:1234:55 ")).toEqual({ number: null, oid: "Story:1234", type: "Story", name: null, assetState: null });
     expect(none.calls).toHaveLength(0);
     expect(await resolveRef(fakeTransport(answer({ Workitem: [{ _oid: "Defect:9", Name: "D", Number: "D-9", AssetState: "Active" }] })), "d-9")).toMatchObject({ oid: "Defect:9", type: "Defect", number: "D-9" });
     expect(await resolveRef(fakeTransport(answer({})), "D-404")).toBeNull();
-    await expect(resolveRef(none, "fix the thing")).rejects.toThrow(TypeError);
+    await expect(resolveRef(none, "fix the thing")).rejects.toThrow(UsageError);
     expect(isAssetNumber("TK-12")).toBe(true);
     expect(isAssetNumber("S1234")).toBe(false);
     expect(isAssetNumber(" UTF-8 ")).toBe(true); // shaped like a number: resolves to missing, harmlessly

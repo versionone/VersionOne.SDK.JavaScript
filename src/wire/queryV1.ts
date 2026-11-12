@@ -21,7 +21,7 @@
  * Because the endpoint cannot change anything, a request is sent idempotent:
  * the transport may retry it after a network failure or a 5xx like a GET.
  */
-import { ApiError } from "../core/errors";
+import { ApiError, UsageError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import type { Asset } from "../types/asset";
 import { fromWireRow, type QueryBody, type ReadOptions, type RowContext } from "./assetApi";
@@ -41,7 +41,7 @@ function rejected(error: ApiError): ApiError {
  * the server's messages) — never an empty result.
  */
 export async function queries<Row extends Asset = Asset>(transport: Transport, qs: QueryBody[], options: ReadOptions = {}): Promise<Row[][]> {
-  for (const q of qs) if (!q.page) throw new Error(`query of ${q.from} without a page: every query.v1 read must be bounded`);
+  for (const q of qs) if (!q.page) throw new UsageError(`query of ${q.from} without a page: every query.v1 read must be bounded`);
   if (!qs.length) return [];
   let response: unknown;
   try {

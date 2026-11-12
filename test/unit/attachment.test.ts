@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { UsageError } from "../../src/core/errors";
 import { AgilityApiClient } from "../../src/client";
 import { ApiError } from "../../src/core/errors";
 import { createFetchTransport } from "../../src/core/fetchTransport";
@@ -24,9 +25,9 @@ describe("attachment wire module", () => {
     expect(toBase64(new TextEncoder().encode("hello attachment\n"))).toBe("aGVsbG8gYXR0YWNobWVudAo="); // as the server stored it (2026-11-07)
   });
 
-  it("numericId takes an id, an OID token, or a momented one; anything else is a TypeError", () => {
+  it("numericId takes an id, an OID token, or a momented one; anything else is a UsageError", () => {
     expect([numericId(5678), numericId("5678"), numericId("Attachment:5678"), numericId("Attachment:5678:900")]).toEqual(["5678", "5678", "5678", "5678"]);
-    expect(() => numericId("S-1")).toThrow(TypeError);
+    expect(() => numericId("S-1")).toThrow(UsageError);
   });
 
   it("normalizeEmbeddedImageUrls rewrites every embedded.img reference to this instance's absolute URL and leaves other images alone", () => {
