@@ -61,10 +61,10 @@ describe("queryV1", () => {
     await expect(queries(fakeTransport({ oops: true }), [storyQuery])).rejects.toMatchObject({ code: "BAD_RESPONSE" });
   });
 
-  it("client.queryV1 loads the types its queries touch and translates through the client's schema", async () => {
+  it("client.query loads the types its queries touch and translates through the client's schema", async () => {
     const t = fakeTransport([[wireStory]]);
     const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, schema });
-    const [row] = await client.queryV1.query(storyQuery);
+    const [row] = await client.query(storyQuery);
     expect(row).toMatchObject({ Estimate: 2, IsClosed: true });
     expect(t.calls.map((c) => c.path)).toEqual(["/query.v1"]);
   });

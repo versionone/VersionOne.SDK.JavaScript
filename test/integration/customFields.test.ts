@@ -46,9 +46,9 @@ describeLocalInstance("custom fields (live, via the classic UI gadget)", () => {
       { "@s": { AssetType: "Story", Name: fixtureName("custom fields"), Scope: { _oid: "Scope:0" }, [numToken]: 7, [flagToken]: true } },
       { from: "@s", select: ["Name", numToken, flagToken] }
     ]);
-    created.push(...res.assetsCreated.oidTokens.map(assetApi.momentless));
-    expect(res.commandFailures.count).toBe(0);
-    const [row] = res.queryResult.results[0]! as unknown as Record<string, unknown>[];
+    created.push(...res.created);
+    expect(res.failures).toEqual([]);
+    const [row] = res.queryResults[0]! as unknown as Record<string, unknown>[];
     expect(row![numToken]).toBe(7);
     expect(row![flagToken]).toBe(true);
     const [plain] = await assetApi.query(t, { from: created[0]!, select: [numToken, flagToken], page: { size: 1, start: 0 } });

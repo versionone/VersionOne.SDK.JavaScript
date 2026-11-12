@@ -326,12 +326,15 @@ export function mergeOutcome<Row extends Asset = Asset>(into: Outcome<Row>, done
 export class CommandFailureError<Row extends Asset = Asset> extends ApiError {
   readonly failures: CommandFailureDetail[];
   readonly response: AssetApiResponse<Row>;
+  /** What the batch did, in the model's terms: the commands that succeeded are committed. */
+  readonly outcome: Outcome<Row>;
 
   constructor(response: AssetApiResponse<Row>, failures: CommandFailureDetail[] = failuresOf(response)) {
     super(failures.map((f) => f.message).join("; ") || "command failed", 200, "CommandFailure", failures);
     this.name = "CommandFailureError";
     this.failures = failures;
     this.response = response;
+    this.outcome = outcomeOf(response);
   }
 }
 

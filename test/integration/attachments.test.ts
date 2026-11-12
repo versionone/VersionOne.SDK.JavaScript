@@ -59,7 +59,7 @@ describeInstance("attachments (live)", () => {
   it.runIf(process.env.SDK_TEST_EMBEDDED_IMAGES === "1")("an embedded image uploads with token auth and is served from its URL (leaves one image behind: they cannot be deleted)", async () => {
     const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
     const image = await client.embeddedImages.upload(story, png, { filename: "sdk-integration pixel.png", contentType: "image/png" });
-    expect(image.url).toBe(client.embeddedImages.url(image.id));
+    expect(image.url).toBe(client.urls.embeddedImage(image.id));
     const served = await t.request<Uint8Array>({ method: "GET", path: `/embedded.img/${image.id}`, responseType: "bytes" });
     expect(served.length).toBe(png.length);
   });

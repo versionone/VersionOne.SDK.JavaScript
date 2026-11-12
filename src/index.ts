@@ -1,5 +1,5 @@
 export { AgilityApiClient } from "./client";
-export type { ClientOptions } from "./client";
+export type { ClientOptions, Me, Page, PagesOptions } from "./client";
 export { ApiError, UsageError, WrappedError, kindOf } from "./core/errors";
 export type { ErrorKind } from "./core/errors";
 export { createFetchTransport } from "./core/fetchTransport";

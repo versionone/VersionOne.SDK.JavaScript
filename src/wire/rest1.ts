@@ -5,6 +5,7 @@
  *
  * Reads (all GET, JSON asked for by Accept):
  *   /rest-1.v1/Data/<Type>           a list; where, sel, find, findin, sort, page (size,start), deleted, needTotal, with, asof
+ *                                    (taken as a query's `filter`/`select`; `where`/`sel` are rest-1's spellings, translated here)
  *   /rest-1.v1/Data/<Type>/<id>      one asset
  *   /rest-1.v1/Hist/<Type>[/<id>]    history: the same shape, one row per moment, ids carrying the moment
  *
@@ -40,9 +41,13 @@ export interface AssetsDocument { _type: "Assets" | "History"; total?: number; p
 // ---- what the endpoint takes ---------------------------------------------
 
 export interface ReadParams {
-  /** Attributes to select; a type-qualified name (Story.Number) reaches a subtype's attribute from a base type. */
+  /** Attributes to select, as a query's `select`; a type-qualified name (Story.Number) reaches a subtype's attribute from a base type. */
+  select?: string[];
+  /** @deprecated rest-1's own spelling of `select`; kept for one alpha. */
   sel?: string[];
-  /** Filter terms, joined with ';' (AND) — the filter grammar, rest-1's spelling. */
+  /** Filter terms, as a query's `filter`, joined with ';' (AND). */
+  filter?: string[];
+  /** @deprecated rest-1's own spelling of `filter`; kept for one alpha. */
   where?: string[];
   /** The filter context: { $oids: [...] } — sent in rest-1's spelling, $name=a,b|$other=c. */
   with?: Record<string, string | string[]>;
@@ -98,8 +103,8 @@ export function fromAssetDocument<Row extends Asset = Asset>(doc: AssetDocument,
 /** The query string rest-1 wants, from the model's parameters. */
 export function toQuery(params: ReadParams): Record<string, string | undefined> {
   return {
-    sel: params.sel?.join(","),
-    where: params.where?.length ? params.where.join(";") : undefined,
+    sel: (params.select ?? params.sel)?.join(","),
+    where: (params.filter ?? params.where)?.length ? (params.filter ?? params.where)!.join(";") : undefined,
     with: params.with ? Object.entries(params.with).map(([k, v]) => `${k}=${[].concat(v as never).join(",")}`).join("|") : undefined,
     find: params.find,
     findin: params.findin?.join(","),
@@ -126,9 +131,9 @@ export const list = <Row extends Asset = Asset>(transport: Transport, type: stri
   read<Row>(transport, `/rest-1.v1/Data/${encodeURIComponent(type)}`, params, false);
 
 /** One asset by OID. */
-export async function get<Row extends Asset = Asset>(transport: Transport, oid: Oid, sel?: string[]): Promise<Row> {
+export async function get<Row extends Asset = Asset>(transport: Transport, oid: Oid, select?: string[]): Promise<Row> {
   const [type, id] = momentless(oid).split(":");
-  const doc = await transport.request<AssetDocument>({ method: "GET", path: `/rest-1.v1/Data/${encodeURIComponent(type!)}/${encodeURIComponent(id!)}`, query: { sel: sel?.join(",") }, responseType: "json" });
+  const doc = await transport.request<AssetDocument>({ method: "GET", path: `/rest-1.v1/Data/${encodeURIComponent(type!)}/${encodeURIComponent(id!)}`, query: { sel: select?.join(",") }, responseType: "json" });
   return fromAssetDocument<Row>(doc);
 }
 

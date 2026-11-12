@@ -13,13 +13,13 @@ describeInstance("queryV1 (live)", () => {
   const q = { from: "Story", select: ["Name", "Number", "Estimate", "IsClosed", "Scope", "Owners", { from: "Status", select: ["Name"] }], sort: ["ID"], page: { size: 3, start: 0 } };
 
   it("the same query through query.v1 and api/asset translates to the same rows", async () => {
-    const [viaQueryV1, viaAssets] = await Promise.all([client.queryV1.query(q), client.assets.query(q)]);
+    const [viaQueryV1, viaAssets] = await Promise.all([client.query(q), client.assets.query(q)]);
     expect(viaQueryV1.length).toBeGreaterThan(0);
     expect(viaQueryV1).toEqual(viaAssets);
   });
 
   it("a query that matches nothing is [] in its own slot — the expect-zero control — and a `with` variable carries an em dash", async () => {
-    const [none, scopes] = await client.queryV1.queries([
+    const [none, scopes] = await client.queries([
       { from: "Story", select: ["Name"], filter: ["Name=$n"], with: { $n: "sdk-integration — no such story" }, page: { size: 1, start: 0 } },
       { from: "Scope", select: ["Name"], page: { size: 1, start: 0 } }
     ]);
@@ -28,14 +28,14 @@ describeInstance("queryV1 (live)", () => {
   });
 
   it("an unknown attribute fails the request with the server's message", async () => {
-    await expect(client.queryV1.queries([q, { from: "Story", select: ["NoSuchAttribute"], page: { size: 1, start: 0 } }])).rejects.toMatchObject({
+    await expect(client.queries([q, { from: "Story", select: ["NoSuchAttribute"], page: { size: 1, start: 0 } }])).rejects.toMatchObject({
       status: 400,
       code: "QUERY_REJECTED",
       message: expect.stringContaining("Story.NoSuchAttribute")
     });
   });
   it("a group query's children are translated by the query's type, and the no-status group's key is null (the slack bot's board query)", async () => {
-    const [groups] = await client.queryV1.queries([{
+    const [groups] = await client.queries([{
       from: "PrimaryWorkitem",
       select: ["Name", "Number", "Status", "Team.HasProcess", "IsClosed"],
       filter: ["AssetState!='Closed'"],
