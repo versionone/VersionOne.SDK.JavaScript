@@ -75,7 +75,11 @@ No registry package yet. Pin a commit: `npm install github:versionone/VersionOne
 Versions are published to npmjs by `.github/workflows/publish.yml` when a
 tag `v<version>` is pushed; the tag must equal `package.json`'s version. A
 prerelease (`1.0.0-alpha.0`, `-beta.N`, `-rc.N`) goes out on its own
-dist-tag (`alpha`, `beta`, `rc`), so `latest` is never a prerelease.
+dist-tag (`alpha`, `beta`, `rc`). Until `1.0.0`, a maintainer moves
+`latest` to the newest alpha by hand (`npm dist-tag add
+@versionone/agility-sdk@<version> latest`), so a bare `npm install` gets
+the current API rather than the first publish; from `1.0.0` on, `latest`
+is never a prerelease.
 
 ```bash
 npm version 1.0.0-alpha.2 --no-git-tag-version   # bump, commit, merge
