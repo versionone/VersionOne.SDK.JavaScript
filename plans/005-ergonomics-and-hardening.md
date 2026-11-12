@@ -226,7 +226,8 @@ Checked against meta.v1's actual document (`metamodel.json`) and the code.
 ## Sequencing
 
 1. **Findings pass** — this file. Read-only, done 2026-11-12.
-2. **Breaking batch → `1.0.0-alpha.3`** — done 2026-11-12, one release
+2. **Breaking batch → `1.0.0-alpha.3`** — done and published 2026-11-12
+   (`alpha` dist-tag; tag `v1.0.0-alpha.3` at `071f0d5`), one release
    before rooms D1: Review 1.1 (Outcome from `send`), 1.3 (one query
    shape; `client.query` the default read path, rest-1 behind `data`),
    1.4 (error kinds, `UsageError`, parsed violations; spec 000 §7), 1.5
