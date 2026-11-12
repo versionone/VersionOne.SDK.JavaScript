@@ -35,3 +35,29 @@ describeInstance("client reads (live)", () => {
     expect([200, 302]).toContain(response.status);
   });
 });
+
+/**
+ * An instance's own list type (Custom_<Name>, Base List) is read like any
+ * type: the schema loads it from meta.v1 by token, and its rows translate
+ * (Order a number, Inactive a boolean). Found through the metamodel, since
+ * which custom lists exist is the instance's business; skipped when it
+ * has none.
+ */
+describeInstance("custom list types (live)", () => {
+  const client = new AgilityApiClient({ baseUrl: instance!.url }, { transport: instance!.transport });
+
+  it("reads a Custom_ list type's values with List's attributes translated", async () => {
+    const metamodel = await client.meta.metamodel();
+    const custom = Object.values(metamodel.AssetTypes).find((t) => t.Base === "List" && t.Token.startsWith("Custom_"));
+    if (!custom) { console.warn(`no custom list type on ${instance!.url}; skipping`); return; }
+    const page = await client.queryPage({ from: custom.Token, select: ["Name", "Order", "Inactive", "AssetType"], page: { size: 3, start: 0 } });
+    expect(page.total).not.toBeNull();
+    for (const row of page.rows) {
+      expect(typeof row.Name).toBe("string");
+      expect(row.Order === null || typeof row.Order === "number").toBe(true);
+      expect(row.Inactive === null || typeof row.Inactive === "boolean").toBe(true);
+      expect(row.AssetType).toBe(custom.Token);
+    }
+    expect(client.schema.assetType(custom.Token)?.Base).toBe("List");
+  }, 60_000);
+});

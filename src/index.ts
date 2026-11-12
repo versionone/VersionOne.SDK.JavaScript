@@ -14,7 +14,7 @@ export { isOidToken, momentless, parseOid, toOid, typeOfOid } from "./types/oid"
 export type { OidParts } from "./types/oid";
 export type { AssetType, AttributeDefinition, AttributeLookup, AttributeType, AttributeTokenRef, AssetTypeToken, Metamodel } from "./types/metamodel";
 export type * from "./types/assets/index";
-export type { CreateType, From, RowOf, RowsOf, SelectKey, SelectPath, SelectValue, Selected, TypeOf } from "./types/query";
+export type { CreateType, CustomList, From, RowOf, RowsOf, SelectKey, SelectPath, SelectValue, Selected, TypeOf } from "./types/query";
 
 // The wire layer: one module per endpoint.
 export { assetApi, rest1, meta, loc2, queryV1, attachment } from "./wire";

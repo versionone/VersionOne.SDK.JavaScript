@@ -52,6 +52,12 @@ next; `1.0.0` follows agility-rooms' adoption, and semver after that.
   string, `row.Nmae` a compile error, `Status.Name` unknown, an aggregate
   a number). An OID as `from` types by its type. `from` still takes an
   alias or an unknown type; variables and `query<Story>` work as before.
+- Custom list types (`Custom_<Name>`, the one custom asset type Agility
+  allows, a subtype of List) type as `CustomList`: List's attributes and
+  the type's own token as `AssetType`, as a `from` or as an OID. Custom
+  attributes (`Custom_…`) and the reciprocal side of a custom relation
+  (`ReciprocalOf_…`, which the server adds on the related type) are
+  accepted on every type as attribute values.
 - `client.urls.asset(oid)`: the asset's page (`assetdetail.v1?oid=`).
 - `parseViolation(message)` and `CommandFailureDetail.violation`: the
   rule, attribute token and loc-2 tag of a validation failure.

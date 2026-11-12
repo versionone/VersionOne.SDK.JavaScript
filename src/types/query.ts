@@ -14,6 +14,16 @@
  */
 import type { Asset } from "./asset";
 import type { AssetTypeMap, AssetTypeName, ConcreteAssetTypeName } from "./assets/index";
+import type { List } from "./assets/List";
+
+/**
+ * An instance's own list type: the one kind of custom asset type Agility
+ * allows, a subtype of List spelled `Custom_<Name>` (Base List; seven on
+ * the API-testing instance, live 2026-11-12). It has List's attributes
+ * (Name, Order, Inactive, ColorName, SelectedInSchemes, …) and its own
+ * token as AssetType; a custom relation attribute points at it.
+ */
+export type CustomList<F extends string = `Custom_${string}`> = Omit<List, "AssetType"> & { readonly AssetType: F };
 
 /** A query's `from`: an asset type token (completed), or anything else the server accepts — an OID token, an alias ("@story"), a type the model lacks. */
 export type From = AssetTypeName | (string & {});
@@ -21,10 +31,11 @@ export type From = AssetTypeName | (string & {});
 /** A create's `AssetType`: a concrete type token (completed), or one the model lacks. */
 export type CreateType = ConcreteAssetTypeName | (string & {});
 
-/** The model type of what a `from` reads: the type itself, the type of an OID token, or Asset when the model cannot tell. */
+/** The model type of what a `from` reads: the type itself, a custom list type, the type of an OID token, or Asset when the model cannot tell. */
 export type TypeOf<F extends string> =
-  F extends keyof AssetTypeMap ? AssetTypeMap[F]
-  : F extends `${infer T}:${string}` ? (T extends keyof AssetTypeMap ? AssetTypeMap[T] : Asset)
+  F extends `${infer T}:${string}` ? TypeOf<T> // an OID token first: a type token never holds a colon
+  : F extends keyof AssetTypeMap ? AssetTypeMap[F]
+  : F extends `Custom_${string}` ? CustomList<F>
   : Asset;
 
 /**

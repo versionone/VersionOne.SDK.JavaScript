@@ -2,7 +2,7 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { AgilityApiClient } from "../../src/client";
 import type { Transport } from "../../src/core/transport";
 import { Schema } from "../../src/services/schema";
-import type { Asset, Ref } from "../../src/types/asset";
+import type { Asset, AttributeValue, Ref } from "../../src/types/asset";
 import type { Story } from "../../src/types/assets/Story";
 import type { StoryStatus } from "../../src/types/assets/StoryStatus";
 import type { QueryBody } from "../../src/wire/assetApi";
@@ -36,6 +36,22 @@ describe("typed queries", () => {
     expectTypeOf(byOid!.Name).toEqualTypeOf<string>();
     const got = await client.get("Story:1055", ["Name", "Number"]);
     expectTypeOf(got).toEqualTypeOf<(Asset & { Name: string; Number: string | null | undefined }) | null>();
+  });
+
+  it("a custom list type (Custom_<Name>, a subtype of List) has List's attributes and its own token; custom and reciprocal attributes are attribute values", async () => {
+    const [value] = await client.query({ from: "Custom_Demo_List", select: ["Name", "Order", "Inactive", "ReciprocalOf_Story_Custom_Demo_Single_List"], page: { size: 1, start: 0 } });
+    expectTypeOf(value!.Name).toEqualTypeOf<string>();
+    expectTypeOf(value!.Order).toEqualTypeOf<number | null | undefined>();
+    expectTypeOf(value!.Inactive).toEqualTypeOf<boolean | null | undefined>();
+    expectTypeOf(value!.ReciprocalOf_Story_Custom_Demo_Single_List).toEqualTypeOf<AttributeValue | undefined>();
+    const byOid = await client.get("Custom_Demo_List:12", ["AssetType", "ColorName"]);
+    expectTypeOf(byOid!.AssetType).toEqualTypeOf<"Custom_Demo_List">();
+    expectTypeOf(byOid!.ColorName).toEqualTypeOf<string>();
+    const [story] = await client.query({ from: "Story", select: ["Custom_Demo_List", "Custom_Points"], page: { size: 1, start: 0 } });
+    expectTypeOf(story!.Custom_Demo_List).toEqualTypeOf<AttributeValue | undefined>();
+    // @ts-expect-error a List has no Estimate
+    value!.Estimate;
+    expect(value).toBeDefined();
   });
 
   it("queries types each slot by its own query", async () => {

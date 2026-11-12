@@ -48,11 +48,15 @@ export type Ref<T extends Asset = Asset> = { _oid: Oid } & Partial<Omit<T, "_oid
 export type AttributeValue = string | number | boolean | null | Ref | Ref[];
 
 /**
- * Custom attributes are not generated: they differ per instance and every one
- * of them is named with the Custom_ prefix, so the root carries them all.
+ * Custom attributes are not generated: they differ per instance. One is
+ * named with the Custom_ prefix; the reciprocal side of a custom relation,
+ * which the server adds on the related type, with ReciprocalOf_ (live
+ * 2026-11-12: `Custom_Demo_List.ReciprocalOf_Story_Custom_Demo_Single_List`).
+ * The root carries both.
  */
 export interface CustomAttributes {
   [custom: `Custom_${string}`]: AttributeValue | undefined;
+  [reciprocal: `ReciprocalOf_${string}`]: AttributeValue | undefined;
 }
 
 /** The root every generated asset type extends. */

@@ -104,9 +104,14 @@ canned-only pull from a reset dev instance. Generation rules:
 - generated when `IsCanned` (the product's canned "custom" attributes —
   `Reference`, `Source`, `RequestedBy`, `LastVersion`, `OriginalEstimate`,
   the `*Source` reverse lists — ship everywhere and are generated); an
-  instance's own custom attributes (`IsCustom` and not `IsCanned`, always
-  `Custom_`-prefixed) are not, and ride on the `Custom_${string}` index
-  signature of `Asset`;
+  instance's own custom attributes (`IsCustom` and not `IsCanned`:
+  `Custom_`-prefixed, or `ReciprocalOf_`-prefixed for the reverse side the
+  server adds to a custom relation's target) are not, and ride on the
+  `Custom_${string}` / `ReciprocalOf_${string}` index signatures of
+  `Asset`. An instance's own asset types — only subtypes of `List`,
+  spelled `Custom_<Name>` — are not generated either; the typed query layer
+  reads one as `CustomList` (List's attributes, its own token as
+  AssetType), and the schema service loads it from meta.v1 like any type;
 - `Relation` → `Ref<Target>` or `Ref<Target>[]`; `AssetType` → the literal
   union of the type's concrete descendants; `Blob` is not a model value;
 - optional (`| null`) unless `IsRequired` or multi-value; `readonly` from

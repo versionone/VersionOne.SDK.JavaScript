@@ -19,8 +19,11 @@
  *   - endpoint-aware. A relation is a Ref (or Ref[]); how api/asset, query.v1
  *     and rest-1 spell a relation on the wire is the wire layer's business.
  *   - instance-specific. An instance's own custom attributes (IsCustom and
- *     not IsCanned; always Custom_-prefixed) are not generated; the Asset
- *     root carries them through a `Custom_${string}` index signature. The
+ *     not IsCanned; Custom_-prefixed, or ReciprocalOf_-prefixed on the
+ *     target of a custom relation) and its own list types (Custom_<Name>,
+ *     Base List) are not generated; the Asset root carries the attributes
+ *     through index signatures, and src/types/query.ts reads a Custom_
+ *     type as a CustomList. The
  *     product's canned "custom" attributes (IsCanned and IsCustom both true)
  *     ship everywhere and are generated like any other.
  *   - hand-editable. Regenerate; a snapshot test fails if the committed
