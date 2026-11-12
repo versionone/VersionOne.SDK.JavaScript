@@ -290,14 +290,13 @@ Checked against meta.v1's actual document (`metamodel.json`) and the code.
   module (`services/grammar`, say) that the console, rooms' query builders
   and the typed-query work would share. Add it to Review 2 as 2.7 once a
   first consumer commits to it.
-- **The committed metamodel is behind the hosted instance** (live
-  2026-11-12): `v1sdktesting` has `Workflow`, `TeamWorkflow` and
-  `WorkflowTransition`, which `metamodel.json` lacks, so the generated
-  model has no types for them and a query of one types its rows as
-  `Asset`. Refresh the canned pull (`npm run download:metamodel`, a reset
-  dev instance of the current release, then `generate:types`) as a step
-  of each alpha, and say in the README which product version the model
-  is from. Custom list types (`Custom_<Name>`, Base List) and custom
+- **The committed metamodel was behind the hosted instance** — refreshed
+  2026-11-12 to meta.v1 26.3.1.13 (from `v1sdktesting`; the diff was
+  three Workflow types and four attributes, nothing removed). The
+  download script now strips instance-specific definitions and reports
+  them, so the pull is reviewable from a hosted instance as well as from
+  a dev instance on a blank database (Core's gulp task). Refreshing is a
+  step of each release; the README names the version. Custom list types (`Custom_<Name>`, Base List) and custom
   attributes (`Custom_…`, and `ReciprocalOf_…` on a custom relation's
   target) are instance-specific by design and handled without generation.
 - **Still open from #51:** an exact guard stamp (Moment is not one;

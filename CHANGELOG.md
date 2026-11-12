@@ -42,6 +42,13 @@ next; `1.0.0` follows agility-rooms' adoption, and semver after that.
 
 ### Added
 
+- The generated model is refreshed from meta.v1 26.3.1.13 (it was a
+  0.0.0.0 dev build): `Workflow`, `TeamWorkflow` and `WorkflowTransition`
+  arrive, with `Status.AllowedStatusTransitions`,
+  `Status.WorkflowStatusTransitions`, `Role.AllowedStatusTransitions` and
+  `Team.TeamWorkflows`. Nothing was removed or changed.
+  `scripts/download-metamodel.mjs` now strips an instance's own
+  definitions and reports them, so a refresh is reviewable.
 - Reads on the client: `client.query`, `queries` (query.v1: read-only,
   retried like a GET), `client.get(oid, select)`, `client.queryPage(q)`
   (total and `more`, via api/asset), `client.pages(q, { limit })` and

@@ -88,3 +88,27 @@ describe("generate-types", () => {
     expect(index).toContain(`export type ConcreteAssetTypeName =\n  "Member"\n  | "Story"`);
   });
 });
+
+describe("download-metamodel: the committed metamodel is the product's", () => {
+  it("strips an instance's custom list types, its custom and reciprocal attributes, and whatever still points at them; keeps canned ones", async () => {
+    const { canned } = await import("../../scripts/download-metamodel.mjs");
+    const delivered = { Version: "26.3.1.13", AssetTypes: {
+      List: { Token: "List", Abstract: true, Attributes: { "List.Name": { Token: "List.Name", Name: "Name", IsCustom: false, IsCanned: false } } },
+      Custom_Demo_List: { Token: "Custom_Demo_List", Base: { nameref: "List" }, Attributes: { "Custom_Demo_List.ReciprocalOf_Story_Custom_Demo_Single_List": { Token: "Custom_Demo_List.ReciprocalOf_Story_Custom_Demo_Single_List", Name: "ReciprocalOf_Story_Custom_Demo_Single_List", IsCustom: true, IsCanned: false } } },
+      Story: { Token: "Story", Attributes: {
+        "Story.Name": { Token: "Story.Name", Name: "Name", IsCustom: false, IsCanned: false },
+        "Story.Reference": { Token: "Story.Reference", Name: "Reference", IsCustom: true, IsCanned: true },
+        "Story.Custom_Points": { Token: "Story.Custom_Points", Name: "Custom_Points", IsCustom: true, IsCanned: false },
+        "Story.Custom_Demo_List": { Token: "Story.Custom_Demo_List", Name: "Custom_Demo_List", IsCustom: true, IsCanned: false, RelatedAsset: { nameref: "Custom_Demo_List" } },
+        "Story.Dangling": { Token: "Story.Dangling", Name: "Dangling", IsCustom: false, IsCanned: false, RelatedAsset: { nameref: "Custom_Demo_List" } }
+      } }
+    } };
+    const { metamodel, removed } = canned(structuredClone(delivered)) as { metamodel: typeof delivered; removed: { types: string[]; attributes: string[]; dangling: string[] } };
+    expect(Object.keys(metamodel.AssetTypes)).toEqual(["List", "Story"]);
+    expect(Object.keys(metamodel.AssetTypes.Story.Attributes)).toEqual(["Story.Name", "Story.Reference"]);
+    expect(removed.types).toEqual(["Custom_Demo_List"]);
+    expect(removed.attributes).toEqual(["Story.Custom_Points", "Story.Custom_Demo_List"]);
+    expect(removed.dangling).toEqual(["Story.Dangling (RelatedAsset Custom_Demo_List)"]);
+    expect(delivered.AssetTypes.Story.Attributes["Story.Custom_Points"]).toBeDefined(); // the input was cloned, not edited
+  });
+});
