@@ -1,5 +1,8 @@
 # Plan 004: agility-rooms adopts `@versionone/agility-sdk` (Track D)
 
+Started 2026-11-14 on `1.0.0-alpha.3` (plan 005's breaking batch), as a
+session from the SDK session.
+
 Brief for a session on `digital-ai/agility-rooms`, a React/Vite SPA that
 runs inside Agility (same-origin, cookie auth). Source plan:
 `plans/001-sdk-adoption-campaign.md`, Track D. gh-v1 (plan 002) and the
@@ -45,23 +48,37 @@ re-survey paragraph. In short:
   injected `IHttpClient` / `FakeHttpClient` is the cleanest seam.
   Playwright (79 specs) runs against a live server.
 
-## What the SDK offers rooms (1.0.0-alpha.0)
+## What the SDK offers rooms (1.0.0-alpha.3, on npmjs as `latest`)
 
 - `AgilityApiClient` with a pluggable `Transport` (D1 wraps rooms' axios),
   or `createFetchTransport` with `credentials: "same-origin"` and
   `onUnauthorized` (resend an idempotent request after re-auth; a write is
   never resent), `signal` / `client.withSignal` for cancellation.
-- `client.assets.query/queries/send` (rows translated through the schema;
-  a failed query throws; `CommandFailureError` carries each failure by
-  index for the snackbar), `client.queryV1`, `client.data` (rest-1 reads),
-  `client.localize`, `client.schema` / `TypeCache`, `client.resolve`,
-  `client.batch` (guarded sends, receipts, undo).
-- `client.attachments` (list/page/info/get/add/put/remove/url; inline
-  Base64 up to 1 MB as rooms does, two-step above) and
-  `client.embeddedImages` (upload/url/normalize).
+- One query body, the client picks the endpoint: `client.query` /
+  `queries` (query.v1, read-only, retried like a GET; rows translated
+  through the schema; a failed query throws), `client.get(oid, select)`,
+  `client.queryPage(q)` (rows, total, more), `client.pages` / `client.all`
+  (page by page up to a limit), `client.me()`. A literal `from` completes
+  `select` from the type's attributes and types the rows by what was
+  selected; `Custom_` list types read as `CustomList`; custom and
+  `ReciprocalOf_` attributes are accepted on every type.
+- `client.assets.send` answers an `Outcome` (`created`, `modified`,
+  `operated`, `failures` with each `violation` parsed — rule, attribute
+  token, loc-2 tag for the snackbar — and `queryResults`), never the
+  envelope; `throwOnFailure` throws a `CommandFailureError` carrying the
+  same Outcome. `client.assets.sendGuarded`, `client.batch`.
+- Every error is an `ApiError` with `kind` (`auth`, `forbidden`,
+  `notFound`, `invalid`, `transient`, `aborted`, `commandFailure`,
+  `protocol`, `usage`): the one switch the interceptor needs.
+- `client.data` (rest-1 reads, query spelling), `client.localize`,
+  `client.schema` / `TypeCache`, `client.resolve`, `client.attachments`
+  (list/page/info/get/add/put/remove; inline Base64 up to 1 MB as rooms
+  does, two-step above), `client.embeddedImages` (upload/normalize),
+  `client.urls` (asset page, attachment, embedded image).
 - Browser-safe: no `node:` imports, no Buffer. Install
-  `npm install @versionone/agility-sdk@1.0.0-alpha.0` (an exact pin; it is
-  an alpha).
+  `npm install @versionone/agility-sdk@1.0.0-alpha.3` (an exact pin; it is
+  an alpha). `CHANGELOG.md` in the SDK repo lists each change with its
+  migration line; the generated model is meta.v1 26.3.1.13.
 
 ## First: a decision for Jim
 
@@ -104,8 +121,9 @@ api/asset, or have the SDK grow a narrow rest-1 write path.
   small and explicitly paged. Point Playwright at nothing else.
 - An EmbeddedImage cannot be deleted; upload one only when a test needs it.
 - If the SDK lacks something, don't work around it in rooms: tell the SDK
-  session (`session_016NSWj9gL1oCubj5e2anVkb`, `send_message`) with what
-  you need and why. Don't request reviewers; Jim picks.
+  session (`session_016NSWj6mJotpoJ4FontE4Kg`, `send_message`) with what
+  you need and why; the friction you hit writing real rooms code is the
+  next findings pass of plan 005. Don't request reviewers; Jim picks.
 
 ## Done when
 
