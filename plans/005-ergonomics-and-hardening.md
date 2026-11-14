@@ -238,7 +238,7 @@ Checked against meta.v1's actual document (`metamodel.json`) and the code.
    carries the migration lines; handoffs: `plans/handoffs/alpha-3-gh-v1.md`
    and `plans/handoffs/alpha-3-k6i-agility-slack-bot.md`, started
    2026-11-14 as sessions `session_016NSWj9RUo5RDw3AvSzQbUd` (gh-v1) and
-   `session_016NSWj8GbyDN3GSs8hrBq4C` (slack bot, against `main`:
+   `session_016NSWj8xjTv47UXheToZpGg` (slack bot, against `main`:
    `bolt-migration` is merged).
 3. **Rooms D1 on `alpha.3`.** Plan 004's first decision (rest-1 writes,
    Copy, `New/{T}`) and the live friction list from writing rooms' top
