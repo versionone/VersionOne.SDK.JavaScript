@@ -321,6 +321,34 @@ had nothing to replace there. Seven findings:
    makes. Say so in the comment, or default `retries` to 1 for idempotent
    requests (alpha.4, a behaviour change to call out).
 
+**k6i-agility-slack-bot, 2026-11-14** — on alpha.3 in
+digital-ai/k6i-agility-slack-bot#63 against `main` (175 tests, typecheck,
+live smoke: mention resolve, find, createWithNumber, update,
+QuickClose/Reactivate, a Required violation, a UsageError; fixtures
+deleted by OID). The deprecated aliases carried it; the only breaking
+surprise was envelope → Outcome in writes (7 tests, all where expected).
+
+1. **CHANGELOG not in the tarball** — same as gh-v1's 3; fixed.
+2. **Asset URL by Number** — same as gh-v1's 2, now two consumers: cards
+   and find results link `assetdetail.v1?Number=S-01022`, what the user
+   typed. First item of alpha.4.
+3. **A UsageError reads like a server failure** to a wrapper that formats
+   every ApiError as "Agility <op> failed: <status> <message>" (status 0).
+   The bot special-cases `instanceof UsageError`. Add a doc line: `kind:
+   "usage"` means nothing was sent; and consider a `sent: boolean` or
+   excluding status 0 from such formats in the README example.
+4. **Violation localization works** end to end (`client.localize([tag])`
+   → "Project"); not yet wired into a reply.
+5. **`outcomeOf` tolerates a partial envelope** (a fake sending only
+   `queryResult`); the bot's fakes depend on it. Make it a stated
+   contract (it is: every field is read with a default) and a test.
+6. **Outcome has no `requestId`**, the one envelope field worth logging
+   on a failed batch; reachable through CommandFailureError.response on
+   failure only. Add `requestId` to Outcome (alpha.4).
+7. **Testing-instance data:** `v1sdktesting` has no StoryStatus rows, so a
+   Story status change cannot be exercised live there (spec §5 already
+   notes the empty instance). Seed a few, or test on a Defect/Epic status.
+
 ## Open questions, with answers where the code gives one
 
 - **Least polished today:** rest-1 (reads only, its own parameter
