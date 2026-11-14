@@ -380,7 +380,9 @@ export class AgilityApiClient {
       if (isAssetNumber(text)) return `${base}/assetdetail.v1?Number=${encodeURIComponent(text)}`;
       throw new UsageError(`"${ref}" is neither an OID token (Story:1234) nor an asset number (S-1234)`);
     },
+    /** Where a browser opens or downloads an attachment's bytes, from its OID token (Attachment:5678) or its numeric id. */
     attachment: (id: string | number) => attachment.attachmentUrl(this.config.baseUrl, id),
+    /** Where an embedded image is served from, from its OID token (EmbeddedImage:5678) or its numeric id. */
     embeddedImage: (id: string | number) => attachment.embeddedImageUrl(this.config.baseUrl, id)
   };
 }
