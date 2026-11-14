@@ -398,7 +398,10 @@ instance for that one read or the SDK grows `meta.metamodel({
 ifNoneMatch })` answering `{ metamodel, etag }` and null on 304 (Review
 2.2's ETag item, now concrete; alpha.5).
 
-**alpha.4 (2026-11-14)** carries all of the above that was marked
+**alpha.4 (2026-11-14)** — published the same day (`latest` and
+`alpha`; tag `v1.0.0-alpha.4` at `f77e8d5`), smoke-tested from a fresh
+consumer against v1sdktesting (copy, template, fields, Number URL,
+requestId, CHANGELOG in the tarball) — carries all of the above that was marked
 alpha.4, plus the two rest-1 paths and `client.fields`. Still open from
 the lists: trimming `QUERY_REJECTED` details, `echoed` on every failure,
 defaulting `retries` for idempotent requests.
