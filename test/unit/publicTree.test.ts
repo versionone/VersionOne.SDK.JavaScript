@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 /**
@@ -11,8 +11,8 @@ import { join, relative } from "node:path";
  * test keeps out.
  */
 const root = join(__dirname, "..", "..");
-/** Not scanned: tooling output, dependencies, and `plans/` while it is on its way out of the tree. */
-const SKIPPED = new Set([".git", "node_modules", "dist", "coverage", "plans"]);
+/** Not scanned: tooling output and dependencies. */
+const SKIPPED = new Set([".git", "node_modules", "dist", "coverage"]);
 const SHAPES: { what: string; pattern: RegExp }[] = [
   { what: "a Claude session id", pattern: /\bsession_[A-Za-z0-9]{20,}\b/g },
   { what: "a GitHub repository other than this one", pattern: /(?<![@\w-])(?:versionone|digital-ai)\/(?!VersionOne\.SDK\.JavaScript\b)[A-Za-z0-9._-]+/gi },
@@ -39,5 +39,11 @@ describe("public tree", () => {
       }
     }
     expect(found).toEqual([]);
+  });
+});
+
+describe("the tree holds no working plans", () => {
+  it("has no plans/ directory: plans and hand-offs live in the private planning repository (CONTRIBUTING.md)", () => {
+    expect(existsSync(join(root, "plans"))).toBe(false);
   });
 });
