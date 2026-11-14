@@ -23,7 +23,7 @@ function fakeTransport(...answers: unknown[]): Transport & { calls: RequestOptio
 describe("assetApi: translation", () => {
   it("writes a Ref as its momentless OID token, a list of Refs as tokens, and leaves strings, aliases and scalars alone — recursively", () => {
     const wire = toWire([
-      { "@story": { AssetType: "Story", Name: "New", Scope: { _oid: "Scope:0:12" }, Owners: [{ _oid: "Member:20", Name: "Jim" }, "Member:21"], Super: "@epic", Estimate: 3, Custom_Flag: true } },
+      { "@story": { AssetType: "Story", Name: "New", Scope: { _oid: "Scope:0:12" }, Owners: [{ _oid: "Member:20", Name: "Dana" }, "Member:21"], Super: "@epic", Estimate: 3, Custom_Flag: true } },
       { from: "Story", filter: ["ID=$oids"], with: { $oids: [{ _oid: "Story:1" }, "Story:2"] }, update: { Owners: { add: [{ _oid: "Member:7" }], remove: ["Member:8"] } } }
     ]);
     expect(wire).toEqual([
@@ -33,8 +33,8 @@ describe("assetApi: translation", () => {
   });
 
   it("reads a query row without a schema as the endpoint spells it: relations stay Refs, OIDs lose their moment, scalars untouched (strings — see translate.test.ts for the schema-driven shape)", () => {
-    const row = fromWireRow<Story>({ _oid: "Story:1:99", Name: "One", Estimate: "3", Owners: [{ _oid: "Member:20:5", Name: "Jim" }], Super: { _oid: "Epic:2" }, Status: null, "Status.Name": "Done" });
-    expect(row).toEqual({ _oid: "Story:1", Name: "One", Estimate: "3", Owners: [{ _oid: "Member:20", Name: "Jim" }], Super: { _oid: "Epic:2" }, Status: null, "Status.Name": "Done" });
+    const row = fromWireRow<Story>({ _oid: "Story:1:99", Name: "One", Estimate: "3", Owners: [{ _oid: "Member:20:5", Name: "Dana" }], Super: { _oid: "Epic:2" }, Status: null, "Status.Name": "Done" });
+    expect(row).toEqual({ _oid: "Story:1", Name: "One", Estimate: "3", Owners: [{ _oid: "Member:20", Name: "Dana" }], Super: { _oid: "Epic:2" }, Status: null, "Status.Name": "Done" });
     expect(momentless("Story:1:99")).toBe("Story:1");
   });
 

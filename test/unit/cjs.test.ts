@@ -6,7 +6,7 @@ import { build } from "tsup";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /**
- * CommonJS consumers (gh-v1 is `require`-based) load the package through
+ * CommonJS consumers (the CLI consumer is `require`-based) load the package through
  * the "require" condition of its exports map. This builds the CJS bundle
  * the way the package does, installs it under node_modules/@versionone/agility-sdk
  * in a temp directory with the real package.json, and has a plain .cjs

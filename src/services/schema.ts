@@ -6,7 +6,7 @@
  * Why lazy: the whole metamodel is ~7 MB and 165 types, and a consumer
  * touches a dozen. Why a service and not the wire module: loading is
  * asynchronous and cross-cutting (one cache per client, in-flight requests
- * deduplicated — the pattern agility-rooms' useMetaDefinitionStore proves),
+ * deduplicated — the pattern a browser app consumer's metamodel store proves),
  * while translation is synchronous and per row. A schema can also be seeded
  * from a metamodel document (a committed metamodel.json, or one read with
  * meta.getMetamodel) and then needs no transport at all.

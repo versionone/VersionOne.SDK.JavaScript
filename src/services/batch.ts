@@ -1,6 +1,6 @@
 /**
  * The batch service: an api/asset batch sent with a record of what it did.
- * Ported from gh-v1's lib/batch.js — preview, describe, snapshot, send
+ * Ported from the CLI consumer's batch module — preview, describe, snapshot, send
  * (guarded by default), receipt, reverse — minus what is the CLI's: file
  * I/O, console output, permalinks and the confirm prompt (a callback here).
  *
@@ -13,7 +13,7 @@
  * which were skipped by the guard; and a reverse batch that undoes what
  * succeeded, best effort, with a note for anything it cannot.
  *
- * Closing a workitem cascades: Core's Inactivate and QuickClose also close
+ * Closing a workitem cascades: the server's Inactivate and QuickClose also close
  * its open descendants, and Reactivate reopens only the asset it names. So
  * before a batch that closes, the receipt records each closing target's
  * open descendants; after it, the ones the close actually closed; and the
@@ -147,7 +147,7 @@ export async function snapshot(transport: Transport, described: Described): Prom
 /** The known inverse operations. Anything else is reported, not guessed. */
 export const INVERSE: Readonly<Record<string, string>> = { Inactivate: "Reactivate", QuickClose: "Reactivate", Reactivate: "Inactivate", Delete: "Undelete", Undelete: "Delete" };
 
-/** Operations that close an asset's open descendants along with it (Core's close cascade). */
+/** Operations that close an asset's open descendants along with it (the server's close cascade). */
 export const CASCADING: ReadonlySet<string> = new Set(["Inactivate", "QuickClose"]);
 
 /** How deep a cascade is followed: Epic → sub-Epic → Story → Task is four. */
@@ -453,7 +453,7 @@ async function statesOf(transport: Transport, oids: Oid[]): Promise<Record<Oid, 
   return out;
 }
 
-/** AssetState as the endpoint spells a closed asset: by name, or by Core's code (128). */
+/** AssetState as the endpoint spells a closed asset: by name, or by the server's code (128). */
 const isClosed = (state: string | undefined): boolean => state === "Closed" || state === "128";
 
 /**

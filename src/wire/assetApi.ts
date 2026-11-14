@@ -66,7 +66,7 @@ export interface QueryBody<F extends string = string> {
  * scalar or a single relation (null clears it). A multi-value relation is
  * changed with `{ add: [...], remove: [...] }`. A plain list does NOT
  * replace a multi-value relation: the server ADDS its members, like rest-1's
- * `act: "add"` (seen live on v1sdktesting, 2026-11-07). To set one exactly,
+ * `act: "add"` (seen live on the API-testing instance, 2026-11-07). To set one exactly,
  * remove what should go and add what should come. A change comment goes in
  * the update node as `ChangeComment`.
  */

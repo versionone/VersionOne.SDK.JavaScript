@@ -5,25 +5,24 @@
  * This file speaks that gadget's dialect so the integration tier can test
  * the SDK's custom-attribute claims; it is a test fixture, not part of the
  * SDK, and it is brittle by construction — the gadget's control ids and
- * the negative AssetType ids are Core's UI internals, kept in step by our
- * proximity to that source. An API endpoint for custom fields is on Jim's
- * wish list; when it exists this file goes.
+ * the negative AssetType ids are the product's UI internals, kept in step by
+ * reading its source. An API endpoint for custom fields is on the
+ * maintainers' wish list; when it exists this file goes.
  *
- * How the post is built (verified against Core 2026-09-07, Controls/
- * PagePostBackHandler.cs, Util/ColumnSelection/CustomAttributeColumn.cs):
+ * How the post is built (verified against the product's source, 2026-09-07):
  *   1. GET the gadget page. Its `_V1_Gadgets_Parameters` hidden field holds
  *      the pending SimpleAttributeDefinition record the page will save —
  *      Asset, IsCustom, IsBasic, … — keyed by the grid token. Replaying
  *      that record, with the chosen AttributeType added, is what makes the
- *      save valid; the scratch-node origin (D:\source\scratch-node\common\
- *      v1.js) hard-codes a subset and its `__VIEWSTATE` trick is a no-op
+ *      save valid; an earlier script this was ported from hard-codes a subset
+ *      and its `__VIEWSTATE` trick is a no-op
  *      (BasePage discards view state).
  *   2. POST `__V1_UPDATES` (what V1.Widgets.SubmitUpdates assembles from
  *      the `_v1_updater` fields: the display name and the type, under the
  *      same grid token and pending key) and the Save button's postback,
  *      `__doPostBack('<gadget>', 'add')`.
  *   3. Recycle the app domain. One recycle per add: adding a second field
- *      before publishing trips Core's debug-only captive-dependency
+ *      before publishing trips the server's debug-only captive-dependency
  *      detector (Agility D-17171).
  *
  * Deleting is ordinary: the definition is an AttributeDefinition asset and

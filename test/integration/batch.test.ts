@@ -65,7 +65,7 @@ describeInstance("batch (live)", () => {
     expect(commands).toEqual([]);
     expect((await client.batch.reversible(receipt, { force: true })).commands).toEqual([{ from: b, update: { Estimate: null } }]);
   });
-  it("a batch of only an aliased execute, sent with guard off, really runs, and its receipt names the asset (gh-v1 apply's case)", async () => {
+  it("a batch of only an aliased execute, sent with guard off, really runs, and its receipt names the asset (the CLI consumer's apply case)", async () => {
     // Its own Story, so the round trip leaves a and b alone.
     const res = await assetApi.send(t, [{ AssetType: "Story", Name: fixtureName("batch aliased"), Scope: { _oid: "Scope:0" } }], { throwOnFailure: true });
     const story = assetApi.momentless(res.assetsCreated.oidTokens[0]!);
@@ -97,7 +97,7 @@ describeInstance("batch (live)", () => {
   const stateOf = async (oid: string) => (await assetApi.query<{ _oid: string; AssetState: string }>(t, { from: oid, select: ["AssetState"], page: { size: 1, start: 0 } }))[0]?.AssetState;
 
   for (const op of ["Inactivate", "QuickClose"] as const) {
-    it(`undoing ${op} on a Story reopens the Story and the open Tasks its close cascaded to, and leaves a Task that was closed before alone (gh-v1#48)`, async () => {
+    it(`undoing ${op} on a Story reopens the Story and the open Tasks its close cascaded to, and leaves a Task that was closed before alone (a CLI consumer finding)`, async () => {
       const res = await assetApi.send(t, [{ AssetType: "Story", Name: fixtureName(`cascade ${op}`), Scope: { _oid: "Scope:0" } }], { throwOnFailure: true });
       const story = assetApi.momentless(res.assetsCreated.oidTokens[0]!);
       created.push(story);
@@ -127,7 +127,7 @@ describeInstance("batch (live)", () => {
     });
   }
 
-  it("a created Conversation is left out of the reverse with a note, and undoing the batch deletes its Expression without a failure (gh-v1#21)", async () => {
+  it("a created Conversation is left out of the reverse with a note, and undoing the batch deletes its Expression without a failure (a CLI consumer finding)", async () => {
     const receipt = await client.batch.run([
       { "@c": { AssetType: "Conversation" } },
       { "@e": { AssetType: "Expression", BelongsTo: "@c", Content: fixtureName("reverse conversation") } }

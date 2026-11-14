@@ -2,8 +2,8 @@
  * OID tokens, the one spelling every endpoint shares: "Story:1234", or with
  * a moment, "Story:1234:5678". The model carries the momentless form except
  * where the moment is the identity (a history row). Every consumer had its
- * own copy of these (agility-rooms' AssetOidHelper, ossum-ui's toMomentless,
- * gh-v1's momentless, v1sdk 2.x's Oid class); this is the one they share.
+ * own copy of these (a browser app's OID helper, a CLI's `momentless`,
+ * v1sdk 2.x's Oid class); this is the one they share.
  */
 import { UsageError } from "../core/errors";
 import type { Oid } from "./asset";

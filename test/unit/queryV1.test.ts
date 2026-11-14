@@ -72,7 +72,7 @@ describe("queryV1", () => {
 });
 
 describe("queryV1: group queries", () => {
-  // Shape copied from a live response (the slack bot's board query, v1sdktesting, 2026-11-07).
+  // Shape copied from a live response (a chat-bot consumer's board query on the API-testing instance, 2026-11-07).
   const grouped = [[
     { _oid: "NULL", _children: [{ _oid: "Story:10471:900", Name: "No status", Status: { _oid: "NULL" }, "Team.HasProcess": "False", Estimate: "3" }] },
     { _oid: "StoryStatus:134", _children: [{ _oid: "Story:10472", Name: "Done", Status: { _oid: "StoryStatus:134" }, "Team.HasProcess": "True", Estimate: "5" }] }

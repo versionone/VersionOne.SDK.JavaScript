@@ -13,7 +13,7 @@ function fake(answer: (o: RequestOptions) => unknown): Transport & { calls: Requ
   const calls: RequestOptions[] = [];
   return { request: vi.fn(async (o: RequestOptions) => { calls.push(o); return answer(o); }) as Transport["request"], calls };
 }
-// As api/visibleFields answered on v1sdktesting (2026-11-14), trimmed.
+// As api/visibleFields answered on the API-testing instance (2026-11-14), trimmed.
 const visibleAnswer = [{ assetType: "Story", fields: ["Custom_Demo_List", "Estimate", "Name", "Number", "Owners", "Scope", "Status"] }, { assetType: "Defect", fields: ["Name", "Number", "Resolution"] }];
 
 describe("fields wire", () => {

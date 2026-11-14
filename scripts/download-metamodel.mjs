@@ -17,9 +17,9 @@
  *   - anything left that still points at a stripped type or attribute.
  * `--raw` keeps everything, for looking at one instance.
  *
- * The cleanest source is a dev instance on a blank database (Core's gulp
- * task for that), where nothing needs stripping; a hosted instance on the
- * current release gives the same product definitions once stripped, and
+ * The cleanest source is a dev instance on a blank database (the product's dev
+ * tooling has a task for that), where nothing needs stripping; a hosted
+ * instance on the current release gives the same product definitions once stripped, and
  * the script reports what it removed so the pull can be reviewed. meta.v1
  * needs no authentication; `V1_ACCESS_TOKEN` is sent when set. Behind a
  * proxy, run with NODE_USE_ENV_PROXY=1.
@@ -33,7 +33,7 @@ import { dirname, resolve } from "node:path";
 function printUsage() {
   process.stderr.write(
     "Usage: npm run download:metamodel -- <baseAgilityUrl> [output-file] [--raw]\n" +
-      "Example: npm run download:metamodel -- https://www14.v1host.com/v1sdktesting metamodel.json\n"
+      "Example: npm run download:metamodel -- https://www7.v1host.com/V1Production metamodel.json\n"
   );
 }
 

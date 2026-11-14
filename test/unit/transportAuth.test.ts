@@ -7,7 +7,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8" } });
 const unauthorized = () => json({ _type: "Error", error: "Unauthorized" }, 401);
 
-// A1: what a browser app (rooms) and a re-authenticating bot need from the transport.
+// A1: what a browser app and a re-authenticating bot need from the transport.
 describe("transport for real callers", () => {
   it("passes fetch a credentials mode only when one is configured", async () => {
     const fetchImpl = vi.fn().mockImplementation(() => Promise.resolve(json({})));

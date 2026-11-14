@@ -19,8 +19,8 @@ const storyDoc: AssetDocument = {
     Super: { _type: "Relation", name: "Super", value: null },
     "Status.Name": { _type: "Attribute", name: "Status.Name", value: "Accepted" },
     Owners: { _type: "Relation", name: "Owners", value: [{ _type: "Asset", href: "/VersionOne.Web/rest-1.v1/Data/Member/1035", idref: "Member:1035" }, { _type: "Asset", href: "", idref: "Member:20" }] },
-    "Owners.Name": { _type: "Attribute", name: "Owners.Name", value: ["Alfred Smith", "Jim Allers"] },
-    "Owners.Nickname": { _type: "Attribute", name: "Owners.Nickname", value: ["alfred", "jim"] },
+    "Owners.Name": { _type: "Attribute", name: "Owners.Name", value: ["Alfred Smith", "Betty Builder"] },
+    "Owners.Nickname": { _type: "Attribute", name: "Owners.Nickname", value: ["alfred", "betty"] },
     Number: { _type: "Attribute", name: "Number", value: "S-01530" }
   }
 };
@@ -35,10 +35,10 @@ describe("rest1: translation", () => {
     expect(row.Number).toBe("S-01530");
     expect(row.Super).toBeNull();
     expect(row.Status).toEqual({ _oid: "StoryStatus:137", Name: "Accepted" });
-    expect(row.Owners).toEqual([{ _oid: "Member:1035", Name: "Alfred Smith", Nickname: "alfred" }, { _oid: "Member:20", Name: "Jim Allers", Nickname: "jim" }]);
+    expect(row.Owners).toEqual([{ _oid: "Member:1035", Name: "Alfred Smith", Nickname: "alfred" }, { _oid: "Member:20", Name: "Betty Builder", Nickname: "betty" }]);
     // The dotted columns stay too, for a caller that selected them by name.
     expect((row as unknown as Record<string, unknown>)["Status.Name"]).toBe("Accepted");
-    expect((row as unknown as Record<string, unknown>)["Owners.Name"]).toEqual(["Alfred Smith", "Jim Allers"]);
+    expect((row as unknown as Record<string, unknown>)["Owners.Name"]).toEqual(["Alfred Smith", "Betty Builder"]);
   });
 
   it("keeps the moment on a history row's _oid and strips it on a data row", () => {
@@ -82,9 +82,9 @@ describe("rest1: calls", () => {
 });
 
 describe("rest-1: operate and template (the two things api/asset cannot answer)", () => {
-  // Shapes as v1sdktesting sent them, 2026-11-14.
+  // Shapes as the API-testing instance sent them, 2026-11-14.
   it("operate POSTs ?op= with no body and answers the resulting asset: the copy for Copy, momentless, with its moment", async () => {
-    const t = fakeTransport({ _type: "Asset", href: "/v1sdktesting/rest-1.v1/Data/Story/146979/194422", id: "Story:146979:194422" });
+    const t = fakeTransport({ _type: "Asset", href: "/VersionOne.Web/rest-1.v1/Data/Story/146979/194422", id: "Story:146979:194422" });
     expect(await operate(t, "Story:146976:1", "Copy")).toEqual({ oid: "Story:146979", moment: "194422" });
     expect(t.calls[0]).toMatchObject({ method: "POST", path: "/rest-1.v1/Data/Story/146976", query: { op: "Copy" } });
     expect(t.calls[0]!.body).toBeUndefined();
@@ -94,17 +94,17 @@ describe("rest-1: operate and template (the two things api/asset cannot answer)"
   });
 
   it("template GETs New/<Type>?ctx= and answers the initializer's values translated, without an _oid", async () => {
-    const doc = { _type: "Asset", href: "/v1sdktesting/rest-1.v1/New/Timebox", id: "", Attributes: {
+    const doc = { _type: "Asset", href: "/VersionOne.Web/rest-1.v1/New/Timebox", id: "", Attributes: {
       State: { _type: "Relation", name: "State", act: "set", value: { _type: "Asset", href: "", idref: "State:100" } },
       Schedule: { _type: "Relation", name: "Schedule", act: "set", value: { _type: "Asset", href: "", idref: "Schedule:3675" } },
       Name: { _type: "Attribute", name: "Name", act: "set", value: "Sprint 7" },
       BeginDate: { _type: "Attribute", name: "BeginDate", act: "set", value: "2015-06-17" },
-      Owner: { _type: "Relation", name: "Owner", act: "set", value: { _type: "Asset", href: "", idref: "Member:145820" } }
+      Owner: { _type: "Relation", name: "Owner", act: "set", value: { _type: "Asset", href: "", idref: "Member:1000" } }
     } };
     const t = fakeTransport(doc);
     const tpl = await template(t, "Timebox", { ctx: "Scope:0:5" });
     expect(t.calls[0]).toMatchObject({ method: "GET", path: "/rest-1.v1/New/Timebox", query: { ctx: "Scope:0" } });
-    expect(tpl).toEqual({ State: { _oid: "State:100" }, Schedule: { _oid: "Schedule:3675" }, Name: "Sprint 7", BeginDate: "2015-06-17", Owner: { _oid: "Member:145820" } });
+    expect(tpl).toEqual({ State: { _oid: "State:100" }, Schedule: { _oid: "Schedule:3675" }, Name: "Sprint 7", BeginDate: "2015-06-17", Owner: { _oid: "Member:1000" } });
     expect("_oid" in tpl).toBe(false);
     expect(await template(fakeTransport({ _type: "Asset", href: "", id: "", Attributes: {} }), "Story")).toEqual({});
   });
