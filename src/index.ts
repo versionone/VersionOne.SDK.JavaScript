@@ -17,7 +17,10 @@ export type * from "./types/assets/index";
 export type { CreateType, CustomList, From, RowOf, RowsOf, SelectKey, SelectPath, SelectValue, Selected, TypeOf } from "./types/query";
 
 // The wire layer: one module per endpoint.
-export { assetApi, rest1, meta, loc2, queryV1, attachment } from "./wire";
+export { assetApi, rest1, meta, loc2, queryV1, attachment, fields } from "./wire";
+export type { OperationResult, Template } from "./wire/rest1";
+export type { FieldsOf } from "./services/fields";
+export { importantName } from "./services/fields";
 export type { Bytes, EmbeddedImage } from "./wire/attachment";
 export * as select from "./wire/select";
 export type { AssetApiResponse, Command, CommandBody, CommandFailureDetail, Outcome, CommandValue, CreateBody, ExecuteBody, QueryBody, UpdateBody, ReadOptions, RowContext, SendOptions } from "./wire/assetApi";

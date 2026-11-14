@@ -8,6 +8,17 @@
  *                                    (taken as a query's `filter`/`select`; `where`/`sel` are rest-1's spellings, translated here)
  *   /rest-1.v1/Data/<Type>/<id>      one asset
  *   /rest-1.v1/Hist/<Type>[/<id>]    history: the same shape, one row per moment, ids carrying the moment
+ *   /rest-1.v1/New/<Type>?ctx=<oid>   a template: the asset the type's initializer would create in that
+ *                                    context (Core runs the type's IAssetInitializer with ctx as the
+ *                                    context OID — a Timebox gets the next sprint name, dates after the
+ *                                    schedule's last timebox, the schedule, a state and the owner; live
+ *                                    2026-11-14). Same document shape, id "", every attribute with act "set".
+ *
+ * Two writes, kept narrow: rest-1 carries nothing api/asset does, except
+ *   POST /rest-1.v1/Data/<Type>/<id>?op=<Operation>   the operation's RESULT, which api/asset drops:
+ *                                    Copy answers the new asset's id (Story:146979:194422), any other
+ *                                    operation the source at its new moment; an unknown operation is 400
+ *                                    "Unknown Operation 'Story.NoSuchOp'" (live 2026-11-14).
  *
  * What it returns, verified against a dev instance (2026-09-07):
  *   { _type: "Assets"|"History", total?, pageSize, pageStart, Assets: [
@@ -23,7 +34,7 @@
  *     Owners.Nickname, Status.Name) uninvited; they are folded onto the Refs.
  *   - a page is required by this module: no Data read is unbounded.
  */
-import { UsageError } from "../core/errors";
+import { ApiError, UsageError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import { assetStateOf, type Asset, type Oid, type Ref } from "../types/asset";
 import { momentless } from "../types/oid";
@@ -135,6 +146,43 @@ export async function get<Row extends Asset = Asset>(transport: Transport, oid: 
   const [type, id] = momentless(oid).split(":");
   const doc = await transport.request<AssetDocument>({ method: "GET", path: `/rest-1.v1/Data/${encodeURIComponent(type!)}/${encodeURIComponent(id!)}`, query: { sel: select?.join(",") }, responseType: "json" });
   return fromAssetDocument<Row>(doc);
+}
+
+/**
+ * What an operation answered with: the asset the server returned, as an
+ * OID token — for Copy the copy, for anything else the operated asset —
+ * and the moment the server stamped on it.
+ */
+export interface OperationResult { oid: Oid; moment: string | null }
+
+/**
+ * Run an operation (Copy, Inactivate, …) through rest-1, for its result.
+ * api/asset's `execute` performs the same operations but reports only the
+ * operated asset, so a Copy's new OID is unobservable there; rest-1 answers
+ * it. Not idempotent: never retried.
+ */
+export async function operate(transport: Transport, oid: Oid, op: string): Promise<OperationResult> {
+  const [type, id] = momentless(oid).split(":");
+  if (!type || !id) throw new UsageError(`"${oid}" is not an OID token (Story:1234)`);
+  const doc = await transport.request<AssetDocument>({ method: "POST", path: `/rest-1.v1/Data/${encodeURIComponent(type)}/${encodeURIComponent(id)}`, query: { op }, responseType: "json" });
+  if (!doc || typeof doc.id !== "string" || !doc.id) throw new ApiError(`rest-1 ${op} on ${oid} did not answer with an asset`, 200, "BAD_RESPONSE", doc);
+  const moment = doc.id.split(":")[2] ?? null;
+  return { oid: momentless(doc.id), moment };
+}
+
+/** A new asset's template as the model carries it: the attributes the initializer set, no `_oid`. */
+export type Template<Row extends Asset = Asset> = Partial<Omit<Row, "_oid">>;
+
+/**
+ * The template for a new asset of `type` in a context (a Scope, a parent
+ * asset): what the server's initializer would fill in — defaults nothing
+ * else exposes. Idempotent, like any GET. Without a context the template
+ * is empty, and an unknown context is echoed back, not refused.
+ */
+export async function template<Row extends Asset = Asset>(transport: Transport, type: string, options: { ctx?: Oid } = {}): Promise<Template<Row>> {
+  const doc = await transport.request<AssetDocument>({ method: "GET", path: `/rest-1.v1/New/${encodeURIComponent(type)}`, query: { ctx: options.ctx ? momentless(options.ctx) : undefined }, responseType: "json" });
+  const { _oid: _ignored, ...values } = fromAssetDocument<Row>({ ...doc, id: doc.id || `${type}:0` });
+  return values as Template<Row>;
 }
 
 /** A bounded history read: one row per moment, _oid carrying the moment. */

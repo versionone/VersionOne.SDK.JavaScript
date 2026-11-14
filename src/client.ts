@@ -4,6 +4,7 @@ import { createFetchTransport } from "./core/fetchTransport";
 import type { Transport } from "./core/transport";
 import * as attachments from "./services/attachments";
 import * as batch from "./services/batch";
+import * as fieldsService from "./services/fields";
 import * as guard from "./services/guard";
 import * as resolve from "./services/resolve";
 import { Schema, type TypeCache } from "./services/schema";
@@ -11,9 +12,11 @@ import type { Asset, Oid } from "./types/asset";
 import type { Member } from "./types/assets/Member";
 import type { Metamodel } from "./types/metamodel";
 import type { From, RowOf, RowsOf, Selected, SelectPath, TypeOf } from "./types/query";
-import { momentless } from "./types/oid";
+import { isOidToken, momentless } from "./types/oid";
+import { isAssetNumber } from "./services/resolve";
 import * as assetApi from "./wire/assetApi";
 import * as attachment from "./wire/attachment";
+import * as fields from "./wire/fields";
 import * as loc2 from "./wire/loc2";
 import * as meta from "./wire/meta";
 import * as queryV1 from "./wire/queryV1";
@@ -65,12 +68,15 @@ const ME_SELECT = ["Name", "Username", "Nickname", "Email"];
  * every write answers in the model's terms (an Outcome, never an envelope).
  *
  * Reads: `query`, `queries`, `get`, `queryPage`, `pages`, `all`, `me`. A
- * query body is the same everywhere; the client picks the endpoint
- * (query.v1 for plain reads — read-only by construction, so a request can
- * be retried like a GET; api/asset where a total is wanted; rest-1 behind
- * `data` for deleted assets and history). Writes: `assets.send`,
- * `assets.sendGuarded`, `batch.run`. Services: `resolve`, `attachments`,
- * `embeddedImages`, `schema`, `localize`, `urls`.
+ * query body is the same everywhere; the client picks the endpoint.
+ * query.v1 answers rows alone — the lightest response, and read-only by
+ * construction, so a request can be resent like a GET — but its shape has
+ * nowhere to put a total; api/asset reports one (`needTotal`) beside the
+ * rows, which is why `queryPage` goes there and `query` does not. rest-1
+ * sits behind `data` for what neither does: deleted assets, history, a
+ * new asset's template, an operation's result. Writes: `assets.send`,
+ * `assets.sendGuarded`, `batch.run`, `copy`. Services: `resolve`,
+ * `fields`, `attachments`, `embeddedImages`, `schema`, `localize`, `urls`.
  */
 export class AgilityApiClient {
   readonly transport: Transport;
@@ -112,9 +118,12 @@ export class AgilityApiClient {
 
   /**
    * One query, its rows, translated. Sent to query.v1: it cannot write, so
-   * the request is retried like a GET after a network failure or a 5xx. A
-   * page is required; a query the server refuses throws (kind "invalid"),
-   * never an empty result.
+   * the request is marked idempotent and the transport may resend it after
+   * a network failure or a 5xx — when `retries` is set above its default
+   * of 0. A page is required; a query the server refuses throws an
+   * ApiError (kind "invalid", code QUERY_REJECTED; `message` holds the
+   * server's sentences, `details` its whole error document), never an
+   * empty result.
    */
   query<const F extends From, const Q extends assetApi.QueryBody<F>>(q: Q & assetApi.QueryBody<F>): Promise<RowOf<Q>[]>;
   query<Row extends Asset = Asset>(q: assetApi.QueryBody): Promise<Row[]>;
@@ -214,17 +223,42 @@ export class AgilityApiClient {
   }
 
   /**
-   * rest-1.v1, for what query.v1 cannot do: deleted assets (`deleted:
-   * true`), one asset by OID without a page, and history (one row per
-   * moment). Parameters are spelled as a query's (`select`, `filter`).
+   * rest-1.v1, for what the other endpoints cannot do: deleted assets
+   * (`deleted: true`), one asset by OID without a page, history (one row
+   * per moment), a new asset's template (`template`: what the type's
+   * initializer fills in for a context — a Timebox's next name and dates,
+   * a Story's carry-over from a Request), and an operation's result
+   * (`operate`: api/asset performs a Copy but never says what it made;
+   * rest-1 answers the new OID). Parameters are spelled as a query's
+   * (`select`, `filter`).
    */
   readonly data = {
     list: <Row extends Asset = Asset>(type: string, params: rest1.ReadParams) => rest1.list<Row>(this.transport, type, params),
     get: <Row extends Asset = Asset>(oid: string, select?: string[]) => rest1.get<Row>(this.transport, oid, select),
-    history: <Row extends Asset = Asset>(target: string, params: rest1.ReadParams) => rest1.history<Row>(this.transport, target, params)
+    history: <Row extends Asset = Asset>(target: string, params: rest1.ReadParams) => rest1.history<Row>(this.transport, target, params),
+    template: <F extends From>(type: F, options?: { ctx?: Oid }) => rest1.template<TypeOf<F>>(this.transport, type, options),
+    operate: (oid: Oid, op: string) => rest1.operate(this.transport, oid, op)
   };
 
-  /** @deprecated since 1.0.0-alpha.3: `client.query` / `client.queries` read through query.v1. Removed in 1.0.0. */
+  /** Copy an asset (the server's Copy operation) and answer the copy's OID: the one thing api/asset's `execute: "Copy"` does not say. */
+  async copy(oid: Oid): Promise<Oid> {
+    return (await rest1.operate(this.transport, oid, "Copy")).oid;
+  }
+
+  /**
+   * What a form needs for an asset type in a scope: the attributes the
+   * server requires to create one (meta), the ones the product shows there
+   * (api/visibleFields, custom fields included once configured), and the
+   * scope's scheme's important fields and whether they are enforced at
+   * close. `visible` alone answers for several types and scopes at once.
+   */
+  readonly fields = {
+    describe: (type: From, scope: Oid) => fieldsService.describe(this.transport, this.schema, type, scope),
+    visible: (types: readonly From[], scopes: readonly Oid[]) => fields.visibleFields(this.transport, types, scopes),
+    visibleByAsset: (oid: Oid) => fields.visibleFieldsByAsset(this.transport, oid)
+  };
+
+  /** @deprecated since 1.0.0-alpha.3: use `client.query` / `client.queries` (the same endpoint, query.v1; only the name moved). Removed in 1.0.0. */
   readonly queryV1 = {
     query: <Row extends Asset = Asset>(q: assetApi.QueryBody) => this.query<Row>(q),
     queries: <Row extends Asset = Asset>(qs: assetApi.QueryBody[]) => this.queries<Row>(qs)
@@ -258,7 +292,7 @@ export class AgilityApiClient {
       await this.schema.ensureFor(commands);
       return guard.sendGuarded<Row>(this.transport, commands, { ...options, lookup: this.schema });
     },
-    /** @deprecated since 1.0.0-alpha.3: use `client.query` (or `client.queryPage` for a total). Removed in 1.0.0. */
+    /** @deprecated since 1.0.0-alpha.3: use `client.query` (rows, through query.v1) or `client.queryPage` (rows and a total, through api/asset as this does). Removed in 1.0.0. */
     query: async <Row extends Asset = Asset>(q: assetApi.QueryBody) => {
       await this.schema.ensureFor([q]);
       return assetApi.query<Row>(this.transport, q, { lookup: this.schema });
@@ -323,8 +357,19 @@ export class AgilityApiClient {
 
   /** Where a browser opens things on this instance: an asset's page, an attachment's bytes, an embedded image. */
   readonly urls = {
-    /** The asset's page: assetdetail.v1 redirects to the type's own detail page (live 2026-11-12). */
-    asset: (oid: Oid) => `${this.config.baseUrl.replace(/\/+$/, "")}/assetdetail.v1?oid=${momentless(oid)}`,
+    /**
+     * The asset's page, from an OID token or an asset Number (S-01001,
+     * what a person typed and what a message shows): assetdetail.v1
+     * resolves either and redirects to the type's own detail page; a signed-
+     * out reader lands there after logging in. Anything else is a UsageError.
+     */
+    asset: (ref: Oid | string) => {
+      const base = this.config.baseUrl.replace(/\/+$/, "");
+      const text = ref.trim();
+      if (isOidToken(text)) return `${base}/assetdetail.v1?oid=${momentless(text)}`;
+      if (isAssetNumber(text)) return `${base}/assetdetail.v1?Number=${encodeURIComponent(text)}`;
+      throw new UsageError(`"${ref}" is neither an OID token (Story:1234) nor an asset number (S-1234)`);
+    },
     attachment: (id: string | number) => attachment.attachmentUrl(this.config.baseUrl, id),
     embeddedImage: (id: string | number) => attachment.embeddedImageUrl(this.config.baseUrl, id)
   };

@@ -49,8 +49,10 @@ Changes between alphas are in `CHANGELOG.md`, each with its migration line.
   - `resolve.numbers` / `resolve.ref` - asset numbers and OID tokens to assets, in one request
   - `attachments.list` / `page` / `info` / `get` / `add` / `put` / `remove` - files attached to an asset; `add` sends a small file inline and a large one in two steps, and a failed upload throws `AttachmentUploadError` naming the empty attachment it left
   - `embeddedImages.upload` / `normalize` - images in rich text; they cannot be deleted
-  - `urls.asset` / `attachment` / `embeddedImage` - where a browser opens each
-  - `data.list` / `get` / `history` - rest-1 reads, for deleted assets and history; `meta.*` - meta.v1 raw; `schema` - the translated, cached view; `localize` - loc-2 labels for tags (a violation's `tag` is one)
+  - `copy(oid)` - the Copy operation, answering the copy's OID (api/asset performs it but never says what it made); `data.operate(oid, op)` is the general form
+  - `fields.describe(type, scope)` - what a form needs: required attributes (meta), the ones the product shows there (`api/visibleFields`, custom fields included), the scheme's important fields and whether they are enforced at close
+  - `urls.asset(oidOrNumber)` / `attachment` / `embeddedImage` - where a browser opens each
+  - `data.list` / `get` / `history` / `template` - rest-1 reads: deleted assets, history, and a new asset's template for a context (`New/<Type>?ctx=`); `meta.*` - meta.v1 raw; `schema` - the translated, cached view; `localize` - loc-2 labels for tags (a violation's `tag` is one)
 - Errors: everything thrown is an `ApiError` with a `kind` (`auth`, `forbidden`, `notFound`, `invalid`, `transient`, `aborted`, `commandFailure`, `protocol`, `usage`, `unknown`). A mistake caught before any request is a `UsageError`
 - `TypeCache` - one instance's loaded type definitions, shared by many clients (`new AgilityApiClient(config, { types })`)
 - `createFetchTransport` - configurable HTTP transport: `credentials` for same-origin cookie auth, `onUnauthorized` to re-authenticate on a 401 (resends idempotent requests once), and a per-request `signal`; `client.withSignal(signal)` ties a whole client to one

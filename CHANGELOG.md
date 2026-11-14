@@ -1,11 +1,51 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-alpha.4 — what the three adoptions asked for
+
+### Added
+
+- **Two narrow rest-1 paths** (agility-rooms): `client.data.operate(oid,
+  op)` runs an operation for its result — api/asset performs a Copy but
+  reports only the source; rest-1 answers the copy's OID — and
+  `client.copy(oid)` is that for Copy. `client.data.template(type, {
+  ctx })` reads `New/<Type>?ctx=`: what the type's initializer fills in
+  for a context (a Timebox's next name and dates, schedule, state and
+  owner; a Story's carry-over from a Request), translated like a row,
+  without an `_oid`. Neither sends attribute values: rest-1 still carries
+  no update path.
+- **`client.fields`**: `describe(type, scope)` joins what a form needs —
+  the attributes the server requires on a create (meta), the ones the
+  product shows for the type in that scope (`api/visibleFields`, custom
+  fields included once configured), and the scope's scheme's important
+  fields with whether they are enforced at close; `visible(types,
+  scopes)` and `visibleByAsset(oid)` are the endpoints alone. New wire
+  module `fields`.
+- **`client.urls.asset` takes an asset Number** as well as an OID
+  (`assetdetail.v1?Number=S-01001`): the readable form a CLI prints and a
+  chat message shows (gh-v1, slack bot).
+- **`Outcome.requestId`**: the server's id for a batch, worth logging
+  (slack bot). Null for an outcome merged from several sends.
+- `outcomeOf` tolerating a partial envelope is now a stated contract
+  with a test: consumers' fakes may send only the fields they need.
+
+### Fixed
 
 - `parseViolation`: `tag` is null for the token spelling
   (`Violation'Invalid'Epic.Scope`); it was the token, which is not a loc-2
-  tag (gh-v1, 2026-11-14).
+  tag (gh-v1).
 - `CHANGELOG.md` ships in the npm package.
+- Doc notes: `kind: "usage"` means nothing was sent (status 0), so an
+  error formatter should not blame the server; `client.query`'s resend
+  after a failure needs `retries` above its default of 0; the deprecation
+  notes on `queryV1` and `assets.query` say where each endpoint is.
+
+### Migration note (from alpha.3's read path)
+
+- A rejected query through `client.query` is an `ApiError` with kind
+  `invalid` and code `QUERY_REJECTED`; `message` holds the server's
+  sentences and `details` its whole error document. A formatter that
+  printed `details` for api/asset's `CommandFailureError` now prints a JSON
+  document; print `message`.
 
 Alpha releases may break between versions. Every breaking change is listed
 here with the one-line migration a consumer applies. A renamed export keeps

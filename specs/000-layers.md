@@ -19,7 +19,7 @@ src/core       transport, errors      imports: nothing above it
   `src/types/asset.ts` (`Asset`, `Ref`, `Oid`, `DateString`,
   `AssetStateValue`, `CustomAttributes`).
 - **`wire`** is one module per endpoint (`assetApi`, `rest1`, `queryV1`,
-  `meta`, `loc2`, `validValues`, `attachment`, …). Each knows exactly two
+  `meta`, `loc2`, `attachment`, `fields`, …). Each knows exactly two
   things: the envelope its endpoint takes and returns, typed as the server
   spells it, and the translation between that envelope and `types`.
 - **`services`** reason about assets and compose wire modules (`schema`,
@@ -151,8 +151,10 @@ expect-zero control beside every "it returned rows".
 ## 6. Politeness is in the layer
 
 No read is unbounded: `assetApi.queries` and `queryV1.queries` refuse a
-query without a page,
-and the rest-1 module will refuse a Data read without one. The transport
+query without a page, and the rest-1 module refuses a Data read without
+one. rest-1 carries no attribute writes — api/asset does those — and one
+narrow write, `operate`: an operation run for its result (the OID a Copy
+made), which api/asset's `execute` performs but does not report. The transport
 retries only idempotent requests (GET by default, and every query.v1
 POST, since that endpoint cannot write), only on a network
 failure or a 5xx, never a 4xx; a batch write is never retried unless the

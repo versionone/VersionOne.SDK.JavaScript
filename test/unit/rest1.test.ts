@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RequestOptions, Transport } from "../../src/core/transport";
 import type { Story } from "../../src/types/assets/Story";
-import { fromAssetDocument, get, history, list, toQuery, type AssetDocument, type AssetsDocument } from "../../src/wire/rest1";
+import { fromAssetDocument, get, history, list, operate, template, toQuery, type AssetDocument, type AssetsDocument } from "../../src/wire/rest1";
 
 function fakeTransport(...answers: unknown[]): Transport & { calls: RequestOptions[] } {
   const calls: RequestOptions[] = [];
@@ -80,3 +80,33 @@ describe("rest1: calls", () => {
     expect(moments.rows.map((r) => r._oid)).toEqual(["Story:2104:2797", "Story:2104:2650"]);
   });
 });
+
+describe("rest-1: operate and template (the two things api/asset cannot answer)", () => {
+  // Shapes as v1sdktesting sent them, 2026-11-14.
+  it("operate POSTs ?op= with no body and answers the resulting asset: the copy for Copy, momentless, with its moment", async () => {
+    const t = fakeTransport({ _type: "Asset", href: "/v1sdktesting/rest-1.v1/Data/Story/146979/194422", id: "Story:146979:194422" });
+    expect(await operate(t, "Story:146976:1", "Copy")).toEqual({ oid: "Story:146979", moment: "194422" });
+    expect(t.calls[0]).toMatchObject({ method: "POST", path: "/rest-1.v1/Data/Story/146976", query: { op: "Copy" } });
+    expect(t.calls[0]!.body).toBeUndefined();
+    expect(t.calls[0]!.idempotent).toBeUndefined();
+    await expect(operate(fakeTransport({ _type: "Asset", id: "" }), "Story:1", "Copy")).rejects.toMatchObject({ code: "BAD_RESPONSE" });
+    await expect(operate(fakeTransport(), "S-1", "Copy")).rejects.toMatchObject({ kind: "usage" });
+  });
+
+  it("template GETs New/<Type>?ctx= and answers the initializer's values translated, without an _oid", async () => {
+    const doc = { _type: "Asset", href: "/v1sdktesting/rest-1.v1/New/Timebox", id: "", Attributes: {
+      State: { _type: "Relation", name: "State", act: "set", value: { _type: "Asset", href: "", idref: "State:100" } },
+      Schedule: { _type: "Relation", name: "Schedule", act: "set", value: { _type: "Asset", href: "", idref: "Schedule:3675" } },
+      Name: { _type: "Attribute", name: "Name", act: "set", value: "Sprint 7" },
+      BeginDate: { _type: "Attribute", name: "BeginDate", act: "set", value: "2015-06-17" },
+      Owner: { _type: "Relation", name: "Owner", act: "set", value: { _type: "Asset", href: "", idref: "Member:145820" } }
+    } };
+    const t = fakeTransport(doc);
+    const tpl = await template(t, "Timebox", { ctx: "Scope:0:5" });
+    expect(t.calls[0]).toMatchObject({ method: "GET", path: "/rest-1.v1/New/Timebox", query: { ctx: "Scope:0" } });
+    expect(tpl).toEqual({ State: { _oid: "State:100" }, Schedule: { _oid: "Schedule:3675" }, Name: "Sprint 7", BeginDate: "2015-06-17", Owner: { _oid: "Member:145820" } });
+    expect("_oid" in tpl).toBe(false);
+    expect(await template(fakeTransport({ _type: "Asset", href: "", id: "", Attributes: {} }), "Story")).toEqual({});
+  });
+});
+

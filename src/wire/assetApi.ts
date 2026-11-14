@@ -278,6 +278,8 @@ export function failuresOf<Row extends Asset = Asset>(response: AssetApiResponse
 
 /** What a batch did, in the model's terms: the services read this, never the envelope. */
 export interface Outcome<Row extends Asset = Asset> {
+  /** The server's id for the request: what to quote when asking about a batch. Null for an outcome merged from several sends. */
+  requestId: string | null;
   created: Oid[];
   modified: Oid[];
   operated: Oid[];
@@ -287,9 +289,15 @@ export interface Outcome<Row extends Asset = Asset> {
   durationSeconds: number | null;
 }
 
-/** The outcome of a (translated) response: OIDs momentless, failures normalised. */
+/**
+ * The outcome of a (translated) response: OIDs momentless, failures
+ * normalised. Every field has a default, so a partial envelope (a test fake
+ * that sends only queryResult) still yields a complete Outcome; consumers'
+ * fakes rely on that, and the unit tests keep it so.
+ */
 export function outcomeOf<Row extends Asset = Asset>(response: AssetApiResponse<Row>): Outcome<Row> {
   return {
+    requestId: typeof response.requestId === "string" && response.requestId ? response.requestId : null,
     created: (response.assetsCreated?.oidTokens ?? []).map(momentless),
     modified: (response.assetsModified?.oidTokens ?? []).map(momentless),
     operated: (response.assetsOperatedOn?.oidTokens ?? []).map(momentless),
@@ -300,7 +308,7 @@ export function outcomeOf<Row extends Asset = Asset>(response: AssetApiResponse<
 }
 
 /** An outcome with nothing in it, to merge several sends into. */
-export const emptyOutcome = <Row extends Asset = Asset>(): Outcome<Row> => ({ created: [], modified: [], operated: [], failures: [], queryResults: [], durationSeconds: null });
+export const emptyOutcome = <Row extends Asset = Asset>(): Outcome<Row> => ({ requestId: null, created: [], modified: [], operated: [], failures: [], queryResults: [], durationSeconds: null });
 
 /**
  * Add one send's outcome to another's, for a batch sent in several
@@ -313,6 +321,7 @@ export function mergeOutcome<Row extends Asset = Asset>(into: Outcome<Row>, done
   into.operated.push(...done.operated);
   into.failures.push(...done.failures.map((f) => ({ ...f, index: f.index === null ? null : f.index + offset })));
   into.queryResults.push(...done.queryResults);
+  into.requestId = null; // several sends, several ids: none is "the" request
   if (done.durationSeconds !== null) into.durationSeconds = (into.durationSeconds ?? 0) + done.durationSeconds;
   return into;
 }

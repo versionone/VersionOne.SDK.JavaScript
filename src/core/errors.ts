@@ -11,7 +11,8 @@
  *   aborted         the caller's signal ended it
  *   commandFailure  api/asset answered 200 with failed commands inside (CommandFailureError)
  *   protocol        the server answered something the SDK cannot read
- *   usage           a mistake caught before any request (UsageError): fix the call
+ *   usage           a mistake caught before any request (UsageError): nothing was sent, so
+ *                   do not blame the server — fix the call (status is 0 here)
  *   unknown         none of the above
  */
 export type ErrorKind = "auth" | "forbidden" | "notFound" | "invalid" | "transient" | "aborted" | "commandFailure" | "protocol" | "usage" | "unknown";

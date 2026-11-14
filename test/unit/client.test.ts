@@ -103,6 +103,7 @@ describe("client: writes", () => {
     const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, schema: schema() });
     const outcome = await client.assets.send<Story>([{ AssetType: "Story", Name: "a", Scope: "Scope:0" }, { AssetType: "Story" }, { from: "Story", select: ["Estimate"], page: { size: 1, start: 0 } }]);
     expect(outcome.created).toEqual(["Story:5"]);
+    expect(outcome.requestId).toBe("r");
     expect(outcome.failures).toEqual([expect.objectContaining({ index: 1, violation: { rule: "Required", attribute: "Story.Scope", tag: "AttributeDefinition'Scope'Story" } })]);
     expect(outcome.queryResults).toEqual([[expect.objectContaining({ Estimate: 2 })]]);
     expect(outcome).not.toHaveProperty("assetsCreated");
@@ -116,10 +117,32 @@ describe("client: writes", () => {
 
 describe("client: urls", () => {
   const client = new AgilityApiClient({ baseUrl: "https://www14.v1host.com/v1sdktesting/" }, { transport: fake(() => { throw new ApiError("no", 0); }) });
-  it("builds the asset page, attachment and embedded image URLs from the base URL", () => {
+  it("builds the asset page, attachment and embedded image URLs from the base URL; the asset page takes an OID or a Number", () => {
     expect(client.urls.asset("Story:1055:777")).toBe("https://www14.v1host.com/v1sdktesting/assetdetail.v1?oid=Story:1055");
+    expect(client.urls.asset("S-01001")).toBe("https://www14.v1host.com/v1sdktesting/assetdetail.v1?Number=S-01001");
+    expect(() => client.urls.asset("hello")).toThrow(UsageError);
     expect(client.urls.attachment("Attachment:9")).toBe("https://www14.v1host.com/v1sdktesting/attachment.img/9");
     expect(client.urls.embeddedImage(12)).toBe("https://www14.v1host.com/v1sdktesting/embedded.img/12");
     expect(client.attachments.url(9)).toBe(client.urls.attachment(9));
   });
 });
+
+describe("client: data.operate, copy, data.template", () => {
+  it("copy answers the copy's OID through rest-1; template reads New/<Type>", async () => {
+    const t = fake((o) => (o.path.startsWith("/rest-1.v1/New/") ? { _type: "Asset", href: "", id: "", Attributes: { Scope: { _type: "Relation", name: "Scope", act: "set", value: { _type: "Asset", href: "", idref: "Scope:0" } } } } : { _type: "Asset", href: "", id: "Story:9:1" }));
+    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, schema: schema() });
+    expect(await client.copy("Story:1")).toBe("Story:9");
+    expect(await client.data.operate("Story:1", "Inactivate")).toEqual({ oid: "Story:9", moment: "1" });
+    const tpl = await client.data.template("Story", { ctx: "Scope:0" });
+    expect(tpl.Scope).toEqual({ _oid: "Scope:0" });
+  });
+});
+
+describe("outcomeOf: a partial envelope is a contract", () => {
+  it("every field has a default, so a fake that sends only queryResult yields a complete Outcome", async () => {
+    const { outcomeOf } = await import("../../src/wire/assetApi");
+    const o = outcomeOf({ queryResult: { results: [[]], resultMetaData: [], count: 1 } } as never);
+    expect(o).toEqual({ requestId: null, created: [], modified: [], operated: [], failures: [], queryResults: [[]], durationSeconds: null });
+  });
+});
+

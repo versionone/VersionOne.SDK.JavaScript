@@ -285,9 +285,43 @@ first decision). Rooms' rest-1 writes are 6 attribute posts, 2
    is `fromAssetDocument`'s documented fold; worth deciding whether the
    dotted key should go once rooms is on `client.get` (Review 1.3).
 
-Decision for Jim: grow the two narrow rest-1 paths (2 and 3), or keep
-those three rooms call sites on rest-1 through the transport adapter.
-The rooms session proceeds with R1 either way.
+Decided 2026-11-14 (Jim): grow the two narrow rest-1 paths. Done in
+alpha.4 as `client.data.operate` / `client.copy` and
+`client.data.template`. Read in Core (`versionone/Core`, attached to the
+SDK session read-only that day): rest-1's `New` is
+`NewAssetQueryProcessor` → `Services.GetNewAsset(assetType, ctx)`, which
+builds a `CandidateAsset` and runs the type's registered
+`IAssetInitializer.InitializeNewAsset(asset, context, …)` (Meta.xml's
+`<Initializer>`; `TimeboxInitializer` is what names the sprint and dates
+it); a type without one gets only its primary relation to the context's
+type set, which is why a Story in a Scope gets just `Scope`. api/asset's
+`ctx` on a create applies the same initializer but does not echo the
+values. The docs page is `apis/rest-1/new-asset-templates` in
+`digital-ai/docs-agility-api`.
+
+**Fields for a form, 2026-11-14 (Jim):** required, visible and important
+attributes given an asset's Scope. Three sources, now one call,
+`client.fields.describe(type, scope)`: meta's `IsRequired` (writable
+attributes), `api/visibleFields?scopeOid=…&assetTypeToken=…` (both keys
+repeat; one entry per type; custom fields once configured; a global
+type ignores the scope and mixing global and non-global is 400 — Core's
+`DisplayedFieldsController`, docs `apis/field-visibility/visible-fields`),
+and `Scope.Scheme.ImportantFields` (a multi-value Text of attribute
+tokens — selecting it with a sub-select, as if a relation, crashes the
+server with a NullReferenceException) with `Scheme.IsRequiredAtClose`.
+`api/visibleFieldsByAsset?oidToken=` answers 500 for an asset of a
+global type (a Member) on v1sdktesting; `api/customFields` is a POST.
+Not yet covered: the "required at close" enforcement details
+(`ImportantEnforcementController`) and `api/customFields`; the testing
+instance's schemes name no important fields, so that path is proven on
+shape only.
+
+**Totals (Jim, 2026-11-14):** api/asset reports the total of a paged
+query (`needTotal`) beside the rows; query.v1's response is a bare list
+of row lists with nowhere to put it. That was a reason consumers routed
+reads through api/asset. The client keeps both: `query` on query.v1 for
+rows, `queryPage` on api/asset for a total; `pages`/`all` stop at a short
+page and need no total. The client's doc comment says so.
 
 **gh-v1, 2026-11-14** — on alpha.3 in versionone/gh-v1#64 (175 tests,
 typecheck, live smoke; CLI output unchanged). Nothing in gh-v1 caught
@@ -298,7 +332,9 @@ had nothing to replace there. Seven findings:
    (`Link.Asset`), which is not a loc-2 tag. Fixed: null there.
 2. **`urls.asset` takes only an OID**; the CLI links by Number
    (`assetdetail.v1?Number=S-1`), the readable form every command prints,
-   so it keeps its own builder. Add a Number form (alpha.4).
+   so it keeps its own builder. Done in alpha.4: `urls.asset` takes
+   either (docs `apis/asset-permalinks`: both forms 302 to the detail
+   page; a signed-out reader lands there after login).
 3. **The npm package shipped no CHANGELOG**; migration lines had to be
    read off the deprecation notes in `index.d.ts`. Fixed: `files` includes
    it.
@@ -342,12 +378,15 @@ surprise was envelope → Outcome in writes (7 tests, all where expected).
 5. **`outcomeOf` tolerates a partial envelope** (a fake sending only
    `queryResult`); the bot's fakes depend on it. Make it a stated
    contract (it is: every field is read with a default) and a test.
-6. **Outcome has no `requestId`**, the one envelope field worth logging
-   on a failed batch; reachable through CommandFailureError.response on
-   failure only. Add `requestId` to Outcome (alpha.4).
+6. **Outcome has no `requestId`** — added in alpha.4.
 7. **Testing-instance data:** `v1sdktesting` has no StoryStatus rows, so a
    Story status change cannot be exercised live there (spec §5 already
    notes the empty instance). Seed a few, or test on a Defect/Epic status.
+
+**alpha.4 (2026-11-14)** carries all of the above that was marked
+alpha.4, plus the two rest-1 paths and `client.fields`. Still open from
+the lists: trimming `QUERY_REJECTED` details, `echoed` on every failure,
+defaulting `retries` for idempotent requests.
 
 ## Open questions, with answers where the code gives one
 
