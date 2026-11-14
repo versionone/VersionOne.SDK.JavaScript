@@ -100,10 +100,12 @@ committed `metamodel.json` and is not edited by hand. The metamodel is the
 product's, for one release (its `Version`, which the generated headers
 and the README repeat): a pull by `scripts/download-metamodel.mjs`, which
 strips an instance's own definitions (its `Custom_` list types, its
-custom and `ReciprocalOf_` attributes) and reports what it removed, so a
-dev instance on a blank database and a hosted instance on the same
-release give the same file. Refresh it, and regenerate, as a step of each
-release. Generation rules:
+custom and `ReciprocalOf_` attributes) and reports what it removed, and
+spells every `href` from `/meta.v1/` (the server spells them from the
+instance's own path, which names the instance), so a dev instance on a
+blank database and a hosted instance on the same release give the same
+file, and the file names no instance. Refresh it, and regenerate, as a
+step of each release. Generation rules:
 
 - an attribute the type defines itself has no `Base`; inherited ones come
   through `extends`;

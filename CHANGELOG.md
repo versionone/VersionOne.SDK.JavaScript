@@ -46,6 +46,10 @@
   receipt, a log line, a bot's result) carries index, message and
   violation only. (chat-bot and CLI consumers: re-mapping failures to keep results
   small.)
+- **The committed `metamodel.json` names no instance**: every `href` is
+  spelled from `/meta.v1/` (`scripts/download-metamodel.mjs` rewrites
+  them on a pull). The generated types are unchanged; nothing in the SDK
+  reads an href.
 
 ## 1.0.0-alpha.4 — what the three adoptions asked for
 

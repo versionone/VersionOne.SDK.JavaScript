@@ -15,6 +15,10 @@
  *     target) — the product's canned "custom" attributes (IsCanned too)
  *     stay;
  *   - anything left that still points at a stripped type or attribute.
+ * Every `href` is also rewritten to start at `/meta.v1/`: meta.v1 spells
+ * them from the instance's own path (`/<instance>/meta.v1/Story`), which
+ * is the instance's name, not the product's. Nothing in the SDK reads an
+ * href (`src/wire/meta.ts` follows `tokenref` and `nameref`).
  * `--raw` keeps everything, for looking at one instance.
  *
  * The cleanest source is a dev instance on a blank database (the product's dev
@@ -65,6 +69,19 @@ export function canned(metamodel) {
   return { metamodel: { ...metamodel, AssetTypes: types }, removed };
 }
 
+/** Every href spelled from `/meta.v1/`, whatever instance path the server put in front of it. */
+export function neutralise(value) {
+  if (Array.isArray(value)) return value.map(neutralise);
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const [key, v] of Object.entries(value)) {
+      out[key] = (key === "href" || key === "HREF") && typeof v === "string" ? v.replace(/^.*?(\/meta\.v1(?=\/|$))/, "$1") : neutralise(v);
+    }
+    return out;
+  }
+  return value;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const raw = args.includes("--raw");
@@ -97,7 +114,7 @@ async function main() {
   let out = delivered;
   if (!raw) {
     const { metamodel, removed } = canned(delivered);
-    out = metamodel;
+    out = neutralise(metamodel);
     const list = (what, items) => items.length ? `  ${what} (${items.length}): ${items.join(", ")}\n` : `  ${what}: none\n`;
     process.stderr.write(`meta.v1 ${delivered.Version}: ${Object.keys(delivered.AssetTypes).length} types delivered, ${Object.keys(metamodel.AssetTypes).length} kept. Instance-specific definitions removed:\n${list("custom list types", removed.types)}${list("custom attributes", removed.attributes)}${list("left pointing at those", removed.dangling)}`);
   }
