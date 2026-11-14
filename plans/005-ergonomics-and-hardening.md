@@ -434,6 +434,25 @@ translated and raw reads, create, copy, template, localize, config.v1,
 loc.v1, a rejected query as invalid/QUERY_REJECTED, a 404 as notFound,
 an abort as aborted), fixtures deleted by OID; result on #1465.
 
+**Initial values from a view — an API gap, recorded 2026-11-14 at Jim's
+request.** Core's gadgets treat the user's current view as the context
+for a new asset: `FilterBubbleContext` asks every filter applicator on a
+gadget for `ProvideInitialValues(querySettings)`, folds in the config
+filters, and the boards add the clicked column (Status) and row (the
+group-by value); the set travels as `FilterAttributeValues` on the
+add-dialog URL. Jim's framing: the boundary between filters and context
+is a matter of perspective, not mechanics. This lives entirely in
+VersionOne.Web; `New/{T}` — and so `client.data.template` — knows one
+OID context and nothing of a view. An API-first client therefore has no
+server-side way to ask "the initial values for a new {T} given this view
+(these filters, this column, this row)". Options, not decided: (a) the
+consumer keeps a client-side layer where each active filter offers an
+initial value, over the server's OID template (rooms' proposed D2
+shape); (b) Core grows an API surface for the filter context — `New/{T}`
+with a filter body, or an api/asset preview that accepts a view — which
+the SDK would then wrap. Source-checked by the rooms session with Core
+attached read-only.
+
 **alpha.5, started 2026-11-14** with the ETag-aware schema reads rooms
 asked for. Live: meta.v1 sends one strong ETag for the whole schema
 (release plus a change stamp), identical on the document, a type and an

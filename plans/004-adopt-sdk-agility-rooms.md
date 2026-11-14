@@ -110,6 +110,35 @@ api/asset, or have the SDK grow a narrow rest-1 write path.
    `src/metaAssetStore/` and `useMetaDefinitionStore` with the SDK's
    `schema` / `TypeCache`.
 
+## D2: the add-asset flow (recorded 2026-11-14 at Jim's request)
+
+What the server gives, source-checked in Core and verified live:
+`New/{T}?ctx=` takes exactly one OID (a comma list is a 400 "Invalid OID
+token") and runs the type's `IAssetInitializer`. `StoryInitializer`
+picks a strategy by the context's type — Epic, Scope, Theme, Issue,
+Request, Retrospective, Room, Idea. From a Room it sets Scope (the
+room's open DefaultScope, else the room's Scope when it is inside the
+room's scope context, else the first of that context), Team when the
+room has one, and Customer from DefaultCustomer; Defect behaves the
+same. Live: `New/Story?ctx=TeamRoom:57394` answered Scope:2204 and
+Team:4094. So `client.data.template(type, { ctx: room })` is the
+server's defaults for an add dialog, and the SDK's single-ctx signature
+matches the endpoint. Core's multi-context initializer (which also
+derives Team from a StoryStatus) is reachable only through Core's own
+add-asset controller, not the API.
+
+What rooms does today: `AddAsset.tsx` recomputes the room defaults by
+hand (DefaultScope, Team from the team store), without Customer and
+without Core's scope-context fallback; the board passes
+`prefilledAttributeValues` (column Status, row value, Timebox for the
+backlog column) through the URL; nothing from the filter drawer reaches
+the dialog.
+
+Proposed D2 shape (waits for Jim): `client.data.template(type, { ctx:
+room })` for the server's defaults, plus a rooms-side layer where every
+active filter can offer an initial value, with the board column and row
+as today. The API gap behind that layer is in plan 005.
+
 ## Rules
 
 - Jest and the existing Playwright gates pass on every PR. No behaviour or
