@@ -428,7 +428,11 @@ reads). Three findings, none blocking:
 
 The instance's database began refusing logins at about 04:20Z that day
 ("Cannot open database v1sdktesting requested by the login"), which the
-transport reports as kind `transient`; the D1 live smoke waits for it.
+transport reports as kind `transient` (batch upgrades that night). Back
+by 07:11Z; the D1 transport smoke then passed on every call (me,
+translated and raw reads, create, copy, template, localize, config.v1,
+loc.v1, a rejected query as invalid/QUERY_REJECTED, a 404 as notFound,
+an abort as aborted), fixtures deleted by OID; result on #1465.
 
 **alpha.5, started 2026-11-14** with the ETag-aware schema reads rooms
 asked for. Live: meta.v1 sends one strong ETag for the whole schema
