@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- `parseViolation`: `tag` is null for the token spelling
+  (`Violation'Invalid'Epic.Scope`); it was the token, which is not a loc-2
+  tag (gh-v1, 2026-11-14).
+- `CHANGELOG.md` ships in the npm package.
+
 Alpha releases may break between versions. Every breaking change is listed
 here with the one-line migration a consumer applies. A renamed export keeps
 its old name as a `@deprecated` alias for one alpha and is removed in the

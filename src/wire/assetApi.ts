@@ -251,7 +251,7 @@ export interface Violation {
   rule: string;
   /** "Story.Scope" when the violation names an attribute; null otherwise. */
   attribute: AttributeTokenRef | null;
-  /** The loc-2 tag naming what was violated, when the message carries one. */
+  /** The loc-2 tag naming what was violated (`AttributeDefinition'Scope'Story`), when the message carries one; null for the token spelling. */
   tag: string | null;
 }
 
@@ -261,8 +261,9 @@ export function parseViolation(message: string): Violation | null {
   if (parts[0] !== "Violation" || !parts[1]) return null;
   const rule = parts[1], rest = parts.slice(2).filter((p) => p !== "");
   if (rest[0] === "AttributeDefinition" && rest[1] && rest[2]) return { rule, attribute: `${rest[2]}.${rest[1]}`, tag: rest.join("'") };
+  // The older spelling names the attribute by its token ("Epic.Scope"): not a loc-2 tag, so `tag` is null there.
   const token = rest.length === 1 && /^[A-Za-z][A-Za-z0-9_]*\.[A-Za-z][A-Za-z0-9_]*$/.test(rest[0]!) ? (rest[0] as AttributeTokenRef) : null;
-  return { rule, attribute: token, tag: rest.length ? rest.join("'") : null };
+  return { rule, attribute: token, tag: !token && rest.length > 1 ? rest.join("'") : null };
 }
 
 /** The failures of a response, normalised: index and message, always both. */

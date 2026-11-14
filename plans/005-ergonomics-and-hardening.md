@@ -289,6 +289,38 @@ Decision for Jim: grow the two narrow rest-1 paths (2 and 3), or keep
 those three rooms call sites on rest-1 through the transport adapter.
 The rooms session proceeds with R1 either way.
 
+**gh-v1, 2026-11-14** — on alpha.3 in versionone/gh-v1#64 (175 tests,
+typecheck, live smoke; CLI output unchanged). Nothing in gh-v1 caught
+`TypeError` or read more than one page, so `UsageError` and `client.all`
+had nothing to replace there. Seven findings:
+
+1. **`parseViolation.tag` on the token spelling** gave the token
+   (`Link.Asset`), which is not a loc-2 tag. Fixed: null there.
+2. **`urls.asset` takes only an OID**; the CLI links by Number
+   (`assetdetail.v1?Number=S-1`), the readable form every command prints,
+   so it keeps its own builder. Add a Number form (alpha.4).
+3. **The npm package shipped no CHANGELOG**; migration lines had to be
+   read off the deprecation notes in `index.d.ts`. Fixed: `files` includes
+   it.
+4. **A rejected query surfaces differently** on the new read path: an
+   `ApiError` kind `invalid`, code `QUERY_REJECTED`, `details` the whole
+   error document, where api/asset gave a `CommandFailureError` whose
+   message was the token. A caller that prints `details` now prints a
+   JSON blob; `message` already holds the server's sentences. Add the
+   migration line (alpha.4) and consider trimming `details` to the
+   exceptions.
+5. **`queryV1` is the deprecated name while `client.query` is what goes
+   to query.v1**, and the deprecation note on `assets.query` says "read
+   through query.v1", which reads as pointing at `queryV1`. Sharpen the
+   notes (alpha.4).
+6. **`CommandFailureDetail.echoed`** rides on every failure, so a caller
+   that serialises failures gets the echoed body; gh-v1 re-maps. Note it;
+   maybe make it lazy or optional later.
+7. **"Retried like a GET" needs `retries > 0`**, which defaults to 0; the
+   doc comment on `client.query` promises a retry the default config never
+   makes. Say so in the comment, or default `retries` to 1 for idempotent
+   requests (alpha.4, a behaviour change to call out).
+
 ## Open questions, with answers where the code gives one
 
 - **Least polished today:** rest-1 (reads only, its own parameter

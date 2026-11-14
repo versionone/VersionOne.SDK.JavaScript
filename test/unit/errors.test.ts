@@ -65,7 +65,7 @@ describe("error kinds", () => {
 
   it("parseViolation reads every spelling seen live, and nothing else", () => {
     expect(parseViolation("Violation'Required'AttributeDefinition'Scope'Story")).toEqual({ rule: "Required", attribute: "Story.Scope", tag: "AttributeDefinition'Scope'Story" });
-    expect(parseViolation("Violation'Invalid'Epic.Scope")).toEqual({ rule: "Invalid", attribute: "Epic.Scope", tag: "Epic.Scope" });
+    expect(parseViolation("Violation'Invalid'Epic.Scope")).toEqual({ rule: "Invalid", attribute: "Epic.Scope", tag: null });
     expect(parseViolation("Violation'AssetCannotDeleteClosed")).toEqual({ rule: "AssetCannotDeleteClosed", attribute: null, tag: null });
     expect(parseViolation("Unknown AttributeDefinition: Story.Nmae")).toBeNull();
     expect(parseViolation("")).toBeNull();
