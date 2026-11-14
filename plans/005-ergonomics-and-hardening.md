@@ -398,6 +398,38 @@ instance for that one read or the SDK grows `meta.metamodel({
 ifNoneMatch })` answering `{ metamodel, etag }` and null on 304 (Review
 2.2's ETag item, now concrete; alpha.5).
 
+**agility-rooms D1, 2026-11-14** — digital-ai/agility-rooms#1465
+(`d1/sdk-under-axios`, stacked on R1 #1464), SDK pinned `1.0.0-alpha.4`.
+`src/utils/agilityTransport.ts` is a `Transport` over rooms' axios
+instance (paths, body, responseType, signal and onResponse mapped; axios
+failures become ApiErrors with the server's status and words);
+`agilityClient.ts` holds the client. Moved: `executeCopy` →
+`client.copy`, `getNewAssetTemplate` → `client.data.template`,
+`fetchLocalizations` → `client.localize`, `uploadEmbeddedImage` →
+`client.embeddedImages.upload`. api/asset and query.v1 stay raw through
+the transport until D2 (rooms' 118 `NULL_OID` sites decode by hand, and
+the SDK's reads turn `NULL` refs into null even without a lookup).
+meta.v1 stays on rooms' own instance until D3 (alpha.5's conditional
+reads). Three findings, none blocking:
+
+1. **No untranslated path through the SDK.** The only way to get a raw
+   envelope is `Transport.request` with a caller-spelled path. A
+   `translate: false` (or `lookup: null` meaning "leave the rows as
+   sent") on `assetApi.send` / `queryV1.queries` would let an adopter
+   route through the wire modules first and translate second. Candidate
+   for alpha.6; weigh against spec 000 §2a ("a consumer never sees the
+   untranslated shape") — it is a strangler's need, not a steady state.
+2. **A custom Transport reimplements `messageOf`** (the server's error
+   words) because it is not exported. Export it, or an
+   `apiErrorFromResponse(status, data)` helper, so custom transports'
+   errors match the fetch transport's. Small; alpha.6.
+3. **`ClientConfig.baseUrl` is required even with a custom Transport**,
+   though only `urls.*` read it. A doc line.
+
+The instance's database began refusing logins at about 04:20Z that day
+("Cannot open database v1sdktesting requested by the login"), which the
+transport reports as kind `transient`; the D1 live smoke waits for it.
+
 **alpha.5, started 2026-11-14** with the ETag-aware schema reads rooms
 asked for. Live: meta.v1 sends one strong ETag for the whole schema
 (release plus a change stamp), identical on the document, a type and an
