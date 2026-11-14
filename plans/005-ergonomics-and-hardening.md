@@ -468,7 +468,14 @@ Retry-After honoured), a rejected query's `details` are the exceptions
 alone, and `echoed` is readable but not enumerable on a failure. The
 live tier passed in full on 2026-11-14 at 07:20Z, after the instance's
 batch upgrades (40 passed, 3 skipped: custom fields on a hosted
-instance, embedded images opt-in); alpha.5 is ready to tag.
+instance, embedded images opt-in). Published 2026-11-14 (`latest` and
+`alpha`; tag `v1.0.0-alpha.5` at `9f7e0db`), smoke-tested from a fresh
+consumer: etag, a 304 on readType, revalidate unchanged, a rejected
+query's trimmed details, echoed readable but not serialised. The
+instance came back from its batch upgrades on 26.3.2.13 (the ETag's
+release part moved from 26.3.1.13), so the committed metamodel is one
+patch release behind again: refresh it after the public-repo hygiene PR
+lands, since that PR changes how the pull is normalised.
 
 **alpha.4 (2026-11-14)** — published the same day (`latest` and
 `alpha`; tag `v1.0.0-alpha.4` at `f77e8d5`), smoke-tested from a fresh
