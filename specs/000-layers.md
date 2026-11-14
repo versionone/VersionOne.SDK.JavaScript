@@ -136,9 +136,10 @@ committed files.
   same modules against a real instance, resolved by
   `test/integration/instance.ts`; skips with a message when none is
   configured. It runs only where fixtures may be written: a local dev
-  instance, or a hosted instance listed in `API_TEST_INSTANCES` as set
-  aside for API testing (today `www14.v1host.com/v1sdktesting`); any other
-  hosted URL and anything named V1Production is **refused**. A suite that
+  instance, or a hosted instance set aside for API testing and named in
+  `SDK_TEST_ALLOWED_INSTANCES` (no such URL is committed: an instance's URL
+  is its name, and this repository is public); any other hosted URL and
+  anything named V1Production is **refused**. A suite that
   recycles the app domain (custom fields) runs on local instances only.
   Suites bring their own data — a hosted testing instance may be nearly
   empty (it had no StoryStatus at all on 2026-11-04) — and fixtures are
