@@ -1,7 +1,8 @@
 # Handoff: the slack bot moves to `@versionone/agility-sdk@1.0.0-alpha.3`
 
 Paste everything below the line into the session working on
-`digital-ai/k6i-agility-slack-bot` (branch `bolt-migration`). Source:
+`digital-ai/k6i-agility-slack-bot` (`bolt-migration` was merged into
+`main` on 2026-11-14; `main` is the target). Source:
 `plans/005-ergonomics-and-hardening.md` and `CHANGELOG.md` in
 `versionone/VersionOne.SDK.JavaScript`.
 
