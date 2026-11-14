@@ -1,7 +1,7 @@
 # Plan 004: agility-rooms adopts `@versionone/agility-sdk` (Track D)
 
-Started 2026-11-14 on `1.0.0-alpha.3` (plan 005's breaking batch), as a
-session from the SDK session.
+Started 2026-11-14 on `1.0.0-alpha.3` (plan 005's breaking batch), as
+session `session_016NSWj5rd2UBmAD3hyYSyT2` from the SDK session.
 
 Brief for a session on `digital-ai/agility-rooms`, a React/Vite SPA that
 runs inside Agility (same-origin, cookie auth). Source plan:
