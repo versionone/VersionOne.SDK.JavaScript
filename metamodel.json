@@ -1,6 +1,6 @@
 {
   "HREF": "/meta.v1/",
-  "Version": "26.3.1.13",
+  "Version": "26.3.2.13",
   "AssetTypes": {
     "AssetType": {
       "_type": "AssetType",
@@ -80865,8 +80865,8 @@
             "tokenref": "Member.MessageReceipts.CreateDate"
           },
           "DisplayByAttribute": {
-            "href": "/meta.v1/Member/MessageReceipts",
-            "tokenref": "Member.MessageReceipts"
+            "href": "/meta.v1/Member/MessageReceipts.Message.Name",
+            "tokenref": "Member.MessageReceipts.Message.Name"
           },
           "RelatedAsset": {
             "nameref": "MessageReceipt",
@@ -142357,8 +142357,8 @@
             "tokenref": "Message.Receipts.CreateDate"
           },
           "DisplayByAttribute": {
-            "href": "/meta.v1/Message/Receipts",
-            "tokenref": "Message.Receipts"
+            "href": "/meta.v1/Message/Receipts.Message.Name",
+            "tokenref": "Message.Receipts.Message.Name"
           },
           "RelatedAsset": {
             "nameref": "MessageReceipt",
@@ -142907,6 +142907,14 @@
         "href": "/meta.v1/MessageReceipt/CreateDate",
         "tokenref": "MessageReceipt.CreateDate"
       },
+      "DefaultDisplayBy": {
+        "href": "/meta.v1/MessageReceipt/Message.Name",
+        "tokenref": "MessageReceipt.Message.Name"
+      },
+      "ShortName": {
+        "href": "/meta.v1/MessageReceipt/Message.Name",
+        "tokenref": "MessageReceipt.Message.Name"
+      },
       "Attributes": {
         "MessageReceipt.ID": {
           "_type": "AttributeDefinition",
@@ -142928,8 +142936,8 @@
             "tokenref": "MessageReceipt.ID"
           },
           "DisplayByAttribute": {
-            "href": "/meta.v1/MessageReceipt/ID",
-            "tokenref": "MessageReceipt.ID"
+            "href": "/meta.v1/MessageReceipt/Message.Name",
+            "tokenref": "MessageReceipt.Message.Name"
           },
           "RelatedAsset": {
             "nameref": "MessageReceipt",
@@ -142956,8 +142964,8 @@
             "tokenref": "MessageReceipt.Now"
           },
           "DisplayByAttribute": {
-            "href": "/meta.v1/MessageReceipt/Now",
-            "tokenref": "MessageReceipt.Now"
+            "href": "/meta.v1/MessageReceipt/Message.Name",
+            "tokenref": "MessageReceipt.Message.Name"
           },
           "RelatedAsset": {
             "nameref": "MessageReceipt",
@@ -142984,8 +142992,8 @@
             "tokenref": "MessageReceipt.History.CreateDate"
           },
           "DisplayByAttribute": {
-            "href": "/meta.v1/MessageReceipt/History",
-            "tokenref": "MessageReceipt.History"
+            "href": "/meta.v1/MessageReceipt/History.Message.Name",
+            "tokenref": "MessageReceipt.History.Message.Name"
           },
           "RelatedAsset": {
             "nameref": "MessageReceipt",
@@ -143380,8 +143388,8 @@
             "tokenref": "MessageReceipt.Prior.CreateDate"
           },
           "DisplayByAttribute": {
-            "href": "/meta.v1/MessageReceipt/Prior",
-            "tokenref": "MessageReceipt.Prior"
+            "href": "/meta.v1/MessageReceipt/Prior.Message.Name",
+            "tokenref": "MessageReceipt.Prior.Message.Name"
           },
           "RelatedAsset": {
             "nameref": "MessageReceipt",

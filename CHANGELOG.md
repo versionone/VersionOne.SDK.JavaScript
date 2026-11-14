@@ -2,6 +2,10 @@
 
 ## 1.0.0-alpha.6 (unreleased)
 
+- The generated model is refreshed from meta.v1 26.3.2.13 (was
+  26.3.1.13): no type, attribute, flag or operation changed between the
+  two; only the version stamp moved.
+
 ### Breaking
 
 - **Node 22 or later** (`engines.node` is `>=22`, was `>=18`), and `dist`

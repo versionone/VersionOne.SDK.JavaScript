@@ -35,7 +35,7 @@ npm test
 - `npm run typecheck` - run TypeScript type checks
 - `npm run verify` - run typecheck + build + tests
 - `npm run test` - run unit tests
-- `npm run download:metamodel -- <baseAgilityUrl>` - refresh `metamodel.json` from an instance on the current release (instance-specific definitions stripped; `--raw` keeps them), then `npm run generate:types`. The cleanest source is a dev instance on a blank database (the product's dev tooling has a task for that); a hosted instance on the release gives the same file. The generated model is from meta.v1 **26.3.1.13** (hosted, 2026-11-12)
+- `npm run download:metamodel -- <baseAgilityUrl>` - refresh `metamodel.json` from an instance on the current release (instance-specific definitions stripped; `--raw` keeps them), then `npm run generate:types`. The cleanest source is a dev instance on a blank database (the product's dev tooling has a task for that); a hosted instance on the release gives the same file. The generated model is from meta.v1 **26.3.2.13** (hosted, 2026-11-14)
 
 ## Public API
 
