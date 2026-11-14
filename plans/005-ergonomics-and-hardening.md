@@ -444,9 +444,12 @@ a later item. Shipped: `client.meta.read` / `readType` (`{ value, etag }`
 or null), `client.meta.etag()`, `TypeCache.etag`,
 `client.schema.revalidate()`, and `RequestOptions.acceptNotModified` on
 the transport. The three leftovers followed the same day: `retries`
-defaults to 1 for idempotent requests, a rejected query's `details` are
-the exceptions alone, and `echoed` is readable but not enumerable on a
-failure.
+defaults to 1 for idempotent requests (a 429 counts as transient, with
+Retry-After honoured), a rejected query's `details` are the exceptions
+alone, and `echoed` is readable but not enumerable on a failure. The
+live tier passed in full on 2026-11-14 at 07:20Z, after the instance's
+batch upgrades (40 passed, 3 skipped: custom fields on a hosted
+instance, embedded images opt-in); alpha.5 is ready to tag.
 
 **alpha.4 (2026-11-14)** — published the same day (`latest` and
 `alpha`; tag `v1.0.0-alpha.4` at `f77e8d5`), smoke-tested from a fresh
