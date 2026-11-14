@@ -37,7 +37,7 @@ import { dirname, resolve } from "node:path";
 function printUsage() {
   process.stderr.write(
     "Usage: npm run download:metamodel -- <baseAgilityUrl> [output-file] [--raw]\n" +
-      "Example: npm run download:metamodel -- https://www7.v1host.com/V1Production metamodel.json\n"
+      "Example: npm run download:metamodel -- https://agility.example.com/MyInstance metamodel.json\n"
   );
 }
 

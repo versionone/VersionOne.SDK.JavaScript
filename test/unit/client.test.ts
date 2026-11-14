@@ -116,13 +116,13 @@ describe("client: writes", () => {
 });
 
 describe("client: urls", () => {
-  const client = new AgilityApiClient({ baseUrl: "https://www7.v1host.com/V1Production/" }, { transport: fake(() => { throw new ApiError("no", 0); }) });
+  const client = new AgilityApiClient({ baseUrl: "https://agility.example.com/MyInstance/" }, { transport: fake(() => { throw new ApiError("no", 0); }) });
   it("builds the asset page, attachment and embedded image URLs from the base URL; the asset page takes an OID or a Number", () => {
-    expect(client.urls.asset("Story:1055:777")).toBe("https://www7.v1host.com/V1Production/assetdetail.v1?oid=Story:1055");
-    expect(client.urls.asset("S-01001")).toBe("https://www7.v1host.com/V1Production/assetdetail.v1?Number=S-01001");
+    expect(client.urls.asset("Story:1055:777")).toBe("https://agility.example.com/MyInstance/assetdetail.v1?oid=Story:1055");
+    expect(client.urls.asset("S-01001")).toBe("https://agility.example.com/MyInstance/assetdetail.v1?Number=S-01001");
     expect(() => client.urls.asset("hello")).toThrow(UsageError);
-    expect(client.urls.attachment("Attachment:9")).toBe("https://www7.v1host.com/V1Production/attachment.img/9");
-    expect(client.urls.embeddedImage(12)).toBe("https://www7.v1host.com/V1Production/embedded.img/12");
+    expect(client.urls.attachment("Attachment:9")).toBe("https://agility.example.com/MyInstance/attachment.img/9");
+    expect(client.urls.embeddedImage(12)).toBe("https://agility.example.com/MyInstance/embedded.img/12");
     expect(client.attachments.url(9)).toBe(client.urls.attachment(9));
   });
 });

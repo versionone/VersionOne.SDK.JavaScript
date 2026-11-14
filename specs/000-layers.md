@@ -224,9 +224,10 @@ here names a private repository, a Claude session, a person, or a hosted
 instance; a consumer is "a CLI consumer", "a chat-bot consumer", "a browser
 app consumer" (a public one may be named); the product's source is "the
 server"; a fixture copied from a live response carries a fictitious
-identity and the example base URL. Plans, surveys and hand-offs between
+identity and a fictitious base URL. Plans, surveys and hand-offs between
 sessions live outside this repository (`CONTRIBUTING.md` says where);
 `specs/` holds invariants of this code and nothing else.
 `test/unit/publicTree.test.ts` enforces the mechanical parts: no session
-id, no GitHub repository slug but this one, no hosted instance URL but the
-documented example, and every metamodel `href` from `/meta.v1/`.
+id, no GitHub repository slug but this one, no hosted instance URL at all
+(examples use a fictitious domain), and every metamodel `href` from
+`/meta.v1/`.

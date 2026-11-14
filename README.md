@@ -15,7 +15,7 @@ npm install @versionone/agility-sdk@alpha
 ```ts
 import { AgilityApiClient } from "@versionone/agility-sdk";
 
-const client = new AgilityApiClient({ baseUrl: "https://www7.v1host.com/V1Production", accessToken: process.env.V1_ACCESS_TOKEN });
+const client = new AgilityApiClient({ baseUrl: "https://agility.example.com/MyInstance", accessToken: process.env.V1_ACCESS_TOKEN });
 const stories = await client.query({ from: "Story", select: ["Name", "Estimate"], page: { size: 10, start: 0 } });
 // stories[0].Estimate is a number | null; stories[0].Nmae does not compile
 ```

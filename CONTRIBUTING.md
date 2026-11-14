@@ -53,10 +53,11 @@ and consumers pin commits by SHA), and nothing new is added to it.
   may be named and linked.
 - The product's source is "the server" or "the product's source". The
   hosted instance the integration tier may write to is "the API-testing
-  instance"; its URL is never committed (see below).
+  instance". No hosted instance's URL is committed, a production one
+  included: an example base URL uses a fictitious domain (see below).
 - People are not named in the tree. A test fixture copied from a live
   response keeps the server's shape and carries fictitious identities
-  (a made-up member, `https://www7.v1host.com/V1Production` or
+  (a made-up member, `https://agility.example.com/MyInstance` or
   `/VersionOne.Web/` as the example base URL and path).
 - Claude sessions are not named. Their ids are attribution for commits,
   not content for files.
