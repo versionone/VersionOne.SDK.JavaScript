@@ -1,6 +1,6 @@
 # @versionone/agility-sdk
 
-TypeScript SDK for the Digital.ai Agility (formerly VersionOne) API. It works in Node (ESM or CommonJS) and the browser, ships its own types, and has no runtime dependencies.
+TypeScript SDK for the Digital.ai Agility (formerly VersionOne) API. It works in Node 22 or later (ESM or CommonJS) and the browser, ships its own types, and has no runtime dependencies.
 
 Not to be confused with `v1sdk`, the 2.x JavaScript SDK: this is a new API, not a compatible successor.
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0-alpha.6 (unreleased)
+
+### Breaking
+
+- **Node 22 or later** (`engines.node` is `>=22`, was `>=18`). Node 18
+  reached end of life in April 2025 and Node 20 in April 2026; neither
+  gets security fixes. CI tests the maintained LTS lines, 22, 24 and 26,
+  so a consumer on 18 or 20 was already untested. (The slack bot runs 24
+  and gh-v1 requires 22; agility-rooms runs in the browser.)
+
 ## 1.0.0-alpha.5 (unreleased)
 
 ### Added
