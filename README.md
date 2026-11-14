@@ -112,6 +112,8 @@ an approval, so a pushed tag waits for a maintainer before it stages. A
 package must exist before it can be linked, so the very first version was
 published once by hand by an `@versionone` org member.
 
-## Before PR
+## Contributing
 
-- Run `npm run verify` to validate typecheck, build, and tests before opening a pull request.
+Run `npm run verify` (typecheck, build, tests) before opening a pull request.
+This repository is public: `CONTRIBUTING.md` says what may be committed
+here and where working plans and consumer hand-offs live instead.
