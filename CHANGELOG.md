@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0-alpha.6 (unreleased)
+## 1.0.0-alpha.6
 
 - The generated model is refreshed from meta.v1 26.3.2.13 (was
   26.3.1.13): no type, attribute, flag or operation changed between the

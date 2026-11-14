@@ -1,6 +1,6 @@
 {
   "name": "@versionone/agility-sdk",
-  "version": "1.0.0-alpha.5",
+  "version": "1.0.0-alpha.6",
   "description": "TypeScript SDK for the Digital.ai Agility (VersionOne) API: queries, batches, schema-translated rows, guarded writes, attachments",
   "keywords": [
     "agility",
