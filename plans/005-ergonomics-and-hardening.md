@@ -253,6 +253,42 @@ Checked against meta.v1's actual document (`metamodel.json`) and the code.
 6. **Quality track, alongside:** client suite, rest-1/meta tests, fixture
    recorder, scheduled integration run.
 
+## Findings from the adoption sessions (the second pass)
+
+**agility-rooms, 2026-11-14** (live on v1sdktesting, alpha.3; plan 004's
+first decision). Rooms' rest-1 writes are 6 attribute posts, 2
+`?op=Copy`, 1 `New/Timebox?ctx=` template read, and 2 plain reads.
+
+1. **Attribute posts: covered.** `update` with `{ add }` / `{ remove }`
+   on a multi-value relation and a scalar set or `null` clear do what the
+   posts do; `client.get` reads it back. Rooms moves them to
+   `client.assets.send` in D2. No SDK change.
+2. **Copy: api/asset discards the result.** `execute: "Copy"` performs
+   the copy but the envelope reports only `assetsOperatedOn: [source]`;
+   `assetsCreated` is empty and `args: { Name }` is ignored, so the new
+   OID is unobservable. rest-1 `?op=Copy` answers `{ id: "Story:…:…" }`.
+   Querying "newest by CreatedBy" is a race, and CreateDate is stamped in
+   instance-local time, so a since-now filter misses it. **Requested:** a
+   narrow rest-1 operation path, `client.data.operate(oid, "Copy")`
+   answering `{ oid }` momentless (or `client.copy(oid)`): the one POST
+   whose return value api/asset drops, not a general rest-1 write path.
+3. **`New/{T}?ctx=`: no api/asset equivalent.** The template carries
+   server-computed defaults nothing else exposes (next sprint name,
+   dates after the schedule's last timebox, Schedule, State, Owner);
+   `assets.preview` echoes the command and meta.v1 carries no defaults.
+   **Requested:** `client.data.template(type, { ctx })` (GET, idempotent),
+   answered like `data.get` (Refs, translated scalars, `act` wrappers
+   dropped). One rooms site uses it.
+4. **Reads: covered** by `client.data.list` / `data.get` / `client.get`.
+   Observation: a rest-1 row spells a nested select twice (`Parent: {
+   _oid, Name }` and `"Parent.Name"`), which `client.get` does not. That
+   is `fromAssetDocument`'s documented fold; worth deciding whether the
+   dotted key should go once rooms is on `client.get` (Review 1.3).
+
+Decision for Jim: grow the two narrow rest-1 paths (2 and 3), or keep
+those three rooms call sites on rest-1 through the transport adapter.
+The rooms session proceeds with R1 either way.
+
 ## Open questions, with answers where the code gives one
 
 - **Least polished today:** rest-1 (reads only, its own parameter
