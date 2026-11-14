@@ -28,6 +28,14 @@ export class TypeCache {
   /** Loaded types; null records that the instance has no such type, so it is not asked for again. */
   readonly types = new Map<AssetTypeToken, AssetType | null>();
   readonly loading = new Map<AssetTypeToken, Promise<AssetType | null>>();
+  /** The schema's tag the loaded types came with (meta.v1's ETag, one for the whole schema); null until a load, or for a seeded cache. */
+  etag: string | null = null;
+
+  /** Forget every loaded type (and the tag): the next query loads afresh. In-flight loads finish into the cache as before. */
+  clear(): void {
+    this.types.clear();
+    this.etag = null;
+  }
 
   /** A cache seeded from a metamodel document. */
   static fromMetamodel(metamodel: Metamodel): TypeCache {
@@ -95,12 +103,31 @@ export class Schema implements AttributeLookup {
     const inFlight = this.loading.get(token);
     if (inFlight) return inFlight;
     if (!this.transport) { this.types.set(token, null); return null; }
-    const request = meta.getAssetType(this.transport, token)
+    const request = meta.readAssetType(this.transport, token)
+      .then((read) => { if (read?.etag) this.cache.etag = read.etag; return read ? read.value : null; })
       .catch((error: unknown) => { if (error instanceof ApiError && error.status === 404) return null; throw error; })
       .then((type) => { this.types.set(token, type); return type; })
       .finally(() => this.loading.delete(token));
     this.loading.set(token, request);
     return request;
+  }
+
+  /**
+   * Has the instance's schema changed since these types were loaded? One
+   * small conditional read of meta.v1. Unchanged: nothing happens.
+   * Changed (or never tagged, or the transport cannot see headers): the
+   * loaded types are dropped, so the next query loads them again, and the
+   * new tag is kept. Answers whether it changed and the current tag. A
+   * schema without a transport (seeded) never changes.
+   */
+  async revalidate(): Promise<{ changed: boolean; etag: string | null }> {
+    if (!this.transport) return { changed: false, etag: this.cache.etag };
+    const was = this.cache.etag;
+    const now = await meta.etag(this.transport, { ifNoneMatch: was });
+    if (was && now === was) return { changed: false, etag: was };
+    this.cache.clear();
+    this.cache.etag = now;
+    return { changed: true, etag: now };
   }
 
   /**

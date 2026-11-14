@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.0-alpha.5 (unreleased)
+
+### Added
+
+- **Conditional schema reads** (agility-rooms D1/D3). meta.v1 sends one
+  strong ETag for the whole schema (`"26.3.1.13.<stamp>"`, the same on
+  the document, a type and an attribute) and honours `If-None-Match` with
+  a 304. `client.meta.read({ ifNoneMatch })` and `readType(token, {
+  ifNoneMatch })` answer `{ value, etag }`, or null without a download when
+  the tag still matches; `client.meta.etag()` reads the tag alone from
+  the smallest resource. `TypeCache.etag` remembers the tag the loaded
+  types came with, and `client.schema.revalidate()` asks the server in
+  one small read and drops the loaded types only when the tag moved —
+  what rooms' metamodel store does by hand. Transport: a request with
+  `acceptNotModified` resolves to undefined on a 304 after `onResponse`
+  sees it.
+
 ## 1.0.0-alpha.4 — what the three adoptions asked for
 
 ### Added

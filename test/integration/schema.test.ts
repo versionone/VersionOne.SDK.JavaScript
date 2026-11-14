@@ -82,3 +82,19 @@ describeInstance("schema (live)", () => {
     expect(Array.isArray(p.Status)).toBe(true);
   });
 });
+
+describeInstance("meta.v1 ETag (live)", () => {
+  it("one strong tag for the whole schema: a conditional read answers 304, and revalidate finds the cache current", async () => {
+    const client = new AgilityApiClient({ baseUrl: instance!.url }, { transport: instance!.transport });
+    const tag = await client.meta.etag();
+    expect(tag).toMatch(/^"[\d.]+"$/);
+    expect(await client.meta.readType("Story", { ifNoneMatch: tag })).toBeNull();
+    const read = await client.meta.readType("Story", { ifNoneMatch: '"stale"' });
+    expect(read?.etag).toBe(tag);
+    expect(read?.value.Token).toBe("Story");
+    await client.schema.load("Story");
+    expect(client.schema.cache.etag).toBe(tag);
+    expect(await client.schema.revalidate()).toEqual({ changed: false, etag: tag });
+    expect(client.schema.assetType("Story")?.Token).toBe("Story");
+  });
+});

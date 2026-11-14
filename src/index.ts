@@ -28,6 +28,7 @@ export { CommandFailureError, parseViolation } from "./wire/assetApi";
 export type { Violation } from "./wire/assetApi";
 export type { AssetDocument, AssetsDocument, ReadParams, ReadResult } from "./wire/rest1";
 export type { Localizations, LocalizeOptions } from "./wire/loc2";
+export type { ConditionalOptions, Tagged } from "./wire/meta";
 
 // Services: what to do.
 export { Schema, TypeCache } from "./services/schema";

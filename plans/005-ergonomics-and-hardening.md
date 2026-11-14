@@ -398,6 +398,18 @@ instance for that one read or the SDK grows `meta.metamodel({
 ifNoneMatch })` answering `{ metamodel, etag }` and null on 304 (Review
 2.2's ETag item, now concrete; alpha.5).
 
+**alpha.5, started 2026-11-14** with the ETag-aware schema reads rooms
+asked for. Live: meta.v1 sends one strong ETag for the whole schema
+(release plus a change stamp), identical on the document, a type and an
+attribute; `If-None-Match` with the exact tag is a 304 with no body (a
+weak form is not matched); Cache-Control is public, max-age under an
+hour. Core sets the same kind of tag on loc-2 (`BaseLocalizationHandler`),
+a later item. Shipped: `client.meta.read` / `readType` (`{ value, etag }`
+or null), `client.meta.etag()`, `TypeCache.etag`,
+`client.schema.revalidate()`, and `RequestOptions.acceptNotModified` on
+the transport. Still queued for alpha.5: trimming `QUERY_REJECTED`
+details, `echoed` on every failure, `retries` for idempotent requests.
+
 **alpha.4 (2026-11-14)** — published the same day (`latest` and
 `alpha`; tag `v1.0.0-alpha.4` at `f77e8d5`), smoke-tested from a fresh
 consumer against v1sdktesting (copy, template, fields, Number URL,

@@ -32,9 +32,15 @@ export interface RequestOptions {
   /**
    * Called with a successful response's status and headers before its body
    * is read — for what the body alone does not say (an attachment's
-   * Content-Type, say). A transport that cannot see headers may skip it.
+   * Content-Type, an ETag). A transport that cannot see headers may skip it.
    */
   onResponse?: (response: { status: number; headers: { get(name: string): string | null } }) => void;
+  /**
+   * The request is conditional (an If-None-Match header is set) and a
+   * 304 Not Modified is an answer, not a failure: the promise then resolves
+   * to undefined after onResponse has seen the 304 and its headers.
+   */
+  acceptNotModified?: boolean;
 }
 
 export interface Transport {

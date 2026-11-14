@@ -7,6 +7,15 @@
  *   GET /meta.v1/<Type>                   one asset type with its attributes
  *   GET /meta.v1/<Type>/<Attribute>       one attribute definition
  *
+ * Every meta.v1 answer carries one strong ETag for the whole schema
+ * ("26.3.1.13.636764259167912911": the release and a change stamp), the
+ * same on the document, a type and an attribute, and If-None-Match with
+ * that exact tag answers 304 with no body (live 2026-11-14; a weak form
+ * is not matched). So "has the schema changed?" is one conditional read
+ * of the smallest resource, and a cached metamodel needs re-parsing only
+ * when the tag moves. Cache-Control is public with a max-age under an
+ * hour.
+ *
  * The delivered document is its own vocabulary — Token, DisplayName,
  * IsMultivalue, RelatedAsset, Base — and NOT the attribute set of the
  * metamodel's own AttributeDefinition asset type (NativeValue, IsBasic, …).
@@ -120,12 +129,52 @@ export function isMetamodelDocument(value: unknown): value is MetamodelDocument 
 
 // ---- the calls ------------------------------------------------------------------
 
+/** A conditional read: the tag a previous answer carried. With it, an unchanged resource is null. */
+export interface ConditionalOptions { ifNoneMatch?: string | null }
+
+/** What a read answered, with the schema's tag as the server sent it (null when it sent none). */
+export interface Tagged<T> { value: T; etag: string | null }
+
+/** The smallest meta.v1 resource: what the schema's tag is read from. */
+const PROBE_PATH = "/meta.v1/BaseAsset/Name";
+
+async function conditional<Doc>(transport: Transport, path: string, options: ConditionalOptions): Promise<Tagged<Doc> | null> {
+  let etag: string | null = null, status = 200;
+  const onResponse = (r: { status: number; headers: { get(name: string): string | null } }) => { status = r.status; etag = r.headers.get("etag"); };
+  const headers = options.ifNoneMatch ? { "if-none-match": options.ifNoneMatch } : undefined;
+  const doc = await transport.request<Doc | undefined>({ method: "GET", path, headers, responseType: "json", onResponse, acceptNotModified: !!options.ifNoneMatch });
+  if (status === 304 || doc === undefined) return null;
+  return { value: doc, etag };
+}
+
 export async function getMetamodel(transport: Transport): Promise<Metamodel> {
   return toMetamodel(await transport.request<MetamodelDocument>({ method: "GET", path: "/meta.v1", responseType: "json" }));
 }
 
+/** The metamodel with its tag; null when `ifNoneMatch` still matches (nothing was downloaded). */
+export async function readMetamodel(transport: Transport, options: ConditionalOptions = {}): Promise<Tagged<Metamodel> | null> {
+  const read = await conditional<MetamodelDocument>(transport, "/meta.v1", options);
+  return read && { value: toMetamodel(read.value), etag: read.etag };
+}
+
 export async function getAssetType(transport: Transport, token: AssetTypeToken): Promise<AssetType> {
   return toAssetType(await transport.request<AssetTypeDocument>({ method: "GET", path: `/meta.v1/${encodeURIComponent(token)}`, responseType: "json" }));
+}
+
+/** One type with the schema's tag; null when `ifNoneMatch` still matches. */
+export async function readAssetType(transport: Transport, token: AssetTypeToken, options: ConditionalOptions = {}): Promise<Tagged<AssetType> | null> {
+  const read = await conditional<AssetTypeDocument>(transport, `/meta.v1/${encodeURIComponent(token)}`, options);
+  return read && { value: toAssetType(read.value), etag: read.etag };
+}
+
+/**
+ * The schema's current tag, from one small read, or null when the server
+ * sends none. With `ifNoneMatch`, "unchanged" is answered as that same tag
+ * without a body — the cheapest way to ask whether anything in meta moved.
+ */
+export async function etag(transport: Transport, options: ConditionalOptions = {}): Promise<string | null> {
+  const read = await conditional<unknown>(transport, PROBE_PATH, options);
+  return read ? read.etag : options.ifNoneMatch ?? null;
 }
 
 export async function getAttributeDefinition(transport: Transport, tokenref: AttributeTokenRef): Promise<AttributeDefinition> {

@@ -188,6 +188,11 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
             options.onResponse?.({ status: response.status, headers: response.headers });
             return (await readBody(response, responseType)) as T;
           }
+          if (response.status === 304 && options.acceptNotModified) {
+            // The caller asked "has it changed?" and the answer is no.
+            options.onResponse?.({ status: 304, headers: response.headers });
+            return undefined as T;
+          }
 
           // An answer, not a failure to get one. 5xx may be retried when
           // idempotent; anything else is final.

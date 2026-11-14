@@ -206,11 +206,21 @@ export class AgilityApiClient {
 
   // ---- the endpoints behind the reads -----------------------------------------------
 
-  /** meta.v1: the instance's schema, raw. (The translated, cached view is `schema`.) */
+  /**
+   * meta.v1: the instance's schema, raw. (The translated, cached view is
+   * `schema`; `schema.revalidate()` drops it when the schema's tag moves.)
+   * `read` and `readType` are conditional: pass the tag a previous answer
+   * carried and an unchanged schema answers null without a download —
+   * meta.v1 sends one strong ETag for the whole schema. `etag()` reads that
+   * tag alone, from the smallest resource.
+   */
   readonly meta = {
     metamodel: () => meta.getMetamodel(this.transport),
+    read: (options?: meta.ConditionalOptions) => meta.readMetamodel(this.transport, options),
     assetType: (token: string) => meta.getAssetType(this.transport, token),
-    attributeDefinition: (tokenref: `${string}.${string}`) => meta.getAttributeDefinition(this.transport, tokenref)
+    readType: (token: string, options?: meta.ConditionalOptions) => meta.readAssetType(this.transport, token, options),
+    attributeDefinition: (tokenref: `${string}.${string}`) => meta.getAttributeDefinition(this.transport, tokenref),
+    etag: (options?: meta.ConditionalOptions) => meta.etag(this.transport, options)
   };
 
   /**
