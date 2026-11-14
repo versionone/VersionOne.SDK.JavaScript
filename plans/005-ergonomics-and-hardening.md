@@ -407,8 +407,10 @@ hour. Core sets the same kind of tag on loc-2 (`BaseLocalizationHandler`),
 a later item. Shipped: `client.meta.read` / `readType` (`{ value, etag }`
 or null), `client.meta.etag()`, `TypeCache.etag`,
 `client.schema.revalidate()`, and `RequestOptions.acceptNotModified` on
-the transport. Still queued for alpha.5: trimming `QUERY_REJECTED`
-details, `echoed` on every failure, `retries` for idempotent requests.
+the transport. The three leftovers followed the same day: `retries`
+defaults to 1 for idempotent requests, a rejected query's `details` are
+the exceptions alone, and `echoed` is readable but not enumerable on a
+failure.
 
 **alpha.4 (2026-11-14)** — published the same day (`latest` and
 `alpha`; tag `v1.0.0-alpha.4` at `f77e8d5`), smoke-tested from a fresh

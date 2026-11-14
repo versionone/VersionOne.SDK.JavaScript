@@ -157,7 +157,8 @@ narrow write, `operate`: an operation run for its result (the OID a Copy
 made), which api/asset's `execute` performs but does not report. The transport
 retries only idempotent requests (GET by default, and every query.v1
 POST, since that endpoint cannot write), only on a network
-failure or a 5xx, never a 4xx; a batch write is never retried unless the
+failure, a 5xx or a 429 (Retry-After honoured, up to 30 s), never
+another 4xx, and once by default (`retries: 1`); a batch write is never retried unless the
 caller has made it idempotent with a guard and says so.
 
 Re-authentication follows the same rule. On a 401 (or a status the caller

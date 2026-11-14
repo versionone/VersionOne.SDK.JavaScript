@@ -12,7 +12,9 @@ import type { RequestBody, RequestOptions, ResponseType, Transport } from "./tra
  * failure from an answer, but they are narrow on purpose: only requests the
  * caller marks idempotent (every GET is; a POST to api/asset is not — a
  * retried batch write after a timeout is a double write), and only on a
- * network error or a 5xx. A 4xx is an answer and is never retried.
+ * network error, a 5xx, or a 429 (the instance throttles per token; it
+ * sends no Retry-After, but one is honoured when present, up to 30 s). Any
+ * other 4xx is an answer and is never retried.
  */
 export interface FetchTransportConfig {
   baseUrl: string;
@@ -28,7 +30,12 @@ export interface FetchTransportConfig {
    * timeouts that turn into retries.
    */
   timeoutMs?: number;
-  /** Extra attempts after the first, for idempotent requests only. Default 0. */
+  /**
+   * Extra attempts after the first, for idempotent requests only (a GET,
+   * a query.v1 read, a guarded batch that says so), after a network
+   * failure or a 5xx. Default 1: one resend, 150 ms later. 0 turns it off.
+   * A plain write is never resent whatever this says.
+   */
   retries?: number;
   fetchImpl?: typeof fetch;
   /**
@@ -133,10 +140,33 @@ function messageOf(data: unknown, status: number): string {
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** The longest a Retry-After is honoured before the request is given up instead. */
+const MAX_RETRY_AFTER_MS = 30_000;
+
+/**
+ * How long to wait before resending after a 429 or a 5xx: the server's
+ * Retry-After (seconds, or an HTTP date) when it sends one and it is
+ * within reason, else a short backoff. Null when the server asks for
+ * longer than is reasonable to block a caller for.
+ */
+function retryDelay(response: { status: number; headers: { get(name: string): string | null } }, attempt: number): number | null {
+  const header = response.headers.get("retry-after");
+  if (header) {
+    const seconds = Number(header);
+    const ms = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(header) - Date.now();
+    if (Number.isFinite(ms) && ms > MAX_RETRY_AFTER_MS) return null;
+    if (Number.isFinite(ms) && ms > 0) return ms;
+  }
+  return 150 * (attempt + 1);
+}
+
+/** A status the same request may succeed after: too many requests, or a server-side failure. */
+const retriable = (status: number): boolean => status === 429 || status >= 500;
+
 export function createFetchTransport(config: FetchTransportConfig): Transport {
   const fetchImpl = config.fetchImpl ?? fetch;
   const timeoutMs = config.timeoutMs ?? 60_000;
-  const retries = Math.max(0, config.retries ?? 0);
+  const retries = Math.max(0, config.retries ?? 1);
   const authorization = config.authorization ?? (config.accessToken ? `Bearer ${config.accessToken}` : undefined);
   const unauthorizedStatuses = config.unauthorizedStatuses ?? [401];
 
@@ -217,8 +247,10 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           }
           break;
         }
-        if (response.status >= 500 && attempt + 1 < attempts) {
-          await delay(150 * (attempt + 1));
+        if (retriable(response.status) && attempt + 1 < attempts) {
+          const wait = retryDelay(response, attempt);
+          if (wait === null) break;
+          await delay(wait);
           continue;
         }
         break;

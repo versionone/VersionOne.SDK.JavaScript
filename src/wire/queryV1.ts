@@ -27,11 +27,19 @@ import type { Asset } from "../types/asset";
 import { fromWireRow, type QueryBody, type ReadOptions, type RowContext } from "./assetApi";
 import { fromTypeOf } from "./select";
 
-/** The error query.v1 sends for a query it refused: the exceptions' messages, joined. */
+/** What query.v1 said about each refused query: its exception type and message. */
+export interface QueryRejection { type: string | null; message: string }
+
+/**
+ * The error query.v1 sends for a query it refused: the exceptions'
+ * messages joined as the message, and `details` the exceptions alone
+ * ({ type, message }[]) — not the whole error document, so a caller that
+ * prints details prints what matters.
+ */
 function rejected(error: ApiError): ApiError {
-  const details = error.details as { exceptions?: { message?: unknown }[] } | undefined;
-  const messages = (details?.exceptions ?? []).map((e) => e?.message).filter((m): m is string => typeof m === "string" && !!m);
-  return messages.length ? new ApiError(messages.join("; "), error.status, "QUERY_REJECTED", error.details) : error;
+  const details = error.details as { exceptions?: { type?: unknown; message?: unknown }[] } | undefined;
+  const rejections: QueryRejection[] = (details?.exceptions ?? []).filter((e) => e && typeof e.message === "string" && e.message).map((e) => ({ type: typeof e.type === "string" ? e.type : null, message: e.message as string }));
+  return rejections.length ? new ApiError(rejections.map((r) => r.message).join("; "), error.status, "QUERY_REJECTED", rejections) : error;
 }
 
 /**

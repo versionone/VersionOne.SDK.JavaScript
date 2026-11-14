@@ -53,7 +53,8 @@ describe("queryV1", () => {
     const t = fakeTransport(new ApiError("Bad Request", 400, undefined, { error: "Bad Request", exceptions: [{ type: "MetaException", message: "Unknown AttributeDefinition: Story.Nope" }] }));
     const err = (await queries(t, [storyQuery, { from: "Story", select: ["Nope"], page: { size: 1, start: 0 } }]).catch((e: unknown) => e)) as ApiError;
     expect(err).toBeInstanceOf(ApiError);
-    expect(err).toMatchObject({ status: 400, code: "QUERY_REJECTED", message: "Unknown AttributeDefinition: Story.Nope" });
+    expect(err).toMatchObject({ status: 400, code: "QUERY_REJECTED", kind: "invalid", message: "Unknown AttributeDefinition: Story.Nope" });
+    expect(err.details).toEqual([{ type: "MetaException", message: "Unknown AttributeDefinition: Story.Nope" }]);
   });
 
   it("a response that does not hold one array per query is an error, not a guess", async () => {

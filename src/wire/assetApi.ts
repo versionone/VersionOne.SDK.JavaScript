@@ -234,9 +234,22 @@ function toNumber(value: unknown): unknown {
 export interface CommandFailureDetail {
   index: number | null;
   message: string;
-  echoed: Record<string, unknown>;
+  /**
+   * The command as the server echoed it, under a generated alias: what a
+   * caller resends after correcting it. Readable on every failure but not
+   * enumerable, so a serialised failure (a receipt, a log line) carries
+   * index, message and violation and not the whole command.
+   */
+  readonly echoed: Record<string, unknown>;
   /** The message read as a validation violation, when it is one. */
   violation: Violation | null;
+}
+
+/** A failure detail with `echoed` readable but not enumerable. */
+function failureDetail(index: number | null, message: string, echoed: Record<string, unknown>): CommandFailureDetail {
+  const detail = { index, message, violation: parseViolation(message) } as CommandFailureDetail;
+  Object.defineProperty(detail, "echoed", { value: echoed, enumerable: false, writable: false });
+  return detail;
 }
 
 /**
@@ -268,12 +281,11 @@ export function parseViolation(message: string): Violation | null {
 
 /** The failures of a response, normalised: index and message, always both. */
 export function failuresOf<Row extends Asset = Asset>(response: AssetApiResponse<Row>): CommandFailureDetail[] {
-  return (response.commandFailures?.commands ?? []).map(({ error, ...echoed }) => ({
-    index: typeof error === "object" && error && typeof error.sourceCommandIndex === "number" ? error.sourceCommandIndex : null,
-    message: typeof error === "string" ? error : error?.message || "command failed",
-    echoed,
-    violation: parseViolation(typeof error === "string" ? error : error?.message || "")
-  }));
+  return (response.commandFailures?.commands ?? []).map(({ error, ...echoed }) => failureDetail(
+    typeof error === "object" && error && typeof error.sourceCommandIndex === "number" ? error.sourceCommandIndex : null,
+    typeof error === "string" ? error : error?.message || "command failed",
+    echoed
+  ));
 }
 
 /** What a batch did, in the model's terms: the services read this, never the envelope. */
@@ -319,7 +331,7 @@ export function mergeOutcome<Row extends Asset = Asset>(into: Outcome<Row>, done
   into.created.push(...done.created);
   into.modified.push(...done.modified);
   into.operated.push(...done.operated);
-  into.failures.push(...done.failures.map((f) => ({ ...f, index: f.index === null ? null : f.index + offset })));
+  into.failures.push(...done.failures.map((f) => failureDetail(f.index === null ? null : f.index + offset, f.message, f.echoed)));
   into.queryResults.push(...done.queryResults);
   into.requestId = null; // several sends, several ids: none is "the" request
   if (done.durationSeconds !== null) into.durationSeconds = (into.durationSeconds ?? 0) + done.durationSeconds;

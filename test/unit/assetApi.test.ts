@@ -43,9 +43,10 @@ describe("assetApi: translation", () => {
       { "@a1b2": { from: "Story" }, error: { message: "Violation'Invalid'Link.Asset", sourceCommandIndex: 2, stackTrace: "   at …" } },
       { "@c3d4": {}, error: "nope" }
     ] } }));
-    expect(failures).toEqual([
-      { index: 2, message: "Violation'Invalid'Link.Asset", echoed: { "@a1b2": { from: "Story" } }, violation: { rule: "Invalid", attribute: "Link.Asset", tag: null } },
-      { index: null, message: "nope", echoed: { "@c3d4": {} }, violation: null }
+    expect(failures.map((f) => f.echoed)).toEqual([{ "@a1b2": { from: "Story" } }, { "@c3d4": {} }]);
+    expect(JSON.parse(JSON.stringify(failures))).toEqual([
+      { index: 2, message: "Violation'Invalid'Link.Asset", violation: { rule: "Invalid", attribute: "Link.Asset", tag: null } },
+      { index: null, message: "nope", violation: null }
     ]);
   });
 });
@@ -100,7 +101,8 @@ describe("assetApi: command failures", () => {
   it("send returns failures inside the envelope by default — nothing thrown, successes readable", async () => {
     const res = await send(fakeTransport(partial()), batch);
     expect(res.assetsCreated.oidTokens).toEqual(["Story:5:10"]);
-    expect(failuresOf(res)).toEqual([{ index: 1, message: "Violation'Required'Scope", echoed: { "@0f3c": { AssetType: "Story" } }, violation: { rule: "Required", attribute: null, tag: null } }]);
+    expect(failuresOf(res)).toEqual([{ index: 1, message: "Violation'Required'Scope", violation: { rule: "Required", attribute: null, tag: null } }]);
+    expect(failuresOf(res)[0]!.echoed).toEqual({ "@0f3c": { AssetType: "Story" } });
   });
 
   it("with throwOnFailure, send throws a CommandFailureError carrying each failure by its index in the batch and the whole response, so what did commit is still known", async () => {
@@ -111,7 +113,8 @@ describe("assetApi: command failures", () => {
     expect(e.message).toBe("Violation'Required'Scope");
     expect(e.status).toBe(200);
     expect(e.code).toBe("CommandFailure");
-    expect(e.failures).toEqual([{ index: 1, message: "Violation'Required'Scope", echoed: { "@0f3c": { AssetType: "Story" } }, violation: { rule: "Required", attribute: null, tag: null } }]);
+    expect(e.failures).toEqual([{ index: 1, message: "Violation'Required'Scope", violation: { rule: "Required", attribute: null, tag: null } }]);
+    expect(e.failures[0]!.echoed).toEqual({ "@0f3c": { AssetType: "Story" } });
     expect(e.failures[0]).not.toHaveProperty("stackTrace");
     expect(e.response.assetsCreated.oidTokens).toEqual(["Story:5:10"]);
   });

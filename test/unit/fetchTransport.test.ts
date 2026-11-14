@@ -79,6 +79,35 @@ describe("createFetchTransport", () => {
     expect(guarded).toHaveBeenCalledTimes(2);
   });
 
+  it("by default a GET is resent once after a network failure, and a write still is not", async () => {
+    const once = vi.fn().mockRejectedValueOnce(new TypeError("fetch failed")).mockResolvedValueOnce(json({ ok: true }));
+    expect(await createFetchTransport({ baseUrl: "https://x", fetchImpl: once }).request<{ ok: boolean }>({ method: "GET", path: "/a" })).toEqual({ ok: true });
+    expect(once).toHaveBeenCalledTimes(2);
+    const twice = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
+    await expect(createFetchTransport({ baseUrl: "https://x", fetchImpl: twice }).request({ method: "GET", path: "/a" })).rejects.toMatchObject({ code: "NETWORK_ERROR" });
+    expect(twice).toHaveBeenCalledTimes(2);
+    const off = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
+    await expect(createFetchTransport({ baseUrl: "https://x", fetchImpl: off, retries: 0 }).request({ method: "GET", path: "/a" })).rejects.toMatchObject({ code: "NETWORK_ERROR" });
+    expect(off).toHaveBeenCalledTimes(1);
+    const write = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
+    await expect(createFetchTransport({ baseUrl: "https://x", fetchImpl: write }).request({ method: "POST", path: "/api/asset", body: [] })).rejects.toMatchObject({ code: "NETWORK_ERROR" });
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it("a 429 is retried like a 5xx for an idempotent request, honouring Retry-After in seconds when sent, never when it is too long", async () => {
+    const throttled = vi.fn()
+      .mockResolvedValueOnce(new Response("", { status: 429, headers: { "retry-after": "0" } }))
+      .mockResolvedValueOnce(json({ ok: true }));
+    expect(await createFetchTransport({ baseUrl: "https://x", fetchImpl: throttled }).request<{ ok: boolean }>({ method: "GET", path: "/a" })).toEqual({ ok: true });
+    expect(throttled).toHaveBeenCalledTimes(2);
+    const tooLong = vi.fn().mockResolvedValue(new Response("", { status: 429, headers: { "retry-after": "120" } }));
+    await expect(createFetchTransport({ baseUrl: "https://x", fetchImpl: tooLong, retries: 3 }).request({ method: "GET", path: "/a" })).rejects.toMatchObject({ status: 429, kind: "transient" });
+    expect(tooLong).toHaveBeenCalledTimes(1);
+    const write = vi.fn().mockResolvedValue(new Response("", { status: 429 }));
+    await expect(createFetchTransport({ baseUrl: "https://x", fetchImpl: write }).request({ method: "POST", path: "/api/asset", body: [] })).rejects.toMatchObject({ status: 429 });
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
   it("times out an attempt and reports it as TIMEOUT", async () => {
     const hang = vi.fn().mockImplementation((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
       init.signal?.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));

@@ -17,6 +17,25 @@
   `acceptNotModified` resolves to undefined on a 304 after `onResponse`
   sees it.
 
+### Changed
+
+- **Idempotent requests are resent once by default** (`retries` now
+  defaults to 1, was 0): a GET, a query.v1 read or a guarded batch that
+  says so, after a network failure or a 5xx, 150 ms later. A plain write
+  is never resent, as before. Pass `retries: 0` for the old behaviour.
+  (gh-v1: the doc promised a retry the default never made.) A 429 counts
+  as transient like a 5xx — the instance throttles per token — and a
+  Retry-After is honoured when sent, up to 30 s.
+- **A rejected query's `details` are the exceptions alone**
+  (`{ type, message }[]`, exported as `QueryRejection`), not query.v1's
+  whole error document; `message` is unchanged. (gh-v1: a formatter that
+  printed details printed a JSON document.)
+- **`CommandFailureDetail.echoed` is not enumerable**: still readable on
+  every failure for a corrected resend, but a serialised failure (a
+  receipt, a log line, a bot's result) carries index, message and
+  violation only. (slack bot, gh-v1: re-mapping failures to keep results
+  small.)
+
 ## 1.0.0-alpha.4 — what the three adoptions asked for
 
 ### Added
