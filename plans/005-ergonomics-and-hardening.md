@@ -383,6 +383,21 @@ surprise was envelope → Outcome in writes (7 tests, all where expected).
    Story status change cannot be exercised live there (spec §5 already
    notes the empty instance). Seed a few, or test on a Defect/Epic status.
 
+**agility-rooms R1, 2026-11-14** — digital-ai/agility-rooms#1464
+(`r1/narrow-axios-surface`, against `main`): every Agility data-endpoint
+call now goes through one helper module per endpoint under `src/utils`
+(api/asset, query.v1, rest-1 with `executeCopy` and
+`getNewAssetTemplate`, meta with ETag, loc-2, embedded images); the
+`/api/asset` interceptor gap is fixed. D1 keeps `executeCopy` and
+`getNewAssetTemplate` on rest-1 through the transport adapter until
+alpha.4 is on npm, then moves them to `client.copy` /
+`client.data.template`. Flagged early for D1: rooms re-parses the
+metamodel only when meta.v1's ETag changes; `client.meta.metamodel()`
+cannot surface that header today, so rooms either keeps its own meta
+instance for that one read or the SDK grows `meta.metamodel({
+ifNoneMatch })` answering `{ metamodel, etag }` and null on 304 (Review
+2.2's ETag item, now concrete; alpha.5).
+
 **alpha.4 (2026-11-14)** carries all of the above that was marked
 alpha.4, plus the two rest-1 paths and `client.fields`. Still open from
 the lists: trimming `QUERY_REJECTED` details, `echoed` on every failure,
