@@ -3,18 +3,21 @@
  *
  * Resolution, in order: SDK_TEST_URL + SDK_TEST_AUTHORIZATION (a ready
  * Authorization header value) or SDK_TEST_ACCESS_TOKEN; else V1_URL +
- * V1_ACCESS_TOKEN (the names gh-v1 and the cloud environment use); else the
- * profile named by SDK_TEST_INSTANCE (default "local") in ~/.v1config/
- * v1api/config.json, the file gh-v1 and Core's gulp v1api helper share. The
- * credential is read in-process and handed to the transport; it is never
- * logged. No instance configured: every integration suite skips with a
- * message.
+ * V1_ACCESS_TOKEN (the names the CLI consumer and the cloud environment
+ * use); else the profile named by SDK_TEST_INSTANCE (default "local") in
+ * ~/.v1config/v1api/config.json, the file the CLI consumer and the
+ * product's dev tooling share. The credential is read in-process and
+ * handed to the transport; it is never logged. No instance configured:
+ * every integration suite skips with a message.
  *
  * The integration tier writes fixtures, so where it may run is a list, not
- * a guess: a local dev instance, or a hosted instance named below as set
- * aside for API testing. Any other hosted URL (v1host.com), and anything
- * named V1Production, is refused. Adding a hosted instance to the list is
- * a reviewed change to this file.
+ * a guess: a local dev instance, or a hosted instance set aside for API
+ * testing and named in SDK_TEST_ALLOWED_INSTANCES (comma-separated base
+ * URLs). Any other hosted URL (v1host.com), and anything named
+ * V1Production, is refused. The list is not committed: a hosted instance's
+ * URL is the instance's name, and this repository is public. Whoever runs
+ * the tier against a hosted instance sets the variable beside the
+ * credential (a local profile needs nothing).
  */
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -22,12 +25,13 @@ import { join } from "node:path";
 import { describe } from "vitest";
 import { createFetchTransport } from "../../src/core/fetchTransport";
 import type { Transport } from "../../src/core/transport";
+import { apiTestInstances, isHosted, permitted, trim } from "./instanceGuard";
 
 export interface Instance {
   name: string;
   url: string;
   transport: Transport;
-  /** "hosted" for a listed API-testing instance on v1host.com: shared, so no suite may recycle its app domain. */
+  /** "hosted" for an allowed API-testing instance on v1host.com: shared, so no suite may recycle its app domain. */
   kind: "local" | "hosted";
 }
 
@@ -54,21 +58,15 @@ function fromEnv(): Instance | null {
   return null;
 }
 
-const trim = (url: string): string => url.replace(/\/+$/, "");
-const HOSTED = /v1host\.com/i;
 function make(name: string, url: string, authorization: string): Instance {
-  return { name, url: trim(url), kind: HOSTED.test(url) ? "hosted" : "local", transport: createFetchTransport({ baseUrl: url, authorization }) };
+  return { name, url: trim(url), kind: isHosted(url) ? "hosted" : "local", transport: createFetchTransport({ baseUrl: url, authorization }) };
 }
-
-/** Hosted instances set aside for API testing, where fixtures may be written. */
-export const API_TEST_INSTANCES = ["https://www14.v1host.com/v1sdktesting"];
 
 export const instance: Instance | null = (() => {
   const i = fromEnv() ?? fromProfile();
   if (!i) return null;
-  const listed = API_TEST_INSTANCES.some((u) => trim(u).toLowerCase() === i.url.toLowerCase());
-  if (/V1Production/i.test(i.url) || (i.kind === "hosted" && !listed)) {
-    throw new Error(`integration tests write fixtures and must not run against ${i.url}; use a local dev instance or one listed in API_TEST_INSTANCES`);
+  if (!permitted(i.url, apiTestInstances())) {
+    throw new Error(`integration tests write fixtures and must not run against ${i.url}; use a local dev instance, or a hosted instance set aside for API testing and named in SDK_TEST_ALLOWED_INSTANCES`);
   }
   return i;
 })();

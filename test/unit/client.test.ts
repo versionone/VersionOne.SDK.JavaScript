@@ -75,10 +75,10 @@ describe("client: reads", () => {
   });
 
   it("me asks for the member whose IsSelf is true", async () => {
-    const t = fake(() => [[{ _oid: "Member:145820", Name: "API Docs Verification - Jim", Username: "api-docs-verifier-jim", Nickname: "Jim", Email: "" }]]);
+    const t = fake(() => [[{ _oid: "Member:1000", Name: "SDK Test Account", Username: "sdk-test-account", Nickname: "SDK", Email: "" }]]);
     const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, schema: schema() });
     const me = await client.me();
-    expect(me).toMatchObject({ _oid: "Member:145820", Username: "api-docs-verifier-jim" });
+    expect(me).toMatchObject({ _oid: "Member:1000", Username: "sdk-test-account" });
     expect((t.calls[0]!.body as unknown[])[0]).toMatchObject({ from: "Member", filter: ["IsSelf='true'"], page: { size: 1, start: 0 } });
     await expect(new AgilityApiClient({ baseUrl: "https://x" }, { transport: fake(() => [[]]), schema: schema() }).me()).rejects.toMatchObject({ kind: "notFound" });
   });
@@ -116,13 +116,13 @@ describe("client: writes", () => {
 });
 
 describe("client: urls", () => {
-  const client = new AgilityApiClient({ baseUrl: "https://www14.v1host.com/v1sdktesting/" }, { transport: fake(() => { throw new ApiError("no", 0); }) });
+  const client = new AgilityApiClient({ baseUrl: "https://agility.example.com/MyInstance/" }, { transport: fake(() => { throw new ApiError("no", 0); }) });
   it("builds the asset page, attachment and embedded image URLs from the base URL; the asset page takes an OID or a Number", () => {
-    expect(client.urls.asset("Story:1055:777")).toBe("https://www14.v1host.com/v1sdktesting/assetdetail.v1?oid=Story:1055");
-    expect(client.urls.asset("S-01001")).toBe("https://www14.v1host.com/v1sdktesting/assetdetail.v1?Number=S-01001");
+    expect(client.urls.asset("Story:1055:777")).toBe("https://agility.example.com/MyInstance/assetdetail.v1?oid=Story:1055");
+    expect(client.urls.asset("S-01001")).toBe("https://agility.example.com/MyInstance/assetdetail.v1?Number=S-01001");
     expect(() => client.urls.asset("hello")).toThrow(UsageError);
-    expect(client.urls.attachment("Attachment:9")).toBe("https://www14.v1host.com/v1sdktesting/attachment.img/9");
-    expect(client.urls.embeddedImage(12)).toBe("https://www14.v1host.com/v1sdktesting/embedded.img/12");
+    expect(client.urls.attachment("Attachment:9")).toBe("https://agility.example.com/MyInstance/attachment.img/9");
+    expect(client.urls.embeddedImage(12)).toBe("https://agility.example.com/MyInstance/embedded.img/12");
     expect(client.attachments.url(9)).toBe(client.urls.attachment(9));
   });
 });

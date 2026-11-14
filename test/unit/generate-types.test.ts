@@ -5,7 +5,7 @@ import { join } from "node:path";
 // @ts-expect-error — a plain ES module script, imported for its exports.
 import { META_TYPES, checkHandwritten, generate, model } from "../../scripts/generate-types.mjs";
 // @ts-expect-error — the same, for the metamodel pull.
-import { canned } from "../../scripts/download-metamodel.mjs";
+import { canned, neutralise } from "../../scripts/download-metamodel.mjs";
 
 const root = join(__dirname, "..", "..");
 
@@ -111,5 +111,25 @@ describe("download-metamodel: the committed metamodel is the product's", () => {
     expect(removed.attributes).toEqual(["Story.Custom_Points", "Story.Custom_Demo_List"]);
     expect(removed.dangling).toEqual(["Story.Dangling (RelatedAsset Custom_Demo_List)"]);
     expect(delivered.AssetTypes.Story.Attributes["Story.Custom_Points"]).toBeDefined(); // the input was cloned, not edited
+  });
+
+  it("spells every href from /meta.v1/, so the committed file does not carry the instance it was pulled from", () => {
+    const delivered = { HREF: "/SomeInstance/meta.v1/", Version: "26.3.1.13", AssetTypes: { Story: { HREF: "/SomeInstance/meta.v1/Story", Token: "Story", Attributes: {
+      "Story.Name": { href: "/SomeInstance/meta.v1/Story/Name", Token: "Story.Name", Base: { href: "/SomeInstance/meta.v1/BaseAsset/Name", tokenref: "BaseAsset.Name" } }
+    }, Base: { href: "/SomeInstance/meta.v1/BaseAsset", nameref: "BaseAsset" } } } };
+    const out = neutralise(delivered) as typeof delivered;
+    expect(out.HREF).toBe("/meta.v1/");
+    expect(out.AssetTypes.Story.HREF).toBe("/meta.v1/Story");
+    expect(out.AssetTypes.Story.Attributes["Story.Name"]!.href).toBe("/meta.v1/Story/Name");
+    expect(out.AssetTypes.Story.Attributes["Story.Name"]!.Base.href).toBe("/meta.v1/BaseAsset/Name");
+    expect(out.AssetTypes.Story.Base.nameref).toBe("BaseAsset"); // only hrefs change
+    expect(delivered.HREF).toBe("/SomeInstance/meta.v1/"); // the input is not edited
+  });
+
+  it("the committed metamodel names no instance: every href starts at /meta.v1", async () => {
+    const text = await readFile(join(root, "metamodel.json"), "utf8");
+    const hrefs = [...text.matchAll(/"(?:href|HREF)":\s*"([^"]*)"/g)].map((m) => m[1]!);
+    expect(hrefs.length).toBeGreaterThan(1000);
+    expect(hrefs.filter((h) => !h.startsWith("/meta.v1"))).toEqual([]);
   });
 });

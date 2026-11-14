@@ -100,10 +100,12 @@ committed `metamodel.json` and is not edited by hand. The metamodel is the
 product's, for one release (its `Version`, which the generated headers
 and the README repeat): a pull by `scripts/download-metamodel.mjs`, which
 strips an instance's own definitions (its `Custom_` list types, its
-custom and `ReciprocalOf_` attributes) and reports what it removed, so a
-dev instance on a blank database and a hosted instance on the same
-release give the same file. Refresh it, and regenerate, as a step of each
-release. Generation rules:
+custom and `ReciprocalOf_` attributes) and reports what it removed, and
+spells every `href` from `/meta.v1/` (the server spells them from the
+instance's own path, which names the instance), so a dev instance on a
+blank database and a hosted instance on the same release give the same
+file, and the file names no instance. Refresh it, and regenerate, as a
+step of each release. Generation rules:
 
 - an attribute the type defines itself has no `Base`; inherited ones come
   through `extends`;
@@ -134,9 +136,10 @@ committed files.
   same modules against a real instance, resolved by
   `test/integration/instance.ts`; skips with a message when none is
   configured. It runs only where fixtures may be written: a local dev
-  instance, or a hosted instance listed in `API_TEST_INSTANCES` as set
-  aside for API testing (today `www14.v1host.com/v1sdktesting`); any other
-  hosted URL and anything named V1Production is **refused**. A suite that
+  instance, or a hosted instance set aside for API testing and named in
+  `SDK_TEST_ALLOWED_INSTANCES` (no such URL is committed: an instance's URL
+  is its name, and this repository is public); any other hosted URL and
+  anything named V1Production is **refused**. A suite that
   recycles the app domain (custom fields) runs on local instances only.
   Suites bring their own data — a hosted testing instance may be nearly
   empty (it had no StoryStatus at all on 2026-11-04) — and fixtures are
@@ -213,3 +216,18 @@ caller wrote on `kind` still holds. api/asset's validation messages
 (`Violation'Required'AttributeDefinition'Scope'Story`) are parsed onto
 each failure as `violation` (rule, attribute token, loc-2 tag); nobody
 matches that text by hand.
+
+## 8. Nothing private in the tree
+
+This repository is public, and its history is permanent. Nothing committed
+here names a private repository, a Claude session, a person, or a hosted
+instance; a consumer is "a CLI consumer", "a chat-bot consumer", "a browser
+app consumer" (a public one may be named); the product's source is "the
+server"; a fixture copied from a live response carries a fictitious
+identity and a fictitious base URL. Plans, surveys and hand-offs between
+sessions live outside this repository (`CONTRIBUTING.md` says where);
+`specs/` holds invariants of this code and nothing else.
+`test/unit/publicTree.test.ts` enforces the mechanical parts: no session
+id, no GitHub repository slug but this one, no hosted instance URL at all
+(examples use a fictitious domain), and every metamodel `href` from
+`/meta.v1/`.

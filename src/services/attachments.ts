@@ -6,7 +6,7 @@
  *
  * Two ways in for the bytes, chosen by size:
  *   - inline: one api/asset create with Content as Base64. One request,
- *     what agility-rooms does; the JSON is a third larger than the file.
+ *     what a browser app consumer does; the JSON is a third larger than the file.
  *   - two-step, as the docs prescribe for anything not tiny: create the
  *     Attachment with empty Content, then POST the raw bytes. A failed
  *     upload leaves an empty Attachment, which is reported, not hidden.

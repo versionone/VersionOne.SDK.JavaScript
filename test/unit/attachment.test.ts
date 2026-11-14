@@ -32,8 +32,8 @@ describe("attachment wire module", () => {
 
   it("normalizeEmbeddedImageUrls rewrites every embedded.img reference to this instance's absolute URL and leaves other images alone", () => {
     const html = `<p><img src="/old/embedded.img/12"> <img src='https://other.host/x/embedded.img/34?x=1'> <img src="https://cdn/logo.png"></p>`;
-    expect(normalizeEmbeddedImageUrls(html, "https://www14.v1host.com/v1sdktesting/")).toBe(
-      `<p><img src="https://www14.v1host.com/v1sdktesting/embedded.img/12"> <img src='https://www14.v1host.com/v1sdktesting/embedded.img/34'> <img src="https://cdn/logo.png"></p>`
+    expect(normalizeEmbeddedImageUrls(html, "https://agility.example.com/MyInstance/")).toBe(
+      `<p><img src="https://agility.example.com/MyInstance/embedded.img/12"> <img src='https://agility.example.com/MyInstance/embedded.img/34'> <img src="https://cdn/logo.png"></p>`
     );
   });
 
@@ -43,10 +43,10 @@ describe("attachment wire module", () => {
   });
 
   it("uploadEmbeddedImage posts multipart { image, oidToken } and reads the URL out of the HTML the route answers", async () => {
-    // The route's answer, verbatim (v1sdktesting, 2026-11-07).
-    const t = fake('<textarea>{"Url":"https://www14.v1host.com/v1sdktesting/embedded.img/146412","Key":"EmbeddedImage:146412"}</textarea>');
+    // The route's answer, verbatim (the API-testing instance, 2026-11-07).
+    const t = fake('<textarea>{"Url":"https://agility.example.com/MyInstance/embedded.img/146412","Key":"EmbeddedImage:146412"}</textarea>');
     const image = await uploadEmbeddedImage(t, "Story:146408", new Uint8Array([1, 2, 3]), { filename: "pixel.png", contentType: "image/png" });
-    expect(image).toEqual({ oid: "EmbeddedImage:146412", id: "146412", url: "https://www14.v1host.com/v1sdktesting/embedded.img/146412" });
+    expect(image).toEqual({ oid: "EmbeddedImage:146412", id: "146412", url: "https://agility.example.com/MyInstance/embedded.img/146412" });
     const form = t.calls[0]!.body as FormData;
     expect(t.calls[0]).toMatchObject({ method: "POST", path: "/EmbeddedImage.mvc/Upload", responseType: "text" });
     expect(form.get("oidToken")).toBe("Story:146408");
@@ -91,22 +91,22 @@ describe("attachments service", () => {
   });
 
   it("list asks for metadata only — never Content — paged, newest first", async () => {
-    const t = fake(envelope({ queryResult: { results: [[{ _oid: "Attachment:5", Name: "n", Filename: "f.png", ContentType: "image/png", Description: null, CreateDate: "2026-11-07T10:00:00", "CreatedBy.Name": "Jim" }]], resultMetaData: [], count: 1 } }));
+    const t = fake(envelope({ queryResult: { results: [[{ _oid: "Attachment:5", Name: "n", Filename: "f.png", ContentType: "image/png", Description: null, CreateDate: "2026-11-07T10:00:00", "CreatedBy.Name": "Dana" }]], resultMetaData: [], count: 1 } }));
     const rows = await list(t, "Story:1:44");
     const q = (t.calls[0]!.body as Record<string, unknown>[])[0]!;
     expect(q).toMatchObject({ from: "Attachment", filter: ["Asset=$asset"], with: { $asset: "Story:1" }, sort: ["-CreateDate"], page: { size: 50, start: 0 } });
     expect(q.select).not.toContain("Content");
-    expect(rows).toEqual([{ oid: "Attachment:5", id: "5", name: "n", filename: "f.png", contentType: "image/png", description: null, createDate: "2026-11-07T10:00:00", createdBy: "Jim" }]);
+    expect(rows).toEqual([{ oid: "Attachment:5", id: "5", name: "n", filename: "f.png", contentType: "image/png", description: null, createDate: "2026-11-07T10:00:00", createdBy: "Dana" }]);
   });
 
   it("the client exposes attachments and embedded images, with URLs on its own base", () => {
-    const client = new AgilityApiClient({ baseUrl: "https://www14.v1host.com/v1sdktesting/" }, { transport: fake() });
-    expect(client.attachments.url("Attachment:5")).toBe("https://www14.v1host.com/v1sdktesting/attachment.img/5");
-    expect(client.embeddedImages.url(12)).toBe("https://www14.v1host.com/v1sdktesting/embedded.img/12");
+    const client = new AgilityApiClient({ baseUrl: "https://agility.example.com/MyInstance/" }, { transport: fake() });
+    expect(client.attachments.url("Attachment:5")).toBe("https://agility.example.com/MyInstance/attachment.img/5");
+    expect(client.embeddedImages.url(12)).toBe("https://agility.example.com/MyInstance/embedded.img/12");
   });
 });
 
-describe("attachment gaps from gh-v1's C4", () => {
+describe("attachment gaps the CLI consumer found", () => {
   it("the fetch transport hands onResponse the headers of a successful response", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response(new Uint8Array([1]), { status: 200, headers: { "content-type": "image/png", "content-disposition": 'inline; filename="a b.png"' } }));
     const seen: (string | null)[] = [];
@@ -124,7 +124,7 @@ describe("attachment gaps from gh-v1's C4", () => {
   });
 
   it("queryPage asks for the total and says whether more pages follow; attachments.page uses it", async () => {
-    // resultMetaData as api/asset sends it with needTotal (v1sdktesting, 2026-11-07).
+    // resultMetaData as api/asset sends it with needTotal (the API-testing instance, 2026-11-07).
     const withTotal = (rows: unknown[], total: number | null) => envelope({ queryResult: { results: [rows], resultMetaData: [{ page: { start: 0, size: 2 }, total }], count: 1 } });
     const t = fake(withTotal([{ _oid: "Story:1" }, { _oid: "Story:2" }], 17093));
     const p = await queryPage(t, { from: "Story", select: ["Name"], page: { size: 2, start: 0 } });

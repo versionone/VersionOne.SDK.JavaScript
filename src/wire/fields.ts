@@ -3,8 +3,8 @@
  * an asset type in a scope. Two GET endpoints, both answering attribute
  * NAMES, narrower than everything meta.v1 reports — the workspace's
  * configuration (which custom fields are displayed, say) is applied only
- * here. Verified against the API-testing instance and Core's
- * DisplayedFieldsController (2026-11-14):
+ * here. Verified against the API-testing instance and the server's
+ * source (2026-11-14):
  *
  *   api/visibleFields?scopeOid=Scope:0&assetTypeToken=Story&assetTypeToken=Defect
  *     Both parameters REPEAT (not comma lists). Answers one entry per

@@ -8,14 +8,15 @@
   is now built for Node 22+ (tsup's `target` was `node18`). Node 18
   reached end of life in April 2025 and Node 20 in April 2026; neither
   gets security fixes. CI tests the maintained LTS lines, 22, 24 and 26,
-  so a consumer on 18 or 20 was already untested. (The slack bot runs 24
-  and gh-v1 requires 22; agility-rooms runs in the browser.)
+  so a consumer on 18 or 20 was already untested. (The chat-bot consumer
+  runs 24 and the CLI consumer requires 22; the browser app consumer
+  does not run on Node.)
 
 ## 1.0.0-alpha.5
 
 ### Added
 
-- **Conditional schema reads** (agility-rooms D1/D3). meta.v1 sends one
+- **Conditional schema reads** (for a browser app consumer). meta.v1 sends one
   strong ETag for the whole schema (`"26.3.1.13.<stamp>"`, the same on
   the document, a type and an attribute) and honours `If-None-Match` with
   a 304. `client.meta.read({ ifNoneMatch })` and `readType(token, {
@@ -24,7 +25,7 @@
   the smallest resource. `TypeCache.etag` remembers the tag the loaded
   types came with, and `client.schema.revalidate()` asks the server in
   one small read and drops the loaded types only when the tag moved —
-  what rooms' metamodel store does by hand. Transport: a request with
+  what a browser app's metamodel store does by hand. Transport: a request with
   `acceptNotModified` resolves to undefined on a 304 after `onResponse`
   sees it.
 
@@ -34,24 +35,28 @@
   defaults to 1, was 0): a GET, a query.v1 read or a guarded batch that
   says so, after a network failure or a 5xx, 150 ms later. A plain write
   is never resent, as before. Pass `retries: 0` for the old behaviour.
-  (gh-v1: the doc promised a retry the default never made.) A 429 counts
+  (a CLI consumer: the doc promised a retry the default never made.) A 429 counts
   as transient like a 5xx — the instance throttles per token — and a
   Retry-After is honoured when sent, up to 30 s.
 - **A rejected query's `details` are the exceptions alone**
   (`{ type, message }[]`, exported as `QueryRejection`), not query.v1's
-  whole error document; `message` is unchanged. (gh-v1: a formatter that
+  whole error document; `message` is unchanged. (a CLI consumer: a formatter that
   printed details printed a JSON document.)
 - **`CommandFailureDetail.echoed` is not enumerable**: still readable on
   every failure for a corrected resend, but a serialised failure (a
   receipt, a log line, a bot's result) carries index, message and
-  violation only. (slack bot, gh-v1: re-mapping failures to keep results
+  violation only. (chat-bot and CLI consumers: re-mapping failures to keep results
   small.)
+- **The committed `metamodel.json` names no instance**: every `href` is
+  spelled from `/meta.v1/` (`scripts/download-metamodel.mjs` rewrites
+  them on a pull). The generated types are unchanged; nothing in the SDK
+  reads an href.
 
 ## 1.0.0-alpha.4 — what the three adoptions asked for
 
 ### Added
 
-- **Two narrow rest-1 paths** (agility-rooms): `client.data.operate(oid,
+- **Two narrow rest-1 paths** (for a browser app consumer): `client.data.operate(oid,
   op)` runs an operation for its result — api/asset performs a Copy but
   reports only the source; rest-1 answers the copy's OID — and
   `client.copy(oid)` is that for Copy. `client.data.template(type, {
@@ -69,9 +74,9 @@
   module `fields`.
 - **`client.urls.asset` takes an asset Number** as well as an OID
   (`assetdetail.v1?Number=S-01001`): the readable form a CLI prints and a
-  chat message shows (gh-v1, slack bot).
+  chat message shows (a CLI consumer, a chat-bot consumer).
 - **`Outcome.requestId`**: the server's id for a batch, worth logging
-  (slack bot). Null for an outcome merged from several sends.
+  (a chat-bot consumer). Null for an outcome merged from several sends.
 - `outcomeOf` tolerating a partial envelope is now a stated contract
   with a test: consumers' fakes may send only the fields they need.
 
@@ -79,7 +84,7 @@
 
 - `parseViolation`: `tag` is null for the token spelling
   (`Violation'Invalid'Epic.Scope`); it was the token, which is not a loc-2
-  tag (gh-v1).
+  tag (a CLI consumer).
 - `CHANGELOG.md` ships in the npm package.
 - Doc notes: `kind: "usage"` means nothing was sent (status 0), so an
   error formatter should not blame the server; `client.query`'s resend
@@ -97,9 +102,9 @@
 Alpha releases may break between versions. Every breaking change is listed
 here with the one-line migration a consumer applies. A renamed export keeps
 its old name as a `@deprecated` alias for one alpha and is removed in the
-next; `1.0.0` follows agility-rooms' adoption, and semver after that.
+next; `1.0.0` follows the browser app consumer's adoption, and semver after that.
 
-## 1.0.0-alpha.3 — the breaking batch (plan 005, step 2)
+## 1.0.0-alpha.3 — the breaking batch
 
 ### Breaking
 

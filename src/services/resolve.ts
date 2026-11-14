@@ -1,7 +1,7 @@
 /**
  * The resolve service: what a person types (an asset number, an OID token)
- * turned into the asset it names. Ported from gh-v1's lib/resolve.js
- * (resolveAssets, resolveAssetRef), minus the prompting, which stays in the
+ * turned into the asset it names. Ported from the CLI consumer's resolve module,
+ * minus the prompting, which stays in the
  * CLI.
  *
  * Which type a number's prefix belongs to is the instance's business (the

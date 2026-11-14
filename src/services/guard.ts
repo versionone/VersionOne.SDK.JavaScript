@@ -1,7 +1,7 @@
 /**
  * The guard: an api/asset batch sent as a compare-and-set, so a change only
  * lands on an asset nobody else has changed since it was read. Ported from
- * gh-v1's lib/batch.js `guarded()`, with a different stamp.
+ * the CLI consumer's batch `guarded()`, with a different stamp.
  *
  * How: preview the batch (the server's projection expands every query-
  * scoped update and execute into one command per asset), read each touched

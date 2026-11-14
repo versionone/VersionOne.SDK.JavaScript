@@ -14,14 +14,14 @@ export type Oid = string;
 export type DateString = string;
 
 /**
- * An AssetState as the model carries it: the names of Core's AssetState
- * enum (VersionOne/AssetState.cs: Future 0, Active 64, Closed 128, Dead 192,
+ * An AssetState as the model carries it: the names of the server's AssetState
+ * enum (Future 0, Active 64, Closed 128, Dead 192,
  * OldBrokenDownStory 208, Deprecated 254, Deleted 255). rest-1 renders the
  * number and query.v1 the name; the wire layer normalises to the name.
  */
 export type AssetStateValue = "Future" | "Active" | "Closed" | "Dead" | "Template" | "OldBrokenDownStory" | "Deprecated" | "Deleted";
 
-/** Core's AssetState codes, by name — the rest-1 rendering. */
+/** The server's AssetState codes, by name — the rest-1 rendering. */
 export const ASSET_STATE_CODES: Record<AssetStateValue, number> = { Future: 0, Active: 64, Closed: 128, Dead: 192, Template: 200, OldBrokenDownStory: 208, Deprecated: 254, Deleted: 255 };
 
 const STATE_OF_CODE: Record<number, AssetStateValue> = Object.fromEntries(Object.entries(ASSET_STATE_CODES).map(([name, code]) => [code, name as AssetStateValue]));

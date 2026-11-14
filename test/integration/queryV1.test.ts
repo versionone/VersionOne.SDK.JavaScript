@@ -34,7 +34,7 @@ describeInstance("queryV1 (live)", () => {
       message: expect.stringContaining("Story.NoSuchAttribute")
     });
   });
-  it("a group query's children are translated by the query's type, and the no-status group's key is null (the slack bot's board query)", async () => {
+  it("a group query's children are translated by the query's type, and the no-status group's key is null (a chat-bot consumer's board query)", async () => {
     const [groups] = await client.queries([{
       from: "PrimaryWorkitem",
       select: ["Name", "Number", "Status", "Team.HasProcess", "IsClosed"],

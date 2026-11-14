@@ -15,7 +15,7 @@ npm install @versionone/agility-sdk@alpha
 ```ts
 import { AgilityApiClient } from "@versionone/agility-sdk";
 
-const client = new AgilityApiClient({ baseUrl: "https://www14.v1host.com/v1sdktesting", accessToken: process.env.V1_ACCESS_TOKEN });
+const client = new AgilityApiClient({ baseUrl: "https://agility.example.com/MyInstance", accessToken: process.env.V1_ACCESS_TOKEN });
 const stories = await client.query({ from: "Story", select: ["Name", "Estimate"], page: { size: 10, start: 0 } });
 // stories[0].Estimate is a number | null; stories[0].Nmae does not compile
 ```
@@ -35,7 +35,7 @@ npm test
 - `npm run typecheck` - run TypeScript type checks
 - `npm run verify` - run typecheck + build + tests
 - `npm run test` - run unit tests
-- `npm run download:metamodel -- <baseAgilityUrl>` - refresh `metamodel.json` from an instance on the current release (instance-specific definitions stripped; `--raw` keeps them), then `npm run generate:types`. The cleanest source is a dev instance on a blank database (Core's gulp task for that); a hosted instance on the release gives the same file. The generated model is from meta.v1 **26.3.1.13** (hosted, 2026-11-12)
+- `npm run download:metamodel -- <baseAgilityUrl>` - refresh `metamodel.json` from an instance on the current release (instance-specific definitions stripped; `--raw` keeps them), then `npm run generate:types`. The cleanest source is a dev instance on a blank database (the product's dev tooling has a task for that); a hosted instance on the release gives the same file. The generated model is from meta.v1 **26.3.1.13** (hosted, 2026-11-12)
 
 ## Public API
 
@@ -112,6 +112,8 @@ an approval, so a pushed tag waits for a maintainer before it stages. A
 package must exist before it can be linked, so the very first version was
 published once by hand by an `@versionone` org member.
 
-## Before PR
+## Contributing
 
-- Run `npm run verify` to validate typecheck, build, and tests before opening a pull request.
+Run `npm run verify` (typecheck, build, tests) before opening a pull request.
+This repository is public: `CONTRIBUTING.md` says what may be committed
+here and where working plans and consumer hand-offs live instead.

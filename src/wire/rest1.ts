@@ -9,7 +9,7 @@
  *   /rest-1.v1/Data/<Type>/<id>      one asset
  *   /rest-1.v1/Hist/<Type>[/<id>]    history: the same shape, one row per moment, ids carrying the moment
  *   /rest-1.v1/New/<Type>?ctx=<oid>   a template: the asset the type's initializer would create in that
- *                                    context (Core runs the type's IAssetInitializer with ctx as the
+ *                                    context (the server runs the type's initializer with ctx as the
  *                                    context OID — a Timebox gets the next sprint name, dates after the
  *                                    schedule's last timebox, the schedule, a state and the owner; live
  *                                    2026-11-14). Same document shape, id "", every attribute with act "set".
@@ -28,7 +28,7 @@
  *           Super:  { _type: "Relation",  name, value: { _type: "Asset", href, idref } | null } single relation
  *       } } ] }
  *   - `total` only with needTotal=true (else absent; -1 in some renderings).
- *   - AssetState is the NUMBER (Core's AssetState enum); the model wants the name.
+ *   - AssetState is the NUMBER (the server's AssetState enum); the model wants the name.
  *   - a type-qualified sel (Story.Number on BaseAsset) arrives keyed by its plain name (Number).
  *   - selecting a relation also brings its display columns (Owners.Name,
  *     Owners.Nickname, Status.Name) uninvited; they are folded onto the Refs.

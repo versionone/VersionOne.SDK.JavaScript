@@ -11,7 +11,7 @@ import { etag, readAssetType, readMetamodel, type MetamodelDocument } from "../.
  * meta.v1's one strong ETag for the whole schema, and what the SDK does
  * with it: a conditional read answers null on 304, the type cache keeps
  * the tag its types came with, and revalidate drops them when it moves.
- * Shapes as v1sdktesting sent them (2026-11-14).
+ * Shapes as the API-testing instance sent them (2026-11-14).
  */
 const document = JSON.parse(readFileSync(join(__dirname, "..", "..", "metamodel.json"), "utf8")) as MetamodelDocument;
 const TAG = '"26.3.1.13.636764259167912911"', NEXT = '"26.3.1.13.636764259170000000"';

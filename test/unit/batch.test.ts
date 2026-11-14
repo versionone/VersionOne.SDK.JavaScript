@@ -97,7 +97,7 @@ group("batch", () => {
     expect(r.notes.slice(1)).toEqual(["Epic:9: Split has no known inverse (was Active)"]);
   });
 
-  it("an asset whose command failed is failed, not also skipped as changed since the snapshot (gh-v1#21)", async () => {
+  it("an asset whose command failed is failed, not also skipped as changed since the snapshot (a CLI consumer finding)", async () => {
     const preview = [{ "@x": { oid: "Conversation:12", execute: { op: "Delete", args: {} } } }, { "@y": { oid: "Epic:9", execute: { op: "Inactivate", args: {} } } }] as unknown as Command[];
     const t = server({
       preview,
@@ -109,7 +109,7 @@ group("batch", () => {
     expect(r.skipped).toEqual(["Epic:9"]); // matched nothing: changed since the snapshot
   });
 
-  it("reverseOf leaves out an operation the type does not have, by meta's Operations, and says so: a created Conversation is not deleted (gh-v1#21)", () => {
+  it("reverseOf leaves out an operation the type does not have, by meta's Operations, and says so: a created Conversation is not deleted (a CLI consumer finding)", () => {
     const d = describe([{ "@c": { AssetType: "Conversation" } }, { "@e": { AssetType: "Expression", BelongsTo: "@c", Content: "x" } }], []);
     const can = (type: string, op: string) => schema.canOperate(type, op);
     expect(can("Conversation", "Delete")).toBe(false);
@@ -122,7 +122,7 @@ group("batch", () => {
     expect(reverseOf(d, {}, { created: ["Conversation:12", "Expression:13"], modified: [], operated: [] }).commands).toHaveLength(2);
   });
 
-  it("reverseOf reopens what a close cascaded to, after the parent and top down; unread, it says what it could not reopen (gh-v1#48)", () => {
+  it("reverseOf reopens what a close cascaded to, after the parent and top down; unread, it says what it could not reopen (a CLI consumer finding)", () => {
     const d = describe([], [{ "@x": { oid: "Story:1", execute: { op: "QuickClose", args: {} } } }] as unknown as Command[]);
     const done = { created: [], modified: [], operated: ["Story:1"] };
     const open = { "Story:1": ["Task:5", "Test:7", "Task:6"] };
@@ -134,7 +134,7 @@ group("batch", () => {
     expect(unread.notes.join("\n")).toMatch(/Story:1: QuickClose may also have closed 3 open descendants \(Task:5, Test:7, Task:6\); they could not be read back/);
   });
 
-  it("runBatch on a close: records the open descendants top down before, the ones the close closed after, stamps them, and reverses parent first (gh-v1#48)", async () => {
+  it("runBatch on a close: records the open descendants top down before, the ones the close closed after, stamps them, and reverses parent first (a CLI consumer finding)", async () => {
     // Epic:9 → Story:1 → Task:5 (open) and Task:6 (closed already); Inactivate on the Epic closes Story:1 and Task:5.
     const children: Record<string, string[]> = { "Epic:9": ["Story:1"], "Story:1": ["Task:5", "Task:6"], "Task:5": [], "Task:6": [] };
     let state: Record<string, string> = { "Epic:9": "Active", "Story:1": "Active", "Task:5": "Active", "Task:6": "Closed" };
@@ -187,7 +187,7 @@ group("batch", () => {
   });
 
   it("a batch of only aliased updates and executes is work: with guard off it is sent as written, noted as unsnapshotted, and left out of the reverse", async () => {
-    // gh-v1's `apply` hit this: preview echoes aliased writes unexpanded, so nothing reads as per-asset work.
+    // the CLI consumer's `apply` hit this: preview echoes aliased writes unexpanded, so nothing reads as per-asset work.
     const close: Command[] = [{ "@close": { from: "Story:20", execute: "QuickClose" } }];
     let sent: Command[] | undefined;
     const t = server({ preview: close, lookup: (q) => q.with!.$oids!.map((oid) => (q.select!.includes("Name") ? { _oid: oid, Name: "Twenty", Number: "S-20" } : { _oid: oid, ChangeDate: "2026-11-06T10:00:00.1" })), send: (body) => { sent = body; return envelope({ assetsOperatedOn: { oidTokens: ["Story:20:900"], count: 1 } }); } });
