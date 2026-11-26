@@ -55,6 +55,18 @@
   Migration: when the search box is empty, leave `find` out of the query
   (or do not send the read).
 
+### Changed
+
+- **`client.explain`: a rule the instance has no sentence for is for a
+  developer, not a user.** Its explanation is the rule's name spelled out
+  ("Refused (asset cannot inactivate closed)."), which is a name and not a
+  sentence written for a person, and can read as the opposite of what
+  happened ("Refused (message must not be sent)." is said of a message
+  that was). `audience` is now `"developer"` for these; the sentence,
+  `rule` and `echoed: false` are unchanged. Migration: none if you show
+  only `audience: "user"` sentences; such a failure now gets your own
+  wording.
+
 ### Added
 
 - **`client.search(text, { types, select?, findin?, filter?, where?,

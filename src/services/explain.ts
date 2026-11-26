@@ -39,12 +39,17 @@ export interface Explanation {
    */
   sentence: string;
   /**
-   * Who the sentence is for. "user": it was made for a person using the
-   * consumer's product — from a rule and the instance's labels, from the
-   * server's own localized sentence, or from the kind of error — and can
-   * be shown as it is. "developer": it is a message about the call itself
-   * (a usage error, a rejected query, a protocol error) or the server's
-   * raw text; log it, and show the user something of your own.
+   * Who the sentence is for. "user", in exactly three cases: a rule the
+   * SDK knows, on an attribute, said with the instance's label for it
+   * ("Project is required."); the server's own localized sentence; or a
+   * sentence for the kind of error (not signed in, not found). It can be
+   * shown as it is. "developer" for everything else: a message about the
+   * call itself (a usage error, a rejected query, a protocol error), the
+   * server's raw text, and a rule the instance has no sentence for, whose
+   * name is spelled out in words ("Refused (message must not be sent).").
+   * A spelled-out rule is never for a user: it is a name, and can read as
+   * the opposite of what happened. Log these, and show the user
+   * something of your own.
    */
   audience: "user" | "developer";
   /** True when `sentence` is nothing more than the message as the server (or the SDK) sent it: nothing was explained. */
@@ -99,9 +104,10 @@ function sentenceOf(problem: Problem, label: string | null, related: string | nu
   }
   // The server's own sentence where it has one.
   if (localized) return forUser(localized);
-  // A rule the instance has no words for (seen live: Violation'AssetCannotInactivateClosed): never the bare token.
-  // What it means is in the rule's name, which a person can read; the token stays in `message` and `rule`.
-  if (problem.rule) return forUser(`${label ? `${label}: refused` : "Refused"} (${words(problem.rule)}).`);
+  // A rule the instance has no words for (seen live: Violation'AssetCannotInactivateClosed, Violation'MessageMustNotBeSent):
+  // never the bare token, but the rule's name spelled out is still a token and not a sentence written for a person. It can
+  // read as the opposite of what happened ("message must not be sent" is said of a message that was). So it is for a developer.
+  if (problem.rule) return { sentence: `${label ? `${label}: refused` : "Refused"} (${words(problem.rule)}).`, audience: "developer", echoed: false };
   // Anything else is the server's own text, as it came.
   return { sentence: message, audience: "developer", echoed: true };
 }
