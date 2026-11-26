@@ -9,6 +9,7 @@ import * as guard from "./services/guard";
 import * as resolve from "./services/resolve";
 import { Schema, type TypeCache } from "./services/schema";
 import type { Asset, Oid } from "./types/asset";
+import type { Attachment } from "./types/assets/Attachment";
 import type { Member } from "./types/assets/Member";
 import type { Metamodel } from "./types/metamodel";
 import type { From, RowOf, RowsOf, Selected, SelectPath, TypeOf } from "./types/query";
@@ -44,7 +45,19 @@ export interface ClientOptions {
 }
 
 /** One page of rows, with the total number of matches when the server reports it, and whether more pages follow. */
-export interface Page<Row extends Asset = Asset> { rows: Row[]; total: number | null; more: boolean }
+export interface Page<Row extends Asset = Asset> {
+  rows: Row[];
+  /** The number of matches across all pages; null when the server did not report one. */
+  total: number | null;
+  /**
+   * Whether more pages follow: what a pager reads. With a total it is exact
+   * (`start + rows.length < total`). When `total` is null it is whether
+   * this page came back full, the only signal left, so a pager keeps
+   * offering "next" on `more` and never on `total`; the page after a full
+   * last page is then empty with `more` false.
+   */
+  more: boolean;
+}
 
 export interface PagesOptions {
   /**
@@ -118,11 +131,11 @@ export class AgilityApiClient {
 
   /**
    * One query, its rows, translated. Sent to query.v1: it cannot write, so
-   * the request is marked idempotent and the transport may resend it after
-   * a network failure or a 5xx — when `retries` is set above its default
-   * of 0. A page is required; a query the server refuses throws an
-   * ApiError (kind "invalid", code QUERY_REJECTED; `message` holds the
-   * server's sentences, `details` its whole error document), never an
+   * the request is marked idempotent and the transport resends it once
+   * after a network failure or a 5xx (`retries`, default 1). A page is
+   * required; a query the server refuses throws an ApiError (kind
+   * "invalid", code QUERY_REJECTED; `message` holds the server's
+   * sentences, `details` each exception's type and message), never an
    * empty result.
    */
   query<const F extends From, const Q extends assetApi.QueryBody<F>>(q: Q & assetApi.QueryBody<F>): Promise<RowOf<Q>[]>;
@@ -207,8 +220,13 @@ export class AgilityApiClient {
   // ---- the endpoints behind the reads -----------------------------------------------
 
   /**
-   * meta.v1: the instance's schema, raw. (The translated, cached view is
-   * `schema`; `schema.revalidate()` drops it when the schema's tag moves.)
+   * meta.v1: the instance's schema, read on request and not cached (the
+   * cached view queries use is `schema`; `schema.revalidate()` drops it
+   * when the schema's tag moves). What comes back is the model's
+   * `Metamodel` / `AssetType` — references as tokens (`Base: "Story"`,
+   * `RelatedAsset: "Member"`), operations by name — not meta.v1's own
+   * document, which spells them `{ nameref, href }`; for that document,
+   * read `/meta.v1` through the transport.
    * `read` and `readType` are conditional: pass the tag a previous answer
    * carried and an unchanged schema answers null without a download —
    * meta.v1 sends one strong ETag for the whole schema. `etag()` reads that
@@ -338,13 +356,16 @@ export class AgilityApiClient {
   /**
    * The files attached to assets: metadata on Attachment assets, bytes
    * through attachment.img. `add` sends a small file inline (one request)
-   * and a large one in two steps.
+   * and a large one in two steps; `get` reads a small one inline on request.
    */
   readonly attachments = {
-    list: (asset: string, options?: { page?: { size: number; start: number } }) => attachments.list(this.transport, asset, options),
-    page: (asset: string, options?: { page?: { size: number; start: number } }) => attachments.page(this.transport, asset, options),
+    /** One page of an asset's attachments, newest first, metadata only; `select` adds keys to each row. */
+    list: <const S extends readonly (SelectPath<Attachment> | assetApi.QueryBody)[] | undefined = undefined>(asset: string, options?: Omit<attachments.ListOptions<S>, "schema">) => attachments.list<S>(this.transport, asset, { ...options, schema: this.schema }),
+    /** The same page with the total and whether more follow. */
+    page: <const S extends readonly (SelectPath<Attachment> | assetApi.QueryBody)[] | undefined = undefined>(asset: string, options?: Omit<attachments.ListOptions<S>, "schema">) => attachments.page<S>(this.transport, asset, { ...options, schema: this.schema }),
     info: (id: string | number) => attachments.info(this.transport, id),
-    get: (id: string | number) => attachments.get(this.transport, id),
+    /** Metadata and bytes: two requests, or one with `{ inline: true }` (for small files; the content rides in the row as Base64). */
+    get: (id: string | number, options?: attachments.GetOptions) => attachments.get(this.transport, id, options),
     add: (asset: string, data: attachment.Bytes, options: attachments.AddOptions) => attachments.add(this.transport, asset, data, options),
     put: (id: string | number, data: attachment.Bytes, contentType?: string) => attachments.put(this.transport, id, data, contentType),
     remove: (id: string | number) => attachments.remove(this.transport, id),

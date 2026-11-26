@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RequestOptions, Transport } from "../../src/core/transport";
 import type { Story } from "../../src/types/assets/Story";
-import { fromAssetDocument, get, history, list, operate, template, toQuery, type AssetDocument, type AssetsDocument } from "../../src/wire/rest1";
+import { UsageError } from "../../src/core/errors";
+import { fromAssetDocument, get, history, list, normalizeQuery, operate, template, toQuery, type AssetDocument, type AssetsDocument } from "../../src/wire/rest1";
 
 function fakeTransport(...answers: unknown[]): Transport & { calls: RequestOptions[] } {
   const calls: RequestOptions[] = [];
@@ -110,3 +111,25 @@ describe("rest-1: operate and template (the two things api/asset cannot answer)"
   });
 });
 
+
+describe("normalizeQuery: a query written with rest-1's spellings", () => {
+  it("sel becomes select, a textual where becomes filter, comma-joined lists become lists, and a \"size,start\" page becomes { size, start }", () => {
+    expect(normalizeQuery({ from: "Story", sel: "Name,Owners[Name='a,b'].Name,Status.Name", where: "Scope='Scope:0';AssetState!='Closed'", sort: "-ChangeDate,Name", findin: "Name,Description", find: "logon", page: "20,40", needTotal: "true", asof: "2026-01-01" }))
+      .toEqual({ from: "Story", select: ["Name", "Owners[Name='a,b'].Name", "Status.Name"], filter: ["Scope='Scope:0';AssetState!='Closed'"], sort: ["-ChangeDate", "Name"], findin: ["Name", "Description"], find: "logon", page: { size: 20, start: 40 }, needTotal: true, asof: "2026-01-01" });
+    expect(normalizeQuery({ from: "Story", sel: ["Name", { from: "Children", sel: "Name", where: ["AssetState!='Dead'"] }], where: ["A='1'", "B='2'"], page: { size: "5", start: 0 } }))
+      .toEqual({ from: "Story", select: ["Name", { from: "Children", select: ["Name"], filter: ["AssetState!='Dead'"] }], filter: ["A='1'", "B='2'"], page: { size: 5, start: 0 } });
+  });
+
+  it("a QueryBody comes back equal: a where object is a query's own where, and keys it does not know are kept", () => {
+    const q = { from: "Story", select: ["Name"], filter: ["Estimate>$n"], where: { Name: "x" }, with: { $n: 3 }, sort: ["Name"], page: { size: 1, start: 0 }, group: ["Status"] };
+    expect(normalizeQuery(q)).toEqual(q);
+  });
+
+  it("saying one thing twice, asking for deleted assets, a bad page or no from is a UsageError: nothing is guessed", () => {
+    expect(() => normalizeQuery({ from: "Story", sel: "Name", select: ["Name"] })).toThrow(/both `sel` and `select`/);
+    expect(() => normalizeQuery({ from: "Story", where: "A='1'", filter: ["B='2'"] })).toThrow(/both a textual `where` and `filter`/);
+    expect(() => normalizeQuery({ from: "Story", deleted: true })).toThrow(/client\.data\.list/);
+    expect(() => normalizeQuery({ from: "Story", page: "ten" })).toThrow(UsageError);
+    expect(() => normalizeQuery({ sel: "Name" } as never)).toThrow(UsageError);
+  });
+});

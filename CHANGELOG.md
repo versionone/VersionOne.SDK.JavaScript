@@ -1,5 +1,115 @@
 # Changelog
 
+## 1.0.0-alpha.7 — what a browser app consumer asked for
+
+One breaking change, to attachments; everything else is additive. Each
+entry says what a consumer changes, if anything.
+
+### Breaking
+
+- **An attachment is answered as a row of the Attachment type**, under
+  meta.v1's attribute names like every other row, plus `id`. It was the
+  one place the SDK had a vocabulary of its own. This holds for
+  `client.attachments.list`, `page`, `info`, `get` and `add`, and for
+  `AttachmentUploadError.attachment`. Migration, field by field:
+  - `oid` → `_oid`
+  - `id` → `id` (unchanged: the number attachment.img addresses)
+  - `name` → `Name`; `filename` → `Filename`; `description` →
+    `Description`; `createDate` → `CreateDate`
+  - `contentType` → `ContentType` (the recorded one)
+  - `createdBy` → `["CreatedBy.Name"]` (the select path, as selected)
+  - on `get`: `contentType` (the served type, falling back to the
+    recorded one) → `servedContentType ?? ContentType`;
+    `recordedContentType` → `ContentType`
+  `add`'s options (`filename`, `contentType`, `name`, `description`,
+  `inlineLimit`) are unchanged. The row type is closed (it does not
+  extend `Asset`): it has these keys and the ones a `select` named, so a
+  read the migration missed (`row.filename`) is a compile error rather
+  than `undefined`.
+
+### Added
+
+- **`client.attachments.list` / `page` take a `select`**: more to read
+  with each attachment, as a query's `select` on Attachment
+  (`Category.Name`, `Asset.Number`, a sub-select). Each row then carries
+  those keys too, as selected, translated like any row and typed by what
+  was selected. Migration: a second query for an attachment's other
+  attributes becomes `list(asset, { select })`.
+- **A one-request read for a small attachment**:
+  `client.attachments.get(id, { inline: true })` reads the metadata and
+  the bytes in one query.v1 request (the Attachment's `Content` comes
+  back as Base64 beside its row) where the default is two (the row, then
+  attachment.img). For small files: the response is a third larger than
+  the file and is held in memory whole. `servedContentType` is then
+  null. Migration: none; add `{ inline: true }` where a thumbnail
+  or a small text file is read.
+- **`normalizeQuery(query)`**: a query written with rest-1's spellings
+  becomes the `QueryBody` every read takes — `sel` → `select`, a textual
+  `where` → `filter`, comma-joined `select` / `sort` / `findin` → lists,
+  a `"size,start"` page → `{ size, start }`, sub-selects the same way. A
+  `QueryBody` comes back equal. Saying one thing twice (`sel` and
+  `select`) or asking for `deleted` is a `UsageError`. `QueryBody` itself
+  gains no alias. Migration: a consumer's own `sel`-to-`select` shim
+  becomes `client.query(normalizeQuery(q))`.
+- **`@versionone/agility-sdk/testing`** exports `FakeAgilityClient`: a
+  real `AgilityApiClient` over a transport that sends nothing. A test
+  scripts answers in the model's shape (`onQuery("Story", rows)`,
+  `onSend(outcome)`, `onRequest(path, answer)` for any other endpoint)
+  and asserts on what was asked (`asked`, `sent`, `requests`). A scripted
+  list is paged by the fake, a write answers OIDs without a script, and a
+  read nothing was scripted for throws a `UsageError` instead of reading
+  as empty. `resolve.numbers` finds a number among the scripted rows,
+  a query from a create's alias reads the created asset back, `localize`
+  echoes a tag `onLocalize` did not script, and `fake.transport` can
+  serve a client the code under test builds itself. It evaluates no
+  filter and applies no write. Migration: a
+  hand-written fake client or fake Transport in a consumer's tests can be
+  replaced by it; nothing requires that.
+- **`apiErrorFromResponse(status, data)`**: the `ApiError` the fetch
+  transport throws for a refused response, exported for a custom
+  `Transport` to throw, so message, `kind` and `details` are the same
+  whichever transport sent the request. Migration: a custom transport's
+  `new ApiError(text, status)` becomes `apiErrorFromResponse(status,
+  body)`.
+- **`@versionone/agility-sdk/wire`**: the wire modules (`assetApi`,
+  `queryV1`, `rest1`, `meta`, `loc2`, `attachment`, `fields`, `select`)
+  under their own import path. The root still exports them in this
+  alpha and stops in the next. Migration: `import { assetApi } from
+  "@versionone/agility-sdk"` → `from "@versionone/agility-sdk/wire"`.
+
+### Fixed
+
+- **`Outcome.requestId` after `assets.sendGuarded` and `batch.run`** is
+  the server's id when the batch went out in one request (the usual
+  case); it was always null. It stays null when the batch took several
+  sends. (a CLI consumer.) Migration: none.
+
+### Documented
+
+- `Page.more` is the pager's signal: with a total it is exact; when
+  `total` is null it is whether the page came back full, so a pager
+  offers "next" on `more`, never on `total`.
+- `kind: "usage"` (on `ApiError.kind`): the SDK refused the call before
+  sending anything — no request reached the server and `status` is 0.
+- `ClientConfig.baseUrl` with a custom `Transport`: the transport alone
+  decides where requests go; `baseUrl` is then used only for the links
+  the client builds (`client.urls.*`, `embeddedImages.normalize`), so
+  give it the instance's public URL.
+- **For authors of a custom `Transport`** (this should have been under
+  "Breaking" in alpha.5): a request with `acceptNotModified` must
+  resolve to `undefined` on a 304, after calling `onResponse` with the
+  304's status and headers, instead of rejecting. `client.meta.etag`,
+  `meta.read`, `meta.readType` and `schema.revalidate` send such
+  requests. And `retries` / `timeoutMs` configure the built-in fetch
+  transport only: a client given its own Transport resends nothing unless
+  that transport does.
+- `client.meta` answers the model's `Metamodel` / `AssetType`
+  (references as tokens), not meta.v1's own document; its doc said
+  "raw".
+- `client.query`'s doc said a resend needed `retries` raised from 0 and
+  that `details` was the whole error document; both changed in alpha.5
+  and the doc now says so.
+
 ## 1.0.0-alpha.6
 
 - The generated model is refreshed from meta.v1 26.3.2.13 (was

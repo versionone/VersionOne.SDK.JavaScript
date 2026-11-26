@@ -84,3 +84,30 @@ describe("typed queries", () => {
     expect(explicit.length + loose.length + typed.length + custom.length).toBeGreaterThan(0);
   });
 });
+
+describe("typed attachment listing", () => {
+  it("an attachment is a row under meta.v1's names; a select adds its keys to the row, typed by what was selected", async () => {
+    const plain = await client.attachments.list("Story:1");
+    expectTypeOf(plain[0]!).toEqualTypeOf<import("../../src/services/attachments").AttachmentInfo>();
+    expectTypeOf(plain[0]!.Filename).toEqualTypeOf<string | null>();
+    const more = await client.attachments.list("Story:1", { select: ["Category", "Days", "Asset.Number"] });
+    expectTypeOf(more[0]!.Name).toEqualTypeOf<string | null>();
+    expectTypeOf(more[0]!.Days).toEqualTypeOf<number | null | undefined>();
+    expectTypeOf(more[0]!["Asset.Number"]).toBeUnknown();
+    // @ts-expect-error IsDeleted was not selected
+    void more[0]!.IsDeleted;
+    // The row type is closed: a stale camelCase name, a misspelling and an unselected custom attribute are compile errors.
+    // @ts-expect-error the attribute is Filename
+    void plain[0]!.filename;
+    // @ts-expect-error the attribute is Filename
+    void plain[0]!.FileName;
+    // @ts-expect-error not selected
+    void plain[0]!.Custom_Anything;
+    const file = await client.attachments.get(5, { inline: true }).catch(() => null);
+    // @ts-expect-error get answers ContentType (recorded) and servedContentType
+    void file?.contentType;
+    expectTypeOf<NonNullable<typeof file>["servedContentType"]>().toEqualTypeOf<string | null>();
+    const paged = await client.attachments.page("Story:1", { select: ["Days"], page: { size: 1, start: 0 } });
+    expectTypeOf(paged.attachments[0]!.Days).toEqualTypeOf<number | null | undefined>();
+  });
+});

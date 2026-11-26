@@ -23,8 +23,9 @@ beforeAll(async () => {
   const installed = join(dir, "node_modules", "@versionone", "agility-sdk");
   // tsup reads entries as glob patterns, where "\\" is an escape: on Windows an
   // absolute path (D:\\source\\…) matches nothing. Forward slashes work everywhere.
-  const entry = join(root, "src", "index.ts").replace(/\\/g, "/");
-  await build({ config: false, entry: [entry], format: ["cjs"], outDir: join(installed, "dist"), target: "node18", dts: false, sourcemap: false, silent: true });
+  const entry = (...parts: string[]) => join(root, "src", ...parts).replace(/\\/g, "/");
+  // The package's own entries and splitting (tsup.config.ts): shared code in chunks, so the three import paths share one copy of every class.
+  await build({ config: false, entry: { index: entry("index.ts"), wire: entry("wire", "index.ts"), testing: entry("testing", "index.ts") }, format: ["cjs"], splitting: true, outDir: join(installed, "dist"), target: "node22", dts: false, sourcemap: false, silent: true });
   copyFileSync(join(root, "package.json"), join(installed, "package.json"));
 }, 30_000);
 afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }); });
@@ -53,6 +54,15 @@ const fetchImpl = async (url) => {
   assert.ok(err instanceof sdk.CommandFailureError && err instanceof sdk.ApiError && err instanceof Error);
   assert.equal(err.failures[0].index, 0);
   assert.equal(sdk.momentless("Story:1:99"), "Story:1");
+  // The other import paths resolve, and share the root's classes: one ApiError, one client.
+  const wire = require("@versionone/agility-sdk/wire");
+  const { FakeAgilityClient } = require("@versionone/agility-sdk/testing");
+  assert.equal(wire.assetApi.send, sdk.assetApi.send);
+  const fake = new FakeAgilityClient().onQuery("Story", [{ _oid: "Story:1", Name: "n" }]);
+  assert.ok(fake instanceof sdk.AgilityApiClient);
+  assert.deepEqual(await fake.query({ from: "Story", select: ["Name"], page: { size: 5, start: 0 } }), [{ _oid: "Story:1", Name: "n" }]);
+  const unscripted = await fake.query({ from: "Epic", page: { size: 1, start: 0 } }).catch((e) => e);
+  assert.ok(unscripted instanceof sdk.UsageError);
   process.stdout.write("ok " + seen.length);
 })().catch((e) => { process.stderr.write(String(e && e.stack || e)); process.exit(1); });
 `;
@@ -71,5 +81,8 @@ describe("CommonJS consumers", () => {
     const entry = pkg.exports["."]!;
     expect(entry.require).toEqual({ types: "./dist/index.d.cts", default: "./dist/index.cjs" });
     expect(entry.import).toEqual({ types: "./dist/index.d.ts", default: "./dist/index.js" });
+    for (const path of ["wire", "testing"]) {
+      expect(pkg.exports[`./${path}`]).toEqual({ import: { types: `./dist/${path}.d.ts`, default: `./dist/${path}.js` }, require: { types: `./dist/${path}.d.cts`, default: `./dist/${path}.cjs` } });
+    }
   });
 });

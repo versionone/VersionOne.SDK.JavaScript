@@ -108,5 +108,9 @@ describe("guard passes: two commands on one asset", () => {
     expect(sent[1]).toEqual([{ from: "Story", filter: ["ID=$oid", "ChangeDate='2026-11-07T12:00:00.5'"], with: { $oid: "Story:1" }, execute: { op: "Delete", args: {} } }]); // Story:2's Delete never sent
     expect(r.sent).toHaveLength(3);
     expect(r.outcome.operated).toEqual(["Story:1", "Story:1"]);
+    // Two sends: no one request id stands for the batch. One send keeps its own.
+    expect(r.outcome.requestId).toBeNull();
+    const once = await sendPasses(transport, [P("Story:1", { execute: { op: "Reactivate", args: {} } })], { "Story:1": "2026-11-07T11:00:00.1" });
+    expect(once.outcome.requestId).toBe("r");
   });
 });

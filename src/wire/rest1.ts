@@ -38,6 +38,7 @@ import { ApiError, UsageError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import { assetStateOf, type Asset, type Oid, type Ref } from "../types/asset";
 import { momentless } from "../types/oid";
+import type { QueryBody } from "./assetApi";
 
 export { momentless };
 
@@ -191,3 +192,78 @@ export const history = <Row extends Asset = Asset>(transport: Transport, target:
   const path = id ? `/rest-1.v1/Hist/${encodeURIComponent(type!)}/${encodeURIComponent(id)}` : `/rest-1.v1/Hist/${encodeURIComponent(type!)}`;
   return read<Row>(transport, path, params, true);
 };
+
+// ---- rest-1 spellings of a query -----------------------------------------------
+
+/**
+ * A query as someone who knows rest-1 writes it, or as a saved rest-1 URL's
+ * parameters read: `sel` for `select`, `where` as filter text, lists as
+ * comma-joined strings, `page` as "size,start". Anything a QueryBody
+ * already says is accepted unchanged.
+ */
+export interface LooseQuery {
+  from: string;
+  select?: string | (string | LooseQuery)[];
+  /** rest-1's spelling of `select`. */
+  sel?: string | (string | LooseQuery)[];
+  filter?: string | string[];
+  /** rest-1's spelling: filter text (one term, or a list of terms). An object is a query's own `where` (attribute → value) and stays one. */
+  where?: string | string[] | Record<string, string>;
+  sort?: string | string[];
+  findin?: string | string[];
+  /** `{ size, start }`, or rest-1's "size,start". */
+  page?: { size: number | string; start: number | string } | string;
+  [key: string]: unknown;
+}
+
+/** Split a comma-joined list outside brackets, parentheses and quotes: "Name,Owners[Name='a,b'].Name" is two entries. */
+function splitList(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0, quote: string | null = null, current = "";
+  for (const ch of text) {
+    if (quote) { current += ch; if (ch === quote) quote = null; continue; }
+    if (ch === "'" || ch === '"') quote = ch;
+    else if (ch === "[" || ch === "(") depth += 1;
+    else if (ch === "]" || ch === ")") depth -= 1;
+    else if (ch === "," && depth === 0) { parts.push(current); current = ""; continue; }
+    current += ch;
+  }
+  parts.push(current);
+  return parts.map((p) => p.trim()).filter(Boolean);
+}
+const listOf = (value: string | string[]): string[] => (typeof value === "string" ? splitList(value) : value);
+
+/**
+ * A query written with rest-1's spellings, as the QueryBody every read
+ * takes: `sel` becomes `select`, a textual `where` becomes `filter`,
+ * comma-joined `select` / `sort` / `findin` become lists, and a
+ * "size,start" page becomes `{ size, start }`; sub-selects are normalised
+ * the same way, and every other key is kept as written. A query that
+ * already is a QueryBody comes back equal. Nothing is sent. Saying one
+ * thing twice (`sel` and `select`, a textual `where` and `filter`) is a
+ * UsageError rather than a guess at which was meant, and so is `deleted`:
+ * a QueryBody cannot ask for deleted assets (`client.data.list` can).
+ */
+export function normalizeQuery(query: LooseQuery): QueryBody {
+  if (!query || typeof query !== "object" || typeof query.from !== "string" || !query.from) throw new UsageError("a query needs a `from`: an asset type token or an OID token");
+  const { sel, select, where, filter, sort, findin, page, ...rest } = query;
+  if (sel !== undefined && select !== undefined) throw new UsageError(`query of ${query.from} has both \`sel\` and \`select\`: write one (\`select\`)`);
+  if ("deleted" in rest) throw new UsageError(`query of ${query.from} asks for \`deleted\`: only rest-1 reads deleted assets — use client.data.list(type, { deleted: true, … })`);
+  const out: Record<string, unknown> = { ...rest };
+  const chosen = select ?? sel;
+  if (chosen !== undefined) out.select = listOf(chosen as string | string[]).map((entry: string | LooseQuery) => (typeof entry === "string" ? entry : normalizeQuery(entry)));
+  const textualWhere = typeof where === "string" || Array.isArray(where);
+  if (textualWhere && filter !== undefined) throw new UsageError(`query of ${query.from} has both a textual \`where\` and \`filter\`: write one (\`filter\`)`);
+  if (textualWhere) out.filter = typeof where === "string" ? [where] : where;
+  else if (where !== undefined) out.where = where;
+  if (filter !== undefined) out.filter = typeof filter === "string" ? [filter] : filter;
+  if (sort !== undefined) out.sort = listOf(sort);
+  if (findin !== undefined) out.findin = listOf(findin);
+  if (page !== undefined) {
+    const [size, start] = typeof page === "string" ? page.split(",").map((n) => Number(n.trim())) : [Number(page.size), Number(page.start)];
+    if (!Number.isInteger(size) || !Number.isInteger(start) || size! < 0 || start! < 0) throw new UsageError(`query of ${query.from}: page ${JSON.stringify(page)} is not { size, start } or "size,start"`);
+    out.page = { size, start };
+  }
+  for (const flag of ["needTotal"]) if (out[flag] === "true" || out[flag] === "false") out[flag] = out[flag] === "true";
+  return out as unknown as QueryBody;
+}
