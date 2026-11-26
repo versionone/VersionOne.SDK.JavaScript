@@ -51,22 +51,41 @@ export interface FetchTransportConfig {
    * the place to re-authenticate — open a login popup, re-run setup. Resolve
    * "retry" to send the request once more, "fail" to throw the error.
    *
-   * A retry is offered only for an idempotent request (every GET; a write the
-   * caller marked idempotent). A plain api/asset write is never resent
-   * automatically, even after a 401: the hook still runs, so the session
-   * can be repaired, and the caller decides whether to send again.
+   * "retry" is honoured only for an idempotent request (every GET; a write
+   * the caller marked idempotent). A plain api/asset write is never resent
+   * on it, even after a 401: the hook still runs, so the session can be
+   * repaired, and the caller decides whether to send again. "retry-write"
+   * resends a plain write too, once, on the hook's own assertion that the
+   * refusal means nothing ran (see UnauthorizedDecision).
    */
   onUnauthorized?: (context: UnauthorizedContext) => UnauthorizedDecision | Promise<UnauthorizedDecision>;
   /** Which statuses call onUnauthorized. Default [401]; a cookie-session app may add 403. */
   unauthorizedStatuses?: readonly number[];
 }
 
-export type UnauthorizedDecision = "retry" | "fail";
+/**
+ * What the hook decides after re-authenticating:
+ *   "fail"         throw the refusal.
+ *   "retry"        send the request once more if it is idempotent; a plain
+ *                  write is not resent and its refusal is thrown.
+ *   "retry-write"  send the request once more whatever it is, a plain
+ *                  write included. By answering this the hook ASSERTS that
+ *                  on its server a refusal with one of
+ *                  `unauthorizedStatuses` means nothing in the request was
+ *                  executed — the sign-in was checked before any command
+ *                  ran — so sending it again cannot apply anything twice.
+ *                  The SDK cannot know that and does not check it: its own
+ *                  tests run where every request is authenticated. Answer
+ *                  it only where that holds (a session that expired; not a
+ *                  permission problem, which api/asset reports per command
+ *                  inside a 200). Honoured once per request, like "retry".
+ */
+export type UnauthorizedDecision = "retry" | "retry-write" | "fail";
 
 export interface UnauthorizedContext {
   error: ApiError;
   request: RequestOptions;
-  /** Whether a "retry" will be honoured: false for a non-idempotent write. */
+  /** Whether a "retry" will be honoured: false for a non-idempotent write (which only "retry-write" resends). */
   retryable: boolean;
 }
 
@@ -220,7 +239,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           reauthorized = true;
           const decision = await config.onUnauthorized({ error: lastError as ApiError, request: options, retryable: idempotent });
           if (callerSignal?.aborted) throw abortedError(callerSignal);
-          if (decision === "retry" && idempotent) {
+          if ((decision === "retry" && idempotent) || decision === "retry-write") {
             // Not counted against `retries`: those are for failures to get an answer.
             attempt -= 1;
             continue;

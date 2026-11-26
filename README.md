@@ -64,6 +64,8 @@ npm test
 
 Every row follows one rule, whichever call read it: **a relation you select is a Ref (`{ _oid }`); a path you select by name is at `row[path]` (`row["Status.Name"]`); nothing arrives that you did not select.** Select both `Owners` and `Owners.Name` and you get the Refs and, beside them, a parallel array at `"Owners.Name"`. To get attributes on the related rows themselves, use a sub-select: `{ from: "Owners", select: ["Name"] }` gives `row.Owners[i].Name`. (rest-1 also puts the display attributes it sends unasked on the Refs of a relation you selected.)
 
+A row's identity is `_oid`: it is the key the server sends, underscored so it cannot collide with an attribute (the identity attribute is `ID`). Rows, Refs, resolved assets, attachments and the assets on a receipt all carry it; a record that only mentions an asset (a receipt's `described` entries, a `drifted` entry) says `oid`.
+
 Rows are typed from what you select, against the product's metamodel: a selected key is its value or `null`, never `undefined`. For an attribute your instance has and the generated model does not (a custom field's relation, a product module's attribute), name your own row type at the call: `client.query<MyRow>(q)` needs only `_oid` on `MyRow`.
 
 ### Reference

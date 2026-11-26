@@ -102,4 +102,27 @@ describe("onError and reauthorize", () => {
     expect(onUnauthorized).toHaveBeenCalledOnce();
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
+
+  it("a plain write refused as unauthorized is resent once only when the hook answers retry-write: not on retry, not for another status, never twice", async () => {
+    const run = async (statuses: number[], decision: "retry" | "retry-write" | "fail", options: { unauthorizedStatuses?: number[]; reauthorize?: boolean } = {}) => {
+      const answers = [...statuses];
+      const fetchImpl = vi.fn(async () => { const status = answers.shift() ?? 200; return new Response(status === 200 ? JSON.stringify({ ok: true }) : "Forbidden", { status, headers: { "content-type": status === 200 ? "application/json" : "text/plain" } }); });
+      const onUnauthorized = vi.fn(async () => decision);
+      const transport = createFetchTransport({ baseUrl: "https://x", retries: 3, fetchImpl: fetchImpl as unknown as typeof fetch, onUnauthorized, unauthorizedStatuses: options.unauthorizedStatuses ?? [401, 403] });
+      const result = await transport.request({ method: "POST", path: "/api/asset", body: [{ from: "Story:1", update: { Name: "x" } }], responseType: "json", reauthorize: options.reauthorize }).catch((e: unknown) => e);
+      return { result, sends: fetchImpl.mock.calls.length, hooks: onUnauthorized.mock.calls.length, retryable: (onUnauthorized.mock.calls as unknown as [{ retryable: boolean }][])[0]?.[0].retryable };
+    };
+    // The session had expired: the hook re-authenticated and vouches that the refusal ran nothing.
+    expect(await run([403], "retry-write")).toMatchObject({ result: { ok: true }, sends: 2, hooks: 1, retryable: false });
+    // "retry" keeps its meaning: a plain write is not resent.
+    expect(await run([403], "retry")).toMatchObject({ result: { kind: "forbidden" }, sends: 1, hooks: 1 });
+    expect(await run([403], "fail")).toMatchObject({ result: { kind: "forbidden" }, sends: 1, hooks: 1 });
+    // Only for a status the transport treats as "not signed in"; a 5xx on a write is never resent, whatever `retries` says.
+    expect(await run([403], "retry-write", { unauthorizedStatuses: [401] })).toMatchObject({ result: { kind: "forbidden" }, sends: 1, hooks: 0 });
+    expect(await run([502], "retry-write")).toMatchObject({ result: { kind: "transient" }, sends: 1, hooks: 0 });
+    // Never twice: a second refusal is final, and the hook is not asked again.
+    expect(await run([403, 403], "retry-write")).toMatchObject({ result: { kind: "forbidden" }, sends: 2, hooks: 1 });
+    // And a request sent with reauthorize: false never reaches the hook.
+    expect(await run([403], "retry-write", { reauthorize: false })).toMatchObject({ result: { kind: "forbidden" }, sends: 1, hooks: 0 });
+  });
 });

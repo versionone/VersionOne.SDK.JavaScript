@@ -219,7 +219,11 @@ function respond(script: Script, request: RequestOptions): unknown {
       const aliased = body !== (c as unknown);
       if (aliased || !("update" in body || "execute" in body)) return c;
       if (typeof body.from !== "string" || !isOidToken(body.from)) throw new UsageError(`FakeAgilityClient cannot preview command ${i}: it is scoped by a query (from ${String(body.from)}), and the fake evaluates no filter. Address the assets by OID, or script the preview with fake.onRequest((r) => r.query?.previewOnly === "true", projection)`);
-      return { [`@fake-${i}`]: { oid: momentless(body.from), ...("update" in body ? { update: body.update } : { execute: body.execute }) } } as unknown as Command;
+      // As the server projects them: a scalar becomes { add: ["value"], remove: [] }, an operation { op, args }.
+      const scalar = (v: unknown) => (v === null || typeof v !== "object" ? { add: v === null ? [] : [String(v)], remove: [] } : v);
+      const update = "update" in body ? Object.fromEntries(Object.entries(body.update as Record<string, unknown>).map(([k, v]) => [k, scalar(v)])) : undefined;
+      const execute = typeof body.execute === "string" ? { op: body.execute, args: {} } : body.execute;
+      return { [`@fake-${i}`]: { oid: momentless(body.from), ...(update ? { update } : { execute }) } } as unknown as Command;
     });
     const bodies = commands.map((c, index) => ({ body: bodyOf(c), index, alias: Object.keys(c).length === 1 && Object.keys(c)[0]!.startsWith("@") ? Object.keys(c)[0]! : null }));
     const writes = bodies.filter(({ body }) => !isQuery(body));
@@ -275,10 +279,18 @@ function toAssetDocument(row: FakeRow): Record<string, unknown> {
   const isRef = (v: unknown): v is { _oid: string } => !!v && typeof v === "object" && typeof (v as { _oid?: unknown })._oid === "string";
   const ref = (r: { _oid: string }) => ({ _type: "Asset", href: "", idref: r._oid });
   const Attributes: Record<string, unknown> = {};
+  // What a scripted Ref carries beyond its OID goes out as rest-1 sends a relation's display columns (`Owners.Name`, a
+  // parallel array for a multi-value relation), so the client folds it back onto the Ref, as it does live.
+  const columns = (name: string, refs: Record<string, unknown>[], many: boolean) => {
+    for (const key of new Set(refs.flatMap((r) => Object.keys(r).filter((k) => k !== "_oid")))) {
+      const path = `${name}.${key}`;
+      if (!(path in row)) Attributes[path] = { _type: "Attribute", name: path, value: many ? refs.map((r) => r[key] ?? null) : refs[0]![key] ?? null };
+    }
+  };
   for (const [name, value] of Object.entries(row)) {
     if (name === "_oid") continue;
-    if (isRef(value)) Attributes[name] = { _type: "Relation", name, value: ref(value) };
-    else if (Array.isArray(value) && value.length && value.every(isRef)) Attributes[name] = { _type: "Relation", name, value: value.map(ref) };
+    if (isRef(value)) { Attributes[name] = { _type: "Relation", name, value: ref(value) }; columns(name, [value as Record<string, unknown>], false); }
+    else if (Array.isArray(value) && value.length && value.every(isRef)) { Attributes[name] = { _type: "Relation", name, value: value.map(ref) }; columns(name, value as Record<string, unknown>[], true); }
     else Attributes[name] = { _type: "Attribute", name, value };
   }
   return { _type: "Asset", href: "", id: row._oid, Attributes };

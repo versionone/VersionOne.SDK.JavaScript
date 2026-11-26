@@ -33,16 +33,16 @@ export interface Explanation {
   /** One short sentence. English, with the instance's own labels for attributes and asset types. */
   sentence: string;
   /**
-   * Is `sentence` fit to show a person using the consumer's product? True
-   * when it was made for one: from a rule and the instance's labels, from
-   * the server's own localized sentence, or from the kind of error
-   * ("Agility could not be reached…"). False when it is only the message
-   * as it came — a token the instance has no words for
-   * (`Violation'AssetCannotInactivateClosed`), the server's raw text, or a
-   * message written for a developer (a usage error, a protocol error):
-   * log those, and show the user something of your own.
+   * Who the sentence is for. "user": it was made for a person using the
+   * consumer's product — from a rule and the instance's labels, from the
+   * server's own localized sentence, or from the kind of error — and can
+   * be shown as it is. "developer": it is a message about the call itself
+   * (a usage error, a rejected query, a protocol error) or the server's
+   * raw text; log it, and show the user something of your own.
    */
-  explained: boolean;
+  audience: "user" | "developer";
+  /** True when `sentence` is nothing more than the message as the server (or the SDK) sent it: nothing was explained. */
+  echoed: boolean;
   /** The failed command's index in the batch, when this explains one; null otherwise. */
   index: number | null;
   /** What was violated: Required, Invalid, Unresolved, Ambiguous, AssetCannotDeleteClosed, …; null when the message is not such a token. */
@@ -53,6 +53,10 @@ export interface Explanation {
   attributeLabel: string | null;
   /** The asset type as the instance labels it ("Backlog Item"); its token when the instance has no label. */
   typeLabel: string | null;
+  /** The related asset type a Resolution failure names ("Member": the value given matched none, or several, of these); null otherwise. */
+  relatedType: string | null;
+  /** That type as the instance labels it; its token when the instance has no label. */
+  relatedTypeLabel: string | null;
   /** The server's own sentence for the whole message, when loc-2 has one; null when it only echoes the token. */
   localized: string | null;
   /** The message as the server sent it. */
@@ -75,18 +79,28 @@ const typeTag = (type: string): string => `AssetType'${type}`;
 /** A token that looks like one loc-2 would know: no spaces, apostrophe-delimited. A plain sentence is not asked about. */
 const isTag = (message: string): boolean => /^[A-Za-z]\w*'[^\s]+$/.test(message.trim());
 
-function sentenceOf(problem: Problem, label: string | null, related: string | null, localized: string | null, message: string): { sentence: string; explained: boolean } {
+type Said = Pick<Explanation, "sentence" | "audience" | "echoed">;
+const forUser = (sentence: string): Said => ({ sentence, audience: "user", echoed: false });
+
+function sentenceOf(problem: Problem, label: string | null, related: string | null, localized: string | null, message: string): Said {
   if (label) {
     switch (problem.rule) {
-      case "Required": return { sentence: `${label} is required.`, explained: true };
-      case "Invalid": return { sentence: `${label} is not valid.`, explained: true };
-      case "Unresolved": return { sentence: `${label}: no ${related ?? "asset"} matches the value given.`, explained: true };
-      case "Ambiguous": return { sentence: `${label}: more than one ${related ?? "asset"} matches the value given.`, explained: true };
+      case "Required": return forUser(`${label} is required.`);
+      case "Invalid": return forUser(`${label} is not valid.`);
+      case "Unresolved": return forUser(`${label}: no ${related ?? "asset"} matches the value given.`);
+      case "Ambiguous": return forUser(`${label}: more than one ${related ?? "asset"} matches the value given.`);
     }
   }
-  // The server's own sentence where it has one; otherwise the message as it came, which explains nothing to a user.
-  return localized ? { sentence: localized, explained: true } : { sentence: message, explained: false };
+  // The server's own sentence where it has one.
+  if (localized) return forUser(localized);
+  // A rule the instance has no words for (seen live: Violation'AssetCannotInactivateClosed): never the bare token.
+  // What it means is in the rule's name, which a person can read; the token stays in `message` and `rule`.
+  if (problem.rule) return forUser(`Agility did not accept this change${label ? ` to ${label}` : ""} (${words(problem.rule)}).`);
+  // Anything else is the server's own text, as it came.
+  return { sentence: message, audience: "developer", echoed: true };
 }
+/** A rule's name as words: AssetCannotInactivateClosed → "asset cannot inactivate closed". */
+const words = (rule: string): string => rule.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
 
 /** The failures to explain, from whatever the caller holds: an Outcome, a list of failures, or a thrown error. */
 function failuresOf(input: unknown): CommandFailureDetail[] | null {
@@ -95,17 +109,17 @@ function failuresOf(input: unknown): CommandFailureDetail[] | null {
   return null;
 }
 
-/** A sentence for an error that is not a list of failed commands, by its kind, and whether it is one for a user. */
-function sentenceForError(error: unknown): { sentence: string; explained: boolean } {
-  if (!(error instanceof ApiError)) return { sentence: error instanceof Error ? error.message : String(error), explained: false };
+/** A sentence for an error that is not a list of failed commands, by its kind, and who it is for. */
+function sentenceForError(error: unknown): Said {
+  if (!(error instanceof ApiError)) return { sentence: error instanceof Error ? error.message : String(error), audience: "developer", echoed: true };
   switch (error.kind) {
-    case "auth": return { sentence: "Agility did not accept the sign-in: the token is missing, wrong or no longer valid.", explained: true };
-    case "forbidden": return { sentence: "Agility refused: this member is not allowed to do that.", explained: true };
-    case "transient": return { sentence: "Agility could not be reached, or is busy. The same request may work in a moment.", explained: true };
-    case "aborted": return { sentence: "The request was cancelled.", explained: true };
-    case "conflict": return { sentence: "Someone else changed this since it was read; nothing was applied. Look at it again and decide.", explained: true };
-    // notFound, invalid, usage, protocol and the rest: the message is the SDK's or the server's own, written for whoever made the call.
-    default: return { sentence: error.message, explained: false };
+    case "auth": return forUser("Agility did not accept the sign-in: the token is missing, wrong or no longer valid.");
+    case "forbidden": return forUser("Agility refused: this member is not allowed to do that.");
+    case "transient": return forUser("Agility could not be reached, or is busy. The same request may work in a moment.");
+    case "aborted": return forUser("The request was cancelled.");
+    case "conflict": return forUser("Someone else changed this since it was read; nothing was applied. Look at it again and decide.");
+    // notFound, invalid, usage, protocol and the rest: the message is the SDK's or the server's own, about the call.
+    default: return { sentence: error.message, audience: "developer", echoed: true };
   }
 }
 
@@ -118,7 +132,7 @@ function sentenceForError(error: unknown): { sentence: string; explained: boolea
  */
 export async function explain(transport: Transport, input: unknown, options: loc2.LocalizeOptions = {}): Promise<Explanation[]> {
   const failures = failuresOf(input);
-  if (!failures) return [{ ...sentenceForError(input), index: null, rule: null, attribute: null, attributeLabel: null, typeLabel: null, localized: null, message: input instanceof Error ? input.message : String(input) }];
+  if (!failures) return [{ ...sentenceForError(input), index: null, rule: null, attribute: null, attributeLabel: null, typeLabel: null, relatedType: null, relatedTypeLabel: null, localized: null, message: input instanceof Error ? input.message : String(input) }];
   const problems = failures.map((f) => problemOf(f.message));
   const tags = new Set<string>();
   failures.forEach((f, i) => {
@@ -140,6 +154,6 @@ export async function explain(transport: Transport, input: unknown, options: loc
     const typeLabel = type ? label(typeTag(type)) ?? type : null;
     const related = p.related ? label(typeTag(p.related)) ?? p.related : null;
     const localized = isTag(f.message) ? label(f.message.trim()) : null;
-    return { ...sentenceOf(p, attributeLabel, related, localized, f.message), index: f.index, rule: p.rule, attribute: p.attribute, attributeLabel, typeLabel, localized, message: f.message };
+    return { ...sentenceOf(p, attributeLabel, related, localized, f.message), index: f.index, rule: p.rule, attribute: p.attribute, attributeLabel, typeLabel, relatedType: p.related, relatedTypeLabel: related, localized, message: f.message };
   });
 }

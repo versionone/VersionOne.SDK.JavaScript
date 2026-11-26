@@ -48,6 +48,13 @@ pulled through) in a create, in an update, and in a query result alike.
 in `Attributes` and rendering `AssetState` as a number — is translated in
 that endpoint's wire module, once, on the way in and on the way out.
 
+A row's identity is `_oid`: the key the server sends for it, underscored
+so that it can never collide with an attribute (an asset's own identity
+attribute is `ID`). Every row has it, and so does anything that is a row
+or stands for one (a Ref, a resolved asset, an attachment, the assets on
+a receipt). A record that is not a row but mentions an asset — a
+described update, a drifted entry — says plain `oid`.
+
 One rule for a row, on every read path (query.v1, api/asset, rest-1):
 **a relation you select is a Ref; a path you select by name is at
 `row[path]`; nothing arrives that you did not select.** A sub-select is
@@ -211,7 +218,12 @@ Re-authentication follows the same rule. On a 401 (or a status the caller
 lists) the transport calls `onUnauthorized` once per request; "retry" resends
 an idempotent request one more time, outside the `retries` count. A plain
 write is never resent: the hook still runs, so the session can be repaired,
-and the caller decides. A request sent with `reauthorize: false` skips
+and the caller decides. There is one way round that, and it is the
+consumer's assertion, not the SDK's: a hook that answers "retry-write"
+has the refused request sent once more, a plain write included, on its
+own word that on its server such a refusal means nothing in the request
+was executed. The SDK cannot verify that premise (its tests run where
+every request is authenticated) and never assumes it. A request sent with `reauthorize: false` skips
 the hook: it is how a hook asks whether the session is alive without
 waiting on itself. A caller's abort (`signal`) ends the request as
 `ABORTED` and is never retried.

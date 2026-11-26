@@ -78,9 +78,7 @@ Each entry has the line a consumer follows to migrate.
   defaulted to true). Migration: `client.batch.run(commands)` →
   `client.batch.run(commands, { guard: true })`.
 - **Receipts are `receipt: 2`**: `skipped` → `conflicts`; new `stamps`,
-  `changedAt` and `stopped`; `described.updates[i]`,
-  `described.executes[i]` and `batch.reversible`'s `drifted[i]` name
-  their asset as `_oid` (was `oid`); and the assets a receipt names are rows,
+  `changedAt` and `stopped`; and the assets a receipt names are rows,
   like every other asset the SDK answers: in `created` and `touched`,
   `oid` → `_oid`, `type` → `AssetType`, `number` → `Number`, `name` →
   `Name` (`touched` gains `AssetType`); in `names[oid]`, `number` →
@@ -169,6 +167,15 @@ Each entry has the line a consumer follows to migrate.
   that finally failed, after any resend, with any Transport. It
   observes: the error is still thrown. For an app-wide toast or a log
   line, without a wrapper Transport.
+- **`onUnauthorized` may answer `"retry-write"`**: after
+  re-authenticating, send the refused request once more even when it is
+  a plain write. Opt-in, and the default is unchanged: a write is never
+  resent, and `"retry"` still resends idempotent requests only. By
+  answering it the hook asserts that on its server a refusal with one of
+  `unauthorizedStatuses` (an expired session) means nothing in the
+  request was executed. **The SDK does not and cannot check that**: its
+  tests run where every request is authenticated, so this premise is the
+  consumer's to hold, for its own server. Honoured once per request.
 - **`RequestOptions.reauthorize: false`**: a refusal of that request is
   answered straight away, without calling the transport's
   `onUnauthorized` hook. For the request a hook itself sends to ask
@@ -182,11 +189,14 @@ Each entry has the line a consumer follows to migrate.
   the attribute and the asset type, the parts it was made from (`rule`,
   `attribute`, `attributeLabel`, `typeLabel`), and the server's own
   `localized` sentence where it has one. `Resolution'…` failures are read
-  too. `explained` says whether the sentence is fit to show a user: false
-  when it is only the message as it came (a token the instance has no
-  words for, raw server text, a message for a developer), so a caller
-  can explain any error and show only what is explained. One loc-2 request at most. Migration: a consumer's own failure
-  patterns and three-tag loc-2 lookups can go.
+  too, with the related type they name (`relatedType`,
+  `relatedTypeLabel`). `audience` says who the sentence is for —
+  `"user"` when it was made for a person and can be shown, `"developer"`
+  when it is about the call itself or is the server's raw text — and
+  `echoed` is true when nothing was explained, so a caller can explain
+  any error and show only what is for a user. A rule the instance has no
+  words for is never answered as its bare token. Migration: a consumer's
+  own failure patterns and three-tag loc-2 lookups can go.
 - **`transportConformance(make)`** from `@versionone/agility-sdk/testing`:
   the SDK's expectations of a `Transport` as a list of named checks,
   runnable against a custom transport with any test runner (path inside
@@ -212,7 +222,9 @@ Each entry has the line a consumer follows to migrate.
   work on the fake for assets addressed by OID that a row was scripted
   for: it keeps a moment per asset, `fake.touch(oid)` is someone else
   changing it (a conflict for a write stamped earlier, drift for a
-  receipt's reverse) and `fake.remove(oid)` is it being deleted. (a
+  receipt's reverse) and `fake.remove(oid)` is it being deleted. Its
+  preview projects a scalar update as the server does (`{ add, remove
+  }`), and what a scripted Ref carries stays on it in a rest-1 list. (a
   chat-bot consumer and a CLI consumer, whose tests replay captured
   responses and fake a batch by hand.)
 - **`client.resolve.refs(specs)`**: numbers and OID tokens mixed, each

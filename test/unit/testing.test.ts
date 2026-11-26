@@ -150,6 +150,9 @@ describe("FakeAgilityClient", () => {
     expect(page.rows).toEqual([{ ...found[0], Owners: [{ _oid: "Member:20", Name: "Dana" }] }, found[1]]);
     expect(page).toMatchObject({ total: 3, more: true });
     expect((await fake.data.list("BaseAsset", { page: { size: 2, start: 2 }, needTotal: true })).rows).toEqual([found[2]]);
+    // What a scripted Ref carries stays on it, as rest-1's display columns do live, whether or not the dotted path was selected.
+    fake.onList("Story", [{ _oid: "Story:1", Status: { _oid: "StoryStatus:1", Name: "Dev" }, Owners: [{ _oid: "Member:1", Name: "a", Nickname: "A" }, { _oid: "Member:2", Name: "b", Nickname: "B" }] }]);
+    expect((await fake.data.list("Story", { select: ["Status", "Owners"], page: { size: 1, start: 0 } })).rows).toEqual([{ _oid: "Story:1", Status: { _oid: "StoryStatus:1", Name: "Dev" }, Owners: [{ _oid: "Member:1", Name: "a", Nickname: "A" }, { _oid: "Member:2", Name: "b", Nickname: "B" }] }]);
     expect(fake.requests[0]).toMatchObject({ method: "GET", path: "/rest-1.v1/Data/BaseAsset", query: { find: "logon", findin: "Name", page: "2,0" } });
     // A function sees the type and rest-1's own query string, and answers one page.
     fake.onList((type, q) => type === "Story" && q.deleted === "true", () => ({ rows: [{ _oid: "Story:7", Name: "gone" }], total: 12 }));
@@ -201,12 +204,15 @@ describe("FakeAgilityClient", () => {
     const receipt = await fake.batch.run([{ from: "Story:1", update: { Estimate: 8 } }, { from: "Story:2", update: { Estimate: 8 } }, { "@t": { AssetType: "Task", Name: "new", Parent: "Story:1" } }], { guard: true });
     expect(receipt).toMatchObject({ receipt: 2, sent: true, guarded: true, stopped: null, conflicts: [], failed: [], stamps: { "Story:1": "1", "Story:2": "1" }, after: { "Story:1": "2", "Story:2": "2", "Task:1000": "1" } });
     expect(receipt.before["Story:1"]).toMatchObject({ Estimate: 3, Moment: "1" });
+    // The projection is in the server's form: a scalar as { add, remove }, which is what a listing of the preview shows live.
+    expect(receipt.described.updates[0]).toEqual({ oid: "Story:1", attributes: { Estimate: { add: ["8"], remove: [] } } });
+    expect(await fake.preview([{ from: "Story:1", execute: "QuickClose" }])).toEqual([{ "@fake-0": { oid: "Story:1", execute: { op: "QuickClose", args: {} } } }]);
     expect(receipt.created).toMatchObject([{ alias: "@t", AssetType: "Task", _oid: "Task:1000" }]);
     expect(receipt.reverse.commands).toEqual([{ from: "Story:1", update: { Estimate: 3 } }, { from: "Story:2", update: { Estimate: 3 + 2 } }, { from: "Task:1000", execute: "Delete" }]);
     expect((await fake.batch.reversible(receipt)).drifted).toEqual([]);
     fake.touch("Story:2");
     const undo = await fake.batch.reversible(receipt);
-    expect(undo.drifted).toMatchObject([{ _oid: "Story:2", was: "2", now: "3" }]);
+    expect(undo.drifted).toMatchObject([{ oid: "Story:2", was: "2", now: "3" }]);
     expect(undo.commands).toEqual([{ from: "Story:1", update: { Estimate: 3 } }, { from: "Task:1000", execute: "Delete" }]);
     // A conflict at send time is on the receipt, and a dry run sends nothing.
     fake.onQuery("Epic", [{ _oid: "Epic:9", Name: "Nine" }]);
