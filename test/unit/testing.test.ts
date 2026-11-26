@@ -97,6 +97,41 @@ describe("FakeAgilityClient", () => {
     await expect(fake.data.get("Story:1")).rejects.toThrow(/no answer scripted for GET \/rest-1\.v1\/Data\/Story\/1/);
   });
 
+  it("a batch that creates and reads back through an alias answers the scripted row of that type under the created OID", async () => {
+    const fake = new FakeAgilityClient().onQuery("Story", [{ _oid: "Story:1", Number: "S-01001", Name: "template" }]);
+    const outcome = await fake.assets.send([{ "@story": { AssetType: "Story", Name: "new", Scope: "Scope:0" } }, { from: "@story", select: ["Number"], page: { size: 1, start: 0 } }]);
+    expect(outcome.created).toEqual(["Story:1000"]);
+    expect(outcome.queryResults).toEqual([[{ _oid: "Story:1000", Number: "S-01001", Name: "template" }]]);
+    await expect(new FakeAgilityClient().assets.send([{ "@e": { AssetType: "Epic", Name: "x" } }, { from: "@e", page: { size: 1, start: 0 } }])).rejects.toThrow(/query of @e \(the Epic the batch creates\).*onQuery\("Epic"/);
+  });
+
+  it("resolve finds a number among every scripted row, whatever its type, and reports the rest missing; the test names no number root", async () => {
+    const fake = new FakeAgilityClient()
+      .onQuery("Story", [{ _oid: "Story:1", Number: "S-01001", Name: "Logon", AssetState: "Active" }])
+      .onQuery("Defect", { rows: [{ _oid: "Defect:9", Number: "D-00009", Name: "Crash", AssetState: "Closed" }] });
+    expect(await fake.resolve.numbers(["d-00009", "S-01001", "S-99999"])).toEqual({
+      found: [{ number: "D-00009", oid: "Defect:9", type: "Defect", name: "Crash", assetState: "Closed" }, { number: "S-01001", oid: "Story:1", type: "Story", name: "Logon", assetState: "Active" }],
+      missing: ["S-99999"]
+    });
+    expect(await fake.resolve.ref("S-01001")).toMatchObject({ oid: "Story:1" });
+    expect(await new FakeAgilityClient().resolve.ref("S-1")).toBeNull();
+  });
+
+  it("localize answers scripted labels and echoes any other tag, as loc-2 does, over GET and POST alike", async () => {
+    const fake = new FakeAgilityClient().onLocalize({ Story: "Backlog Item" });
+    expect(await fake.localize(["Story", "Plural'Epic"])).toEqual({ Story: "Backlog Item", "Plural'Epic": "Plural'Epic" });
+    expect(await fake.localize(["Story", "Defect"], { maxGetLength: 0 })).toEqual({ Story: "Backlog Item", Defect: "Defect" });
+  });
+
+  it("fake.transport serves a client the code under test builds itself: it reads rows as scripted, with no asset type to script", async () => {
+    const fake = new FakeAgilityClient().onQuery("Member", [{ _oid: "Member:20", Name: "Dana", IsSelf: true }]);
+    const calls: string[] = [];
+    const wrapped = new AgilityApiClient({ baseUrl: "https://x" }, { transport: { request: (o) => { calls.push(o.path); return fake.transport.request(o); } } });
+    expect(await wrapped.query({ from: "Member", select: ["Name", "IsSelf"], page: { size: 1, start: 0 } })).toEqual([{ _oid: "Member:20", Name: "Dana", IsSelf: true }]);
+    expect(calls).toEqual(["/meta.v1/Member", "/query.v1"]);
+    expect(fake.asked).toHaveLength(1);
+  });
+
   it("an aborted signal ends a read as ABORTED, like the fetch transport", async () => {
     const controller = new AbortController();
     controller.abort();

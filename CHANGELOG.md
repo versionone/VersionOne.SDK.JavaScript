@@ -37,7 +37,11 @@ anything.
   and asserts on what was asked (`asked`, `sent`, `requests`). A scripted
   list is paged by the fake, a write answers OIDs without a script, and a
   read nothing was scripted for throws a `UsageError` instead of reading
-  as empty. It evaluates no filter and applies no write. Migration: a
+  as empty. `resolve.numbers` finds a number among the scripted rows,
+  a query from a create's alias reads the created asset back, `localize`
+  echoes a tag `onLocalize` did not script, and `fake.transport` can
+  serve a client the code under test builds itself. It evaluates no
+  filter and applies no write. Migration: a
   hand-written fake client or fake Transport in a consumer's tests can be
   replaced by it; nothing requires that.
 - **`apiErrorFromResponse(status, data)`**: the `ApiError` the fetch
@@ -51,6 +55,13 @@ anything.
   under their own import path. The root still exports them in this
   alpha and stops in the next. Migration: `import { assetApi } from
   "@versionone/agility-sdk"` → `from "@versionone/agility-sdk/wire"`.
+
+### Fixed
+
+- **`Outcome.requestId` after `assets.sendGuarded` and `batch.run`** is
+  the server's id when the batch went out in one request (the usual
+  case); it was always null. It stays null when the batch took several
+  sends. (a CLI consumer.) Migration: none.
 
 ### Documented
 

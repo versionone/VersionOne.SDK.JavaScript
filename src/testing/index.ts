@@ -15,7 +15,7 @@
  */
 import { AgilityApiClient } from "../client";
 import type { ClientConfig } from "../core/clientConfig";
-import { ApiError, UsageError } from "../core/errors";
+import { ApiError, UsageError, apiErrorFromResponse } from "../core/errors";
 import type { RequestOptions, Transport } from "../core/transport";
 import { Schema } from "../services/schema";
 import type { Asset, Oid } from "../types/asset";
@@ -53,16 +53,29 @@ interface Script {
   queries: { match: QueryMatch; answer: QueryAnswer }[];
   sends: SendAnswer[];
   requests: { match: RequestMatch; answer: RequestAnswer }[];
+  labels: Record<string, string>;
   seen: { requests: RequestOptions[]; asked: QueryBody[]; sent: Command[][] };
   nextId: number;
 }
 
 /** The scripted rows for one query, and the total a paged read would report. */
-function answerQuery(script: Script, q: QueryBody): { rows: Asset[]; total: number | null } {
-  script.seen.asked.push(q);
+const hitFor = (script: Script, q: QueryBody, type: string) =>
   // The answer scripted last wins, so a test can override what a shared setup scripted.
-  const hit = [...script.queries].reverse().find(({ match }) => (typeof match === "function" ? match(q) : match === q.from || match === typeOfFrom(q.from)));
-  if (!hit) throw new UsageError(`FakeAgilityClient: no answer scripted for a query of ${q.from}; script one with fake.onQuery("${typeOfFrom(q.from)}", rows)`);
+  [...script.queries].reverse().find(({ match }) => (typeof match === "function" ? match(q) : match === q.from || match === type));
+
+/** Every row scripted as a list, whatever its type: what a lookup by Number searches. */
+const scriptedRows = (script: Script): FakeRow[] =>
+  script.queries.flatMap(({ answer }) => (Array.isArray(answer) ? answer : answer && typeof answer === "object" && !(answer instanceof Error) && "rows" in answer ? [...(answer as { rows: readonly FakeRow[] }).rows] : []) as FakeRow[]);
+
+/** The resolver's question: one query per number root, each `Number=$numbers`. */
+const isNumberLookup = (q: QueryBody): boolean => q.filter?.length === 1 && q.filter[0] === "Number=$numbers" && Array.isArray(q.with?.$numbers);
+
+/** The scripted rows for one query, and the total a paged read would report. `created` is the asset an alias `from` ("@story") names: the create earlier in the same batch. */
+function answerQuery(script: Script, q: QueryBody, created?: { type: string; oid: Oid | undefined }): { rows: Asset[]; total: number | null } {
+  script.seen.asked.push(q);
+  const type = created?.type ?? typeOfFrom(q.from);
+  const hit = hitFor(script, q, type);
+  if (!hit) throw new UsageError(`FakeAgilityClient: no answer scripted for a query of ${q.from}${created ? ` (the ${type} the batch creates)` : ""}; script one with fake.onQuery("${type}", rows)`);
   if (hit.answer instanceof Error) throw hit.answer;
   if (typeof hit.answer === "function") {
     const answered = hit.answer(q);
@@ -73,6 +86,8 @@ function answerQuery(script: Script, q: QueryBody): { rows: Asset[]; total: numb
   // Rows scripted as a list are the whole result: a read by OID gets the row
   // with that OID, and a page gets its slice, so `get` and `pages` end as
   // they would against a server.
+  // A read-back of the batch's own create is the first scripted row of its type, under the OID the create answered.
+  if (created) return { rows: created.oid ? [{ ...(scripted[0] ?? {}), _oid: created.oid }] : [], total: created.oid ? 1 : 0 };
   const all = isOidToken(q.from) ? scripted.filter((row) => momentless(row._oid) === momentless(q.from)) : [...scripted];
   const page = q.page ?? { size: all.length, start: 0 };
   return { rows: all.slice(page.start, page.start + page.size), total: all.length };
@@ -100,15 +115,37 @@ function respond(script: Script, request: RequestOptions): unknown {
     if (raw.answer instanceof Error) throw raw.answer;
     return typeof raw.answer === "function" ? (raw.answer as (r: RequestOptions) => unknown)(request) : raw.answer;
   }
+  // A type nothing scripted is a type the fake's instance does not have: a client built on `fake.transport` then reads rows as scripted, like the fake itself.
+  if (request.method === "GET" && request.path.startsWith("/meta.v1/")) throw apiErrorFromResponse(404, { error: "Not Found", exceptions: [{ message: `FakeAgilityClient knows no asset type at ${request.path}` }] });
+  if (request.path.startsWith("/loc-2.v1")) {
+    // loc-2 answers a tag it does not know with the tag itself; so does the fake, for every tag onLocalize did not script.
+    const encoded = request.method === "GET" ? request.path.slice(request.path.indexOf("?") + 1) : String(request.body);
+    return Object.fromEntries((JSON.parse(decodeURIComponent(encoded)) as string[]).map((tag) => [tag, script.labels[tag] ?? tag]));
+  }
   if (request.method === "POST" && request.path === "/query.v1") return (request.body as QueryBody[]).map((q) => answerQuery(script, q).rows);
   if (request.method === "POST" && request.path === "/api/asset" && Array.isArray(request.body)) {
     const commands = request.body as Command[];
     // A preview answers the projection; the fake's is the batch as written.
     if (request.query?.previewOnly) return commands;
-    const bodies = commands.map((c, index) => ({ body: bodyOf(c), index }));
-    const answers = bodies.filter(({ body }) => isQuery(body)).map(({ body }) => answerQuery(script, body as QueryBody));
+    const bodies = commands.map((c, index) => ({ body: bodyOf(c), index, alias: Object.keys(c).length === 1 && Object.keys(c)[0]!.startsWith("@") ? Object.keys(c)[0]! : null }));
     const writes = bodies.filter(({ body }) => !isQuery(body));
     const done = writes.length ? answerSend(script, commands, writes) : { created: [], modified: [], operated: [], failures: [] };
+    // The i-th create made the i-th created OID; a query from its alias reads that asset back.
+    const creates = writes.filter(({ body }) => "AssetType" in body);
+    const createdBy = (from: string) => {
+      const i = creates.findIndex(({ alias }) => alias === from);
+      return i < 0 ? undefined : { type: String((creates[i]!.body as { AssetType: unknown }).AssetType), oid: done.created[i] };
+    };
+    const asked = bodies.filter(({ body }) => isQuery(body)).map(({ body }) => body as QueryBody);
+    let answers: { rows: Asset[]; total: number | null }[];
+    if (asked.length && asked.every(isNumberLookup) && !asked.some((q) => hitFor(script, q, q.from))) {
+      // resolve.numbers asks every number root at once; which roots is the SDK's business, so the fake answers
+      // from every row a test scripted, by Number, whatever its type. A number no row has is simply not found.
+      const wanted = new Set((asked[0]!.with!.$numbers as string[]).map((n) => n.toUpperCase()));
+      const found = scriptedRows(script).filter((row) => typeof row.Number === "string" && wanted.has(row.Number.toUpperCase()));
+      script.seen.asked.push(...asked);
+      answers = asked.map((_, i) => ({ rows: i === 0 ? found : [], total: i === 0 ? found.length : 0 }));
+    } else answers = asked.map((q) => answerQuery(script, q, q.from.startsWith("@") ? createdBy(q.from) : undefined));
     const tokens = (oidTokens: Oid[]) => ({ oidTokens, count: oidTokens.length });
     return {
       requestId: `fake-${script.seen.requests.length}`, createdDate: "", completedDate: "", duration: "", durationSeconds: 0, complete: true, processing: false,
@@ -146,9 +183,18 @@ function respond(script: Script, request: RequestOptions): unknown {
  *   (`Story:1000`, `Story:1001`, …), each update or operation addressed by
  *   OID answers that OID. `onSend` scripts anything else (failures by
  *   index, a create's OID).
+ * - A query from an alias of a create in the same batch (`from: "@story"`)
+ *   answers the first row scripted for the created type, under the OID the
+ *   create answered. `resolve.numbers` and `resolve.ref` find a number
+ *   among every row scripted as a list, by its `Number`; one no row has is
+ *   `missing`. `localize` answers each tag with its `onLocalize` label, or
+ *   with the tag itself.
+ * - `fake.transport` can be the Transport of another client (one your code
+ *   builds and wraps): it reads rows as scripted too, because the fake
+ *   answers every meta.v1 type read with 404, "no such type".
  * - `onRequest(match, answer)` answers any other request by path, in the
  *   endpoint's own shape (rest-1 behind `client.data`, attachment bytes,
- *   meta.v1, loc-2), and wins over the two above. Guarded sends and
+ *   meta.v1), and wins over everything above. Guarded sends and
  *   `batch.run` are not scripted by the fake: their request sequence is
  *   internal to the SDK and changes between alphas, so fake the function
  *   of yours that calls them.
@@ -166,7 +212,7 @@ export class FakeAgilityClient extends AgilityApiClient {
   private readonly script: Script;
 
   constructor(config: Partial<ClientConfig> = {}) {
-    const script: Script = { queries: [], sends: [], requests: [], seen: { requests: [], asked: [], sent: [] }, nextId: 1000 };
+    const script: Script = { queries: [], sends: [], requests: [], labels: {}, seen: { requests: [], asked: [], sent: [] }, nextId: 1000 };
     const transport: Transport = {
       // Answers are computed synchronously and delivered as a real response would be: later, and a throw as a rejection.
       request: async <T>(request: RequestOptions): Promise<T> => {
@@ -195,6 +241,12 @@ export class FakeAgilityClient extends AgilityApiClient {
   /** Script what writes answer from here on: an outcome, a function of the batch, or an Error to throw. */
   onSend(answer: SendAnswer): this {
     this.script.sends.push(answer);
+    return this;
+  }
+
+  /** Script labels for `client.localize`: tag → label. A tag nothing scripted answers itself, as loc-2 answers a tag it does not know. */
+  onLocalize(labels: Record<string, string>): this {
+    Object.assign(this.script.labels, labels);
     return this;
   }
 

@@ -185,6 +185,7 @@ export async function sendPasses<Row extends Asset = Asset>(transport: Transport
   const passes = passesOf(projected);
   const outcome = assetApi.emptyOutcome<Row>();
   const sent: Command[] = [], unstamped: Oid[] = [];
+  const requestIds: (string | null)[] = [];
   let applied = new Set<Oid>();
   for (const [k, pass] of passes.entries()) {
     let current: { commands: Command[]; unstamped: Oid[] };
@@ -209,8 +210,11 @@ export async function sendPasses<Row extends Asset = Asset>(transport: Transport
     }
     sent.push(...commands);
     assetApi.mergeOutcome(outcome, done, offset);
+    requestIds.push(done.requestId);
     applied = new Set([...done.modified, ...done.operated].map(momentless));
   }
+  // One send (the usual case) has one request id, and it is the outcome's; several sends have none that is "the" request.
+  if (requestIds.length === 1) outcome.requestId = requestIds[0]!;
   return { outcome, sent, unstamped: [...new Set(unstamped)] };
 }
 
