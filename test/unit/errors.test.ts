@@ -41,7 +41,7 @@ describe("error kinds", () => {
     expect(e).toBeInstanceOf(ApiError);
     expect(e.kind).toBe("usage");
     expect(e.status).toBe(0);
-    expect(new UnguardableError([{ index: 0, reason: "r" }])).toBeInstanceOf(UsageError);
+    expect(new UnguardableError([{ index: 0, code: "aliasedWrite", reason: "r" }])).toBeInstanceOf(UsageError);
   });
 
   it("an error wrapped around another keeps the cause's kind and status, so the service errors still branch", () => {

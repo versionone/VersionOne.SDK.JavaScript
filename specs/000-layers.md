@@ -212,24 +212,36 @@ answer (thrown for reads and with throwOnFailure); a disagreement with no
 such failure is an error of its own.
 
 The guard (`services/guard`) is what makes a write batch safe to resend:
-each per-asset command of the server's projection is sent scoped to its
-ID and the ChangeDate read just before, so a stale or repeated command
-matches nothing. ChangeDate goes in the filter as a literal — the one
-exception to "values travel as `with` variables", because a ChangeDate
-variable never compares equal — after a strict timestamp check. Moment is
-not a stamp: a filter on an earlier Moment selects the asset as it was then.
-A guarded batch with no creates is sent idempotent; a plain one never is.
-Two commands on one asset are sent in passes: the second goes only if the
-first applied, guarded on the ChangeDate read just after it (a shared
-pre-batch stamp would make the second match nothing). A reverse batch
-reactivates a closed asset before deleting it, since Agility refuses to
-delete a closed asset.
+each per-asset command of the server's projection is sent scoped to the
+asset at the Moment read just before (`where { ID, Moment }`) and to that
+version still being the current one (`filter RetireDateUTC=''`), so a stale
+or repeated command matches nothing. The two terms always travel together:
+a Moment alone selects the asset as it was then, and a write scoped by it
+lands on the current asset; the filter alone is a server error. Both values
+are `with` variables, like every value. A command that matched lists its
+asset in the response even when it changed no value, so an asset the
+response does not list, and that no failure names, matched nothing: a
+**conflict** (`conflicts`, or a `ConflictError` with `throwOnFailure`),
+never a success and never confused with a no-op. A caller may supply the
+moment it read earlier, with the row a person is looking at; the guard then
+compares against what they saw. What the guard cannot see is a change that
+makes no new version of the asset (a child added to it): it protects an
+asset's own attributes. A guarded batch with no creates is sent
+idempotent; a plain one never is. Two commands on one asset are sent in
+passes: the second goes only if the first applied, guarded on the Moment
+read just after it (the response does not say the new moment, and a shared
+pre-batch stamp would make the second match nothing). `batch.run` takes
+`guard: true | false` with no default: which one a batch wants is the
+caller's decision. A receipt records Moments (`receipt: 2`); one from
+before that cannot be checked for drift and is refused unless forced. A
+reverse batch reactivates a closed asset before deleting it, since Agility
+refuses to delete a closed asset.
 
 ## 7. One error, one kind
 
 Everything the SDK throws is an `ApiError` (`src/core/errors.ts`), and
 every `ApiError` has a `kind`: `auth`, `forbidden`, `notFound`, `invalid`,
-`transient`, `aborted`, `commandFailure`, `protocol`, `usage` or
+`transient`, `aborted`, `commandFailure`, `conflict`, `protocol`, `usage` or
 `unknown`. `status` and `code` say what happened; `kind` says what to do.
 A mistake the SDK catches before any request (an unpaged read, an empty
 batch, a bad OID token) is a `UsageError` (`kind: "usage"`, `status: 0`),

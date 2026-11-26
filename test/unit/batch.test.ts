@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe as group, expect, it, vi } from "vitest";
 import type { RequestOptions, Transport } from "../../src/core/transport";
-import { BatchRecordError, BatchSendError, describe, reverseOf, reversible, runBatch, type Receipt } from "../../src/services/batch";
+import { UsageError } from "../../src/core/errors";
+import { BatchRecordError, BatchSendError, ReceiptVersionError, describe, isReceipt, reverseOf, reversible, runBatch, type Receipt } from "../../src/services/batch";
 import { UnguardableError } from "../../src/services/guard";
 import { Schema } from "../../src/services/schema";
 import { toMetamodel, type MetamodelDocument } from "../../src/wire/meta";
@@ -43,15 +44,17 @@ const PREVIEW = [
   { "@x": { oid: "Epic:9", execute: { op: "Inactivate", args: {} } } }
 ] as unknown as Command[];
 const BEFORE: Record<string, Record<string, unknown>> = {
-  "Story:1": { _oid: "Story:1:100", Estimate: "3", Owners: [], ChangeDate: "2026-11-04T16:00:00.1" },
-  "Story:2": { _oid: "Story:2", Estimate: null, Owners: [{ _oid: "Member:20" }], ChangeDate: "2026-11-04T16:00:00.2" },
-  "Epic:9": { _oid: "Epic:9", AssetState: "Active", ChangeDate: "2026-11-04T16:00:00.3" }
+  "Story:1": { _oid: "Story:1:100", Estimate: "3", Owners: [], Moment: "100", ChangeDate: "2026-11-04T16:00:00.1" },
+  "Story:2": { _oid: "Story:2", Estimate: null, Owners: [{ _oid: "Member:20" }], Moment: "200", ChangeDate: "2026-11-04T16:00:00.2" },
+  "Epic:9": { _oid: "Epic:9", AssetState: "Active", Moment: "300", ChangeDate: "2026-11-04T16:00:00.3" }
 };
 const NAMES: Record<string, { Name: string; Number: string }> = { "Story:1": { Name: "One", Number: "S-1" }, "Story:2": { Name: "Two", Number: "S-2" }, "Epic:9": { Name: "Nine", Number: "E-9" }, "Task:50": { Name: "new task", Number: "TK-50" } };
-const AFTER: Record<string, string> = { "Task:50": "2026-11-04T17:00:00.5", "Story:1": "2026-11-04T17:00:00.1", "Epic:9": "2026-11-04T17:00:00.3" };
+const AFTER: Record<string, string> = { "Task:50": "505", "Story:1": "101", "Epic:9": "303" };
+const AFTER_AT: Record<string, string> = { "Task:50": "2026-11-04T17:00:00.5", "Story:1": "2026-11-04T17:00:00.1", "Epic:9": "2026-11-04T17:00:00.3" };
+/** The read just after a send: each asset's Moment (the stamp) and ChangeDate (the same instant, readable). */
+const isVersionRead = (q: Q): boolean => q.select!.length === 2 && q.select![0] === "Moment" && q.select![1] === "ChangeDate";
 const lookup = (q: Q) => q.with!.$oids!.map((oid) => {
-  if (q.select!.includes("Moment")) throw new Error("no Moment reads");
-  if (q.select!.length === 1 && q.select![0] === "ChangeDate") return { _oid: oid, ChangeDate: AFTER[oid] };
+  if (isVersionRead(q)) return { _oid: oid, Moment: AFTER[oid], ChangeDate: AFTER_AT[oid] };
   if (q.select!.includes("Name") || q.select!.includes("Number")) return { _oid: oid, ...Object.fromEntries(q.select!.map((a) => [a, NAMES[oid]?.[a as "Name"]])) };
   return BEFORE[oid];
 });
@@ -64,21 +67,25 @@ group("batch", () => {
     expect(d.executes).toEqual([{ oid: "Epic:9", op: "Inactivate", args: {} }]);
   });
 
-  it("runBatch: preview, name, snapshot, send guarded on the snapshot's ChangeDates, then a receipt — created with alias and number, touched, skipped, after-stamps, reverse", async () => {
+  it("runBatch: preview, name, snapshot, send guarded on the snapshot's Moments, then a receipt — created with alias and number, touched, conflicts, after-stamps, reverse", async () => {
     let sent: Command[] = [];
     // Story:2 changed after the snapshot: its guarded update matches nothing.
     const t = server({ preview: PREVIEW, lookup, send: (b) => { sent = b; return envelope({ assetsCreated: { oidTokens: ["Task:50"], count: 1 }, assetsModified: { oidTokens: ["Story:1:101"], count: 1 }, assetsOperatedOn: { oidTokens: ["Epic:9"], count: 1 } }); } });
     const confirm = vi.fn((_r: Receipt) => true);
-    const r = await runBatch(t, schema, REQUEST, { confirm });
+    const r = await runBatch(t, schema, REQUEST, { guard: true, confirm });
     expect(confirm).toHaveBeenCalledOnce();
-    expect(confirm.mock.calls[0]![0]!.before["Story:1"]).toEqual({ Estimate: "3", Owners: [], ChangeDate: "2026-11-04T16:00:00.1" });
-    expect(sent[1]).toEqual({ from: "Story", filter: ["ID=$oid", "ChangeDate='2026-11-04T16:00:00.1'"], with: { $oid: "Story:1" }, update: { Estimate: { add: ["5"], remove: [] }, Owners: { add: ["Member:20"], remove: [] } } });
+    expect(confirm.mock.calls[0]![0]!.before["Story:1"]).toEqual({ Estimate: "3", Owners: [], Moment: "100", ChangeDate: "2026-11-04T16:00:00.1" });
+    expect(sent[1]).toEqual({ from: "Story", where: { ID: "$oid", Moment: "$moment" }, filter: ["RetireDateUTC=''"], with: { $oid: "Story:1", $moment: "100" }, update: { Estimate: { add: ["5"], remove: [] }, Owners: { add: ["Member:20"], remove: [] } } });
     expect(t.calls.at(-3)!.idempotent).toBe(false); // the batch creates: never resent
     expect(r.sent && r.guarded).toBe(true);
     expect(r.created).toEqual([{ alias: "@t", type: "Task", oid: "Task:50", number: "TK-50", name: "new task" }]);
     expect(r.touched).toEqual([{ oid: "Story:1", number: "S-1", name: "One" }, { oid: "Epic:9", number: "E-9", name: "Nine" }]);
-    expect(r.skipped).toEqual(["Story:2"]);
+    expect(r.conflicts).toEqual(["Story:2"]);
+    expect(r).toMatchObject({ receipt: 2, stopped: null, stamps: { "Story:1": "100", "Story:2": "200", "Epic:9": "300" } });
     expect(r.after).toEqual(AFTER);
+    expect(r.changedAt).toEqual(AFTER_AT);
+    expect(isReceipt(JSON.parse(JSON.stringify(r)))).toBe(true);
+    expect(isReceipt({ receipt: 1, reverse: { commands: [], notes: [] } })).toBe(false);
     expect(r.reverse.commands).toEqual([
       { from: "Story:1", update: { Estimate: "3", Owners: { add: [], remove: ["Member:20"] } } },
       { from: "Epic:9", execute: "Reactivate" },
@@ -97,16 +104,16 @@ group("batch", () => {
     expect(r.notes.slice(1)).toEqual(["Epic:9: Split has no known inverse (was Active)"]);
   });
 
-  it("an asset whose command failed is failed, not also skipped as changed since the snapshot (a CLI consumer finding)", async () => {
+  it("an asset whose command failed is failed, not also a conflict (a CLI consumer finding)", async () => {
     const preview = [{ "@x": { oid: "Conversation:12", execute: { op: "Delete", args: {} } } }, { "@y": { oid: "Epic:9", execute: { op: "Inactivate", args: {} } } }] as unknown as Command[];
     const t = server({
       preview,
-      lookup: (q) => q.with!.$oids!.map((oid) => (q.select!.includes("Name") ? { _oid: oid } : q.select!.includes("Children") ? { _oid: oid, Children: [] } : { _oid: oid, AssetState: "Active", ChangeDate: "2026-11-11T09:00:00.1" })),
+      lookup: (q) => q.with!.$oids!.map((oid) => (q.select!.includes("Name") ? { _oid: oid } : q.select!.includes("Children") ? { _oid: oid, Children: [] } : { _oid: oid, AssetState: "Active", Moment: "7", ChangeDate: "2026-11-11T09:00:00.1" })),
       send: () => envelope({ assetsOperatedOn: { oidTokens: [], count: 0 }, commandFailures: { commands: [{ error: { sourceCommandIndex: 0, message: "Unknown Operation 'Conversation.Delete'" } }], count: 1 } })
     });
-    const r = await runBatch(t, schema, [{ from: "Conversation:12", execute: "Delete" }, { from: "Epic:9", execute: "Inactivate" }]);
+    const r = await runBatch(t, schema, [{ from: "Conversation:12", execute: "Delete" }, { from: "Epic:9", execute: "Inactivate" }], { guard: true });
     expect(r.failed).toEqual(["Conversation:12"]);
-    expect(r.skipped).toEqual(["Epic:9"]); // matched nothing: changed since the snapshot
+    expect(r.conflicts).toEqual(["Epic:9"]); // matched nothing: changed since the snapshot
   });
 
   it("reverseOf leaves out an operation the type does not have, by meta's Operations, and says so: a created Conversation is not deleted (a CLI consumer finding)", () => {
@@ -145,13 +152,13 @@ group("batch", () => {
         const sel = q.select!;
         if (sel.length === 1 && sel[0] === "Children") return { _oid: oid, Children: children[oid]!.map((c) => ({ _oid: c })) };
         if (sel.length === 1 && sel[0] === "AssetState") return { _oid: oid, AssetState: state[oid] };
-        if (sel.length === 1 && sel[0] === "ChangeDate") return { _oid: oid, ChangeDate: `2026-11-11T10:00:00.${oid.length}` };
+        if (isVersionRead(q)) return { _oid: oid, Moment: `9${oid.length}`, ChangeDate: `2026-11-11T10:00:00.${oid.length}` };
         if (sel.includes("Name")) return { _oid: oid, Name: oid, Number: oid };
-        return { _oid: oid, AssetState: state[oid], ChangeDate: "2026-11-11T09:00:00.1" };
+        return { _oid: oid, AssetState: state[oid], Moment: "8", ChangeDate: "2026-11-11T09:00:00.1" };
       }),
       send: () => { state = { ...state, "Epic:9": "Closed", "Story:1": "Closed", "Task:5": "Closed" }; return envelope({ assetsOperatedOn: { oidTokens: ["Epic:9"], count: 1 } }); }
     });
-    const r = await runBatch(t, schema, [{ from: "Epic:9", execute: "Inactivate" }]);
+    const r = await runBatch(t, schema, [{ from: "Epic:9", execute: "Inactivate" }], { guard: true });
     expect(r.openDescendants).toEqual({ "Epic:9": ["Story:1", "Task:5"] }); // Task:6 was closed already: not the cascade's
     expect(r.cascaded).toEqual({ "Epic:9": ["Story:1", "Task:5"] });
     expect(Object.keys(r.after).sort()).toEqual(["Epic:9", "Story:1", "Task:5"]); // so a later reverse can check them for drift
@@ -162,16 +169,21 @@ group("batch", () => {
     ]);
     // A preview records the open descendants too, and sends nothing.
     state = { "Epic:9": "Active", "Story:1": "Active", "Task:5": "Active", "Task:6": "Closed" };
-    expect((await runBatch(t, schema, [{ from: "Epic:9", execute: "Inactivate" }], { dryRun: true })).openDescendants).toEqual({ "Epic:9": ["Story:1", "Task:5"] });
+    expect((await runBatch(t, schema, [{ from: "Epic:9", execute: "Inactivate" }], { guard: true, dryRun: true })).openDescendants).toEqual({ "Epic:9": ["Story:1", "Task:5"] });
   });
 
-  it("dryRun and a declined confirm send nothing; an unguardable batch is refused before any request unless guard is off", async () => {
+  it("dryRun and a declined confirm send nothing and say which; `guard` has no default; an unguardable batch is refused before any request unless guard is off", async () => {
     const t = server({ preview: PREVIEW, lookup, send: () => { throw new Error("must not send"); } });
-    expect((await runBatch(t, schema, REQUEST, { dryRun: true })).sent).toBe(false);
-    expect((await runBatch(t, schema, REQUEST, { confirm: () => false })).sent).toBe(false);
+    expect(await runBatch(t, schema, REQUEST, { guard: true, dryRun: true })).toMatchObject({ sent: false, stopped: "dryRun" });
+    expect(await runBatch(t, schema, REQUEST, { guard: true, confirm: () => false })).toMatchObject({ sent: false, stopped: "declined" });
+    expect(await runBatch(server({ preview: [], lookup, send: () => envelope() }), schema, [{ from: "Story", filter: ["Number='S-0'"], update: { Estimate: 1 } }], { guard: true })).toMatchObject({ sent: false, stopped: "nothing" });
+    const unasked = server({ preview: [], lookup, send: () => envelope() });
+    await expect(runBatch(unasked, schema, REQUEST, {} as never)).rejects.toThrow(/guard: true.*guard: false.*no default/);
+    await expect(runBatch(unasked, schema, REQUEST, undefined as never)).rejects.toBeInstanceOf(UsageError);
+    expect(unasked.calls).toHaveLength(0);
     const aliasedUpdate: Command[] = [{ "@u": { from: "Story:1", update: { Name: "x" } } }];
     const none = server({ preview: [], lookup, send: () => envelope() });
-    await expect(runBatch(none, schema, aliasedUpdate)).rejects.toBeInstanceOf(UnguardableError);
+    await expect(runBatch(none, schema, aliasedUpdate, { guard: true })).rejects.toBeInstanceOf(UnguardableError);
     expect(none.calls).toHaveLength(0);
     expect((await runBatch(none, schema, aliasedUpdate, { guard: false })).guarded).toBe(false);
     await expect(runBatch(none, schema, [{ from: "@s", execute: "Delete" }], { guard: false })).rejects.toThrow(/rejected by the server/);
@@ -179,7 +191,7 @@ group("batch", () => {
 
   it("a send that fails outright throws BatchSendError carrying the receipt up to the attempt", async () => {
     const t = server({ preview: PREVIEW, lookup, send: () => { throw new Error("socket hang up"); } });
-    const e = (await runBatch(t, schema, REQUEST).catch((x: unknown) => x)) as BatchSendError;
+    const e = (await runBatch(t, schema, REQUEST, { guard: true }).catch((x: unknown) => x)) as BatchSendError;
     expect(e).toBeInstanceOf(BatchSendError);
     expect(e.receipt.sentCommands).toHaveLength(4);
     expect(e.receipt.before["Epic:9"]).toBeDefined();
@@ -190,13 +202,15 @@ group("batch", () => {
     // the CLI consumer's `apply` hit this: preview echoes aliased writes unexpanded, so nothing reads as per-asset work.
     const close: Command[] = [{ "@close": { from: "Story:20", execute: "QuickClose" } }];
     let sent: Command[] | undefined;
-    const t = server({ preview: close, lookup: (q) => q.with!.$oids!.map((oid) => (q.select!.includes("Name") ? { _oid: oid, Name: "Twenty", Number: "S-20" } : { _oid: oid, ChangeDate: "2026-11-06T10:00:00.1" })), send: (body) => { sent = body; return envelope({ assetsOperatedOn: { oidTokens: ["Story:20:900"], count: 1 } }); } });
+    const t = server({ preview: close, lookup: (q) => q.with!.$oids!.map((oid) => (q.select!.includes("Name") ? { _oid: oid, Name: "Twenty", Number: "S-20" } : { _oid: oid, Moment: "900", ChangeDate: "2026-11-06T10:00:00.1" })), send: (body) => { sent = body; return envelope({ assetsOperatedOn: { oidTokens: ["Story:20:900"], count: 1 } }); } });
     const r = await runBatch(t, schema, close, { guard: false });
     expect(sent).toEqual(close);
     expect(r.sent).toBe(true);
     expect(r.described.deferred).toEqual([{ index: 0, alias: "@close", from: "Story:20", kind: "execute" }]);
     expect(r.touched).toEqual([{ oid: "Story:20", number: "S-20", name: "Twenty" }]); // named after the send: preview never listed it
-    expect(r.after).toEqual({ "Story:20": "2026-11-06T10:00:00.1" });
+    expect(r.after).toEqual({ "Story:20": "900" });
+    expect(r.changedAt).toEqual({ "Story:20": "2026-11-06T10:00:00.1" });
+    expect(r.conflicts).toEqual([]); // not guarded: nothing is compared, so nothing conflicts
     expect(r.notes.join("\n")).toMatch(/@close.*aliased execute.*not reversible/);
     expect(r.reverse.commands).toEqual([]);
     expect(r.reverse.notes.join("\n")).toMatch(/@close.*not reversed/);
@@ -205,7 +219,7 @@ group("batch", () => {
   it("confirm sees the touched assets' names on the receipt, looked up once; a failed name lookup is a note, not a silence", async () => {
     const t = server({ preview: PREVIEW, lookup, send: () => envelope({ assetsCreated: { oidTokens: ["Task:50"], count: 1 }, assetsModified: { oidTokens: ["Story:1"], count: 1 }, assetsOperatedOn: { oidTokens: ["Epic:9"], count: 1 } }) });
     let seen: Receipt["names"] | undefined;
-    const r = await runBatch(t, schema, REQUEST, { confirm: (receipt) => { seen = receipt.names; return true; } });
+    const r = await runBatch(t, schema, REQUEST, { guard: true, confirm: (receipt) => { seen = receipt.names; return true; } });
     expect(seen).toEqual({ "Story:1": { number: "S-1", name: "One" }, "Story:2": { number: "S-2", name: "Two" }, "Epic:9": { number: "E-9", name: "Nine" } });
     const nameQueries = t.calls.filter((c) => (c.body as Q[])[0]?.select?.includes("Name") && (c.body as Q[])[0]?.with?.$oids?.some((o) => o.startsWith("Story")));
     expect(nameQueries).toHaveLength(1); // not again after the send
@@ -213,15 +227,15 @@ group("batch", () => {
     expect(r.notes).toEqual([]);
 
     const refusing = server({ preview: PREVIEW, lookup: (q) => { if (q.select!.includes("Name") && q.with!.$oids![0]!.startsWith("Epic")) throw new Error("Unknown AttributeDefinition: Epic.Name"); return lookup(q); }, send: () => envelope({ assetsOperatedOn: { oidTokens: ["Epic:9"], count: 1 } }) });
-    const lookupFailed = (await runBatch(refusing, schema, REQUEST).catch((e: unknown) => e)) as Receipt;
+    const lookupFailed = (await runBatch(refusing, schema, REQUEST, { guard: true }).catch((e: unknown) => e)) as Receipt;
     expect(lookupFailed.sent).toBe(true);
     expect(lookupFailed.notes.some((n) => /could not look up Name for 1 Epic asset: .*Epic\.Name/.test(n))).toBe(true);
   });
 
   it("a read-back that fails after the send throws BatchRecordError with the receipt: sent, outcome and reverse kept, after incomplete", async () => {
-    const afterFails = (q: Q) => { if (q.select!.length === 1 && q.select![0] === "ChangeDate") throw new Error("socket hang up"); return lookup(q); };
+    const afterFails = (q: Q) => { if (isVersionRead(q)) throw new Error("socket hang up"); return lookup(q); };
     const t = server({ preview: PREVIEW, lookup: afterFails, send: () => envelope({ assetsCreated: { oidTokens: ["Task:50"], count: 1 }, assetsModified: { oidTokens: ["Story:1"], count: 1 }, assetsOperatedOn: { oidTokens: ["Epic:9"], count: 1 } }) });
-    const e = (await runBatch(t, schema, REQUEST).catch((x: unknown) => x)) as BatchRecordError;
+    const e = (await runBatch(t, schema, REQUEST, { guard: true }).catch((x: unknown) => x)) as BatchRecordError;
     expect(e).toBeInstanceOf(BatchRecordError);
     expect(e.message).toMatch(/sent and its outcome recorded.*receipt\.after is incomplete.*socket hang up/);
     expect(e.receipt.sent).toBe(true);
@@ -232,23 +246,41 @@ group("batch", () => {
   });
 
   it("reversible puts a Reactivate before deleting an asset that is closed now: Agility refuses to delete a closed asset", async () => {
-    const receipt = { after: { "Task:50": "2026-11-04T17:00:00.5", "Story:1": "2026-11-04T17:00:00.1" }, reverse: { notes: [], commands: [{ from: "Story:1", update: { Estimate: "3" } }, { from: "Task:50", execute: "Delete" }] as Command[] } };
-    const t = server({ preview: [], lookup: (q) => q.with!.$oids!.map((oid) => (q.select![0] === "AssetState" ? { _oid: oid, AssetState: "Closed" } : { _oid: oid, ChangeDate: receipt.after[oid as "Task:50"] })), send: () => envelope() });
+    const receipt = { receipt: 2 as const, after: { "Task:50": "505", "Story:1": "101" }, reverse: { notes: [], commands: [{ from: "Story:1", update: { Estimate: "3" } }, { from: "Task:50", execute: "Delete" }] as Command[] } };
+    const t = server({ preview: [], lookup: (q) => q.with!.$oids!.map((oid) => (q.select![0] === "AssetState" ? { _oid: oid, AssetState: "Closed" } : { _oid: oid, Moment: receipt.after[oid as "Task:50"], ChangeDate: "2026-11-04T17:00:00.5" })), send: () => envelope() });
     const r = await reversible(t, receipt);
     expect(r.reactivated).toEqual(["Task:50"]);
     expect(r.commands).toEqual([{ from: "Story:1", update: { Estimate: "3" } }, { from: "Task:50", execute: "Reactivate" }, { from: "Task:50", execute: "Delete" }]);
     // An open one is deleted as is.
-    const open = server({ preview: [], lookup: (q) => q.with!.$oids!.map((oid) => (q.select![0] === "AssetState" ? { _oid: oid, AssetState: "Active" } : { _oid: oid, ChangeDate: receipt.after[oid as "Task:50"] })), send: () => envelope() });
+    const open = server({ preview: [], lookup: (q) => q.with!.$oids!.map((oid) => (q.select![0] === "AssetState" ? { _oid: oid, AssetState: "Active" } : { _oid: oid, Moment: receipt.after[oid as "Task:50"], ChangeDate: "2026-11-04T17:00:00.5" })), send: () => envelope() });
     expect((await reversible(open, receipt)).reactivated).toEqual([]);
   });
 
-  it("reversible drops assets changed since the batch (their ChangeDate is not the one recorded after it) unless forced", async () => {
-    const receipt = { after: { "Story:1": "2026-11-04T17:00:00.1", "Epic:9": "2026-11-04T17:00:00.3" }, reverse: { notes: [], commands: [{ from: "Story:1", update: { Estimate: "3" } }, { from: "Epic:9", execute: "Reactivate" }] as Command[] } };
-    const now: Record<string, string> = { "Story:1": "2026-11-04T18:00:00.9", "Epic:9": "2026-11-04T17:00:00.3" };
-    const t = server({ preview: [], lookup: (q) => q.with!.$oids!.map((oid) => ({ _oid: oid, ChangeDate: now[oid] })), send: () => envelope() });
+  it("reversible drops assets changed since the batch (their Moment is not the one recorded after it) unless forced, and says when each last changed", async () => {
+    const receipt = { receipt: 2 as const, after: { "Story:1": "101", "Epic:9": "303", "Task:5": "77" }, changedAt: { "Story:1": "2026-11-04T17:00:00.1" }, reverse: { notes: [], commands: [{ from: "Story:1", update: { Estimate: "3" } }, { from: "Epic:9", execute: "Reactivate" }, { from: "Task:5", execute: "Reactivate" }] as Command[] } };
+    // Story:1 changed since; Epic:9 did not; Task:5 is gone.
+    const now: Record<string, { Moment: string; ChangeDate: string }> = { "Story:1": { Moment: "140", ChangeDate: "2026-11-04T18:00:00.9" }, "Epic:9": { Moment: "303", ChangeDate: "2026-11-04T17:00:00.3" } };
+    const t = server({ preview: [], lookup: (q) => q.with!.$oids!.flatMap((oid) => (now[oid] ? [{ _oid: oid, ...now[oid] }] : [])), send: () => envelope() });
     const r = await reversible(t, receipt);
-    expect(r.drifted).toEqual([{ oid: "Story:1", was: "2026-11-04T17:00:00.1", now: "2026-11-04T18:00:00.9" }]);
+    expect(r.drifted).toEqual([
+      { oid: "Story:1", was: "101", now: "140", wasChangedAt: "2026-11-04T17:00:00.1", nowChangedAt: "2026-11-04T18:00:00.9" },
+      { oid: "Task:5", was: "77", now: null, wasChangedAt: null, nowChangedAt: null }
+    ]);
     expect(r.commands).toEqual([{ from: "Epic:9", execute: "Reactivate" }]);
-    expect((await reversible(t, receipt, { force: true })).commands).toHaveLength(2);
+    expect((await reversible(t, receipt, { force: true })).commands).toHaveLength(3);
+  });
+
+  it("a receipt from before Moment stamps cannot be checked: reversible refuses it with a coded error naming the way out, and force reverses it without a check or a read", async () => {
+    // As stored by 1.0.0-alpha.7 and earlier: `receipt: 1`, ChangeDates in `after`.
+    const old = { receipt: 1, after: { "Story:1": "2026-11-04T17:00:00.1" }, reverse: { notes: [], commands: [{ from: "Story:1", update: { Estimate: "3" } }] as Command[] } };
+    const t = server({ preview: [], lookup: () => { throw new Error("an old receipt reads nothing"); }, send: () => envelope() });
+    const error = (await reversible(t, old).catch((e: unknown) => e)) as ReceiptVersionError;
+    expect(error).toBeInstanceOf(ReceiptVersionError);
+    expect(error).toMatchObject({ kind: "usage", code: "RECEIPT_VERSION", status: 0, receiptVersion: 1, targets: ["Story:1"] });
+    expect(error.message).toMatch(/before 1\.0\.0-alpha\.8.*Reverse it with force.*or run the batch again/);
+    expect(await reversible(t, old, { force: true })).toEqual({ commands: old.reverse.commands, drifted: [], reactivated: [] });
+    // A receipt with no version at all is treated the same.
+    await expect(reversible(t, { after: {}, reverse: old.reverse })).rejects.toBeInstanceOf(ReceiptVersionError);
+    expect(t.calls).toHaveLength(0);
   });
 });

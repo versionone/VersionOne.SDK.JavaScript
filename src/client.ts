@@ -309,11 +309,18 @@ export class AgilityApiClient {
 
   /**
    * Send as a compare-and-set: each asset is changed only if nobody has
-   * changed it since the preview read it; the rest come back `skipped`.
-   * Throws UnguardableError, before any request, for shapes it cannot
-   * cover.
+   * changed it since it was read. The result is a plain send's Outcome
+   * plus `conflicts`: the assets whose command matched nothing, because
+   * someone changed them (or they are gone); nothing was applied to those.
+   * By default the moment is read just before the send; pass `moments`
+   * to guard on the version a person saw earlier (select `Moment` with the
+   * row you show, keep it, pass it here). With `throwOnFailure` a failed
+   * command throws a CommandFailureError and a conflict a ConflictError
+   * (kind "conflict"). Throws UnguardableError, before any write, for
+   * shapes it cannot cover. What it cannot see: a change that makes no new
+   * version of the asset, such as a child added to it.
    */
-  async sendGuarded<Row extends Asset = Asset>(commands: assetApi.Command[], options?: Pick<assetApi.SendOptions, "throwOnFailure">): Promise<guard.GuardedResult<Row>> {
+  async sendGuarded<Row extends Asset = Asset>(commands: assetApi.Command[], options?: Omit<guard.GuardedOptions, "lookup">): Promise<guard.GuardedResult<Row>> {
     await this.schema.ensureFor(commands);
     return guard.sendGuarded<Row>(this.transport, commands, { ...options, lookup: this.schema });
   }
@@ -330,13 +337,14 @@ export class AgilityApiClient {
 
   /**
    * A batch with a record: preview, snapshot what it overwrites, (confirm,)
-   * send guarded, and a receipt with created/touched/skipped assets and a
-   * reverse batch. `reversible` drops from a receipt's reverse the assets
-   * changed since, unless forced.
+   * send — guarded or not, as `guard` says; it has no default — and a
+   * receipt with the created, touched and conflicting assets and a reverse
+   * batch. `reversible` drops from a receipt's reverse the assets changed
+   * since, unless forced.
    */
   readonly batch = {
-    run: (commands: assetApi.Command[], options?: batch.BatchOptions) => batch.runBatch(this.transport, this.schema, commands, options),
-    reversible: (receipt: Pick<batch.Receipt, "reverse" | "after">, options?: { force?: boolean }) => batch.reversible(this.transport, receipt, options)
+    run: (commands: assetApi.Command[], options: batch.BatchOptions) => batch.runBatch(this.transport, this.schema, commands, options),
+    reversible: (receipt: Parameters<typeof batch.reversible>[1], options?: { force?: boolean }) => batch.reversible(this.transport, receipt, options)
   };
 
   /**

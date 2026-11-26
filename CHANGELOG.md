@@ -50,8 +50,58 @@ Each entry has the line a consumer follows to migrate.
   what to branch on. Migration: a comparison with the old code string
   changes; one on `kind` or `instanceof CommandFailureError` does not.
 
+- **The guard compares Moments, and a conflict is said out loud.**
+  `sendGuarded` and `batch.run` guard each asset on its `Moment` together
+  with `RetireDateUTC=''` (an exact compare-and-set; the evidence is on
+  issue #51), where they compared a `ChangeDate` literal. What changes for
+  a caller:
+  - `sendGuarded`'s result is flat: the `Outcome`'s own fields
+    (`created`, `modified`, `operated`, `failures`, `queryResults`,
+    `requestId`) plus `touched`, `conflicts` and `details`. Migration:
+    `res.outcome.modified` → `res.modified`; `res.skipped` →
+    `res.conflicts`; `res.projected` / `res.sent` / `res.stamps` →
+    `res.details.projected` / `.sent` / `.stamps`.
+  - `conflicts` holds only the assets whose command matched nothing
+    (changed since they were read, or gone). An asset whose command
+    failed is in `failures` and no longer also listed as skipped; a
+    command that matched and changed no value is a success.
+  - With `throwOnFailure`, a conflict throws a `ConflictError` (`kind:
+    "conflict"`, code `CONFLICT`) carrying the result. Migration: a
+    caller that passes `throwOnFailure` and wants conflicts returned
+    catches it, or stops passing the option.
+  - Stamps are Moments (digits), not timestamps: `details.stamps`,
+    `Receipt.stamps`, `Receipt.after`, and `was` / `now` in
+    `batch.reversible`'s `drifted`. For a readable time use
+    `Receipt.changedAt[oid]`, `before[oid].ChangeDate`, and
+    `drifted[i].wasChangedAt` / `nowChangedAt`.
+- **`batch.run` takes `guard: true | false` and has no default** (it
+  defaulted to true). Migration: `client.batch.run(commands)` →
+  `client.batch.run(commands, { guard: true })`.
+- **Receipts are `receipt: 2`**: `skipped` → `conflicts`; new `stamps`,
+  `changedAt` and `stopped`. **A stored `receipt: 1` cannot be checked
+  for drift**: `batch.reversible` throws a `ReceiptVersionError` (`kind:
+  "usage"`, code `RECEIPT_VERSION`) for it. Migration for a holder of old
+  receipts: reverse one with `{ force: true }`, which sends its reverse
+  without checking whether anyone changed the assets since; or run the
+  batch again and keep the new receipt. `isReceipt(value)` tells a
+  current receipt from anything else before calling.
+- **An unguardable reason has a `code`** (`aliasedWrite`,
+  `bareAliasFrom`, `inlineCreate`, `noMoment`). Migration: branch on
+  `reason.code`, not on the words of `reason.reason`.
+
+### Added
+
+- **`sendGuarded(commands, { moments })`**: guard an asset on the moment
+  the caller read earlier (select `Moment` with the row a person is
+  shown), so a change made since they saw it is a conflict.
+- `Receipt.stopped` says why nothing was sent: `"nothing"`, `"dryRun"` or
+  `"declined"`.
+- `ErrorKind` gains `"conflict"`.
+
 ### Changed
 
+- The guard's blind spot is documented: a change that makes no new
+  version of an asset (a child added to it) is invisible to it.
 - `FakeAgilityClient.requests` leaves out the client's own unscripted
   meta.v1 type loads: it lists what the code under test asked for.
 - The `Ref` type's doc said a dotted path lands on the Ref; it does not.

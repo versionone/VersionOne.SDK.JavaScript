@@ -29,7 +29,8 @@ import type { AssetTypeToken } from "../types/metamodel";
 import { momentless, typeOfOid } from "../types/oid";
 import * as assetApi from "../wire/assetApi";
 import type { Command, CommandValue } from "../wire/assetApi";
-import { aliased, guard, GuardedPassError, passesOf, sendPasses, stampsOf, touchedBy, unguardable, UnguardableError } from "./guard";
+import { ApiError } from "../core/errors";
+import { aliased, conflictsOf, guard, GuardedPassError, oidOfSent, passesOf, sendPasses, touchedBy, unguardable, UnguardableError, UNGUARDABLE_TYPES } from "./guard";
 import type { Schema } from "./schema";
 
 /** OIDs per lookup query: bounded, never one giant filter. */
@@ -122,12 +123,12 @@ export async function namesOf(transport: Transport, schema: Schema, oids: Iterab
   return out;
 }
 
-/** The values about to be overwritten: each update's named attributes, each execute's AssetState, and every touched asset's ChangeDate. */
+/** The values about to be overwritten: each update's named attributes, each execute's AssetState, and every touched asset's Moment (what the guard compares) and ChangeDate (the same instant, readable). Ideas types have neither and are not asked. */
 export async function snapshot(transport: Transport, described: Described): Promise<Record<Oid, Record<string, unknown>>> {
   const wanted = new Map<Oid, Set<string>>();
   const want = (oid: Oid, attrs: string[]) => { const s = wanted.get(oid) ?? new Set<string>(); attrs.forEach((a) => s.add(a)); wanted.set(oid, s); };
-  for (const u of described.updates) want(u.oid, [...Object.keys(u.attributes), "ChangeDate"]);
-  for (const e of described.executes) want(e.oid, ["AssetState", "ChangeDate"]);
+  for (const u of described.updates) want(u.oid, [...Object.keys(u.attributes), "Moment", "ChangeDate"]);
+  for (const e of described.executes) want(e.oid, ["AssetState", "Moment", "ChangeDate"]);
   const before: Record<Oid, Record<string, unknown>> = {};
   for (const [type, oids] of byType(wanted.keys())) {
     const select = [...new Set(oids.flatMap((o) => [...wanted.get(o)!]))];
@@ -267,7 +268,8 @@ export function reverseOf(described: Described, before: Record<Oid, Record<strin
 // ---- the receipt -----------------------------------------------------------------------
 
 export interface Receipt {
-  receipt: 1;
+  /** The receipt's format. 2 since 1.0.0-alpha.8: stamps are Moments. (1 recorded ChangeDates.) */
+  receipt: 2;
   request: Command[];
   previewedAt: string;
   preview: Command[];
@@ -275,11 +277,15 @@ export interface Receipt {
   /** Numbers and names of the assets the preview touches, looked up before confirm. */
   names: Record<Oid, Named>;
   snapshotAt?: string;
-  /** Before values per touched asset, ChangeDate included: what the guard compared and the reverse restores. */
+  /** Before values per touched asset: what the reverse restores, with the asset's Moment and its ChangeDate (the same instant, readable) at the snapshot. */
   before: Record<Oid, Record<string, unknown>>;
-  /** Was the batch sent? False for a preview, a declined confirm, or nothing to do. */
+  /** Was the batch sent? False for a dry run, a declined confirm, or nothing to do: `stopped` says which. */
   sent: boolean;
+  /** Why nothing was sent: the batch does nothing, `dryRun` was asked, or `confirm` answered false. Null when it was sent (or the send was attempted). */
+  stopped: "nothing" | "dryRun" | "declined" | null;
   guarded: boolean;
+  /** The Moment each touched asset was guarded on (empty when not guarded). */
+  stamps: Record<Oid, string>;
   /** The batch as sent (the guarded projection, or the request as written). */
   sentCommands?: Command[];
   sentAt?: string;
@@ -287,10 +293,17 @@ export interface Receipt {
   outcome?: assetApi.Outcome;
   created: ({ alias: string | null; type: string; oid: Oid } & Named)[];
   touched: ({ oid: Oid } & Named)[];
-  /** ChangeDate of everything the batch touched, just after it: the stamp a later reverse checks for drift. */
+  /** Moment of everything the batch touched, just after it: the stamp a later reverse checks for drift. */
   after: Record<Oid, string>;
-  /** Touched assets the guard left alone: changed or gone since the snapshot. Not the ones whose command failed: those are in `failed`. */
-  skipped: Oid[];
+  /** ChangeDate of the same assets at the same read: `after`, readable, for a message. */
+  changedAt: Record<Oid, string>;
+  /**
+   * Touched assets whose guarded command matched nothing: changed by
+   * someone since the snapshot, or gone. Nothing was applied to them. Not
+   * the ones whose command failed (those are in `failed`), and not one
+   * whose command matched and changed no value (that is a success).
+   */
+  conflicts: Oid[];
   /** Touched assets whose command the server reports as failed (outcome.failures says why). */
   failed: Oid[];
   /** Per asset the batch closes (Inactivate, QuickClose): its open descendants at the snapshot, top down. */
@@ -329,8 +342,13 @@ export class BatchSendError extends WrappedError {
 }
 
 export interface BatchOptions {
-  /** Send as a compare-and-set (default). An unguardable batch then throws UnguardableError before any request; pass false to send it as written. */
-  guard?: boolean;
+  /**
+   * Required, no default: true sends the batch as a compare-and-set (an
+   * unguardable batch then throws UnguardableError before any request);
+   * false sends it as written, overwriting whatever is there. Which one a
+   * batch wants is the caller's decision to make, every time.
+   */
+  guard: boolean;
   /** Stop after the snapshot and send nothing: the receipt says what would happen. */
   dryRun?: boolean;
   /** Asked after the snapshot, before the send, with the touched assets' names on the receipt; false sends nothing. */
@@ -340,11 +358,12 @@ export interface BatchOptions {
 const now = (): string => new Date().toISOString();
 
 /** Preview, describe, name, snapshot, (confirm,) send, receipt. */
-export async function runBatch(transport: Transport, schema: Schema, commands: Command[], options: BatchOptions = {}): Promise<Receipt> {
-  const useGuard = options.guard ?? true;
+export async function runBatch(transport: Transport, schema: Schema, commands: Command[], options: BatchOptions): Promise<Receipt> {
+  if (typeof options?.guard !== "boolean") throw new UsageError("batch.run needs `guard: true` (compare-and-set) or `guard: false` (send as written): there is no default");
+  const useGuard = options.guard;
   if (!commands.length) throw new UsageError("the batch is empty");
   const refused = unguardable(commands);
-  const fatal = refused.filter((r) => r.reason.includes("rejected by the server"));
+  const fatal = refused.filter((r) => r.code === "bareAliasFrom");
   if (fatal.length || (useGuard && refused.length)) throw new UnguardableError(useGuard ? refused : fatal);
 
   const notes: string[] = [];
@@ -355,16 +374,16 @@ export async function runBatch(transport: Transport, schema: Schema, commands: C
   const described = describe(commands, projected);
   const touched = touchedBy(projected);
   const names = await namesOf(transport, schema, touched, noteFailure);
-  const receipt: Receipt = { receipt: 1, request: commands, previewedAt, preview: projected, described, names: Object.fromEntries(names), before: {}, sent: false, guarded: false, created: [], touched: [], after: {}, skipped: [], failed: [], openDescendants: {}, cascaded: {}, reverse: { commands: [], notes: [] }, notes };
+  const receipt: Receipt = { receipt: 2, request: commands, previewedAt, preview: projected, described, names: Object.fromEntries(names), before: {}, sent: false, stopped: null, guarded: false, stamps: {}, created: [], touched: [], after: {}, changedAt: {}, conflicts: [], failed: [], openDescendants: {}, cascaded: {}, reverse: { commands: [], notes: [] }, notes };
   const nothing = !described.creates.length && !described.updates.length && !described.executes.length && !described.queries.length && !described.deferred.length;
-  if (nothing) return receipt;
+  if (nothing) return { ...receipt, stopped: "nothing" };
   for (const d of described.deferred) notes.push(`command ${d.index} (${d.alias}): an aliased ${d.kind}, which preview does not expand; sent as written, not snapshotted, not reversible`);
   receipt.snapshotAt = now();
   receipt.before = await snapshot(transport, described);
   const closing = described.executes.filter((e) => CASCADING.has(e.op)).map((e) => e.oid);
   if (closing.length) receipt.openDescendants = await openDescendantsOf(transport, schema, closing);
-  if (options.dryRun) return receipt;
-  if (options.confirm && !(await options.confirm(receipt))) return receipt;
+  if (options.dryRun) return { ...receipt, stopped: "dryRun" };
+  if (options.confirm && !(await options.confirm(receipt))) return { ...receipt, stopped: "declined" };
 
   let unstamped: Oid[] = [];
   receipt.guarded = useGuard;
@@ -374,7 +393,8 @@ export async function runBatch(transport: Transport, schema: Schema, commands: C
     if (useGuard) {
       // Guarded pass by pass: a second command on the same asset (Reactivate
       // then Delete in a reverse) goes only if the first applied (guard.ts).
-      const stamps = Object.fromEntries(Object.entries(receipt.before).flatMap(([oid, v]) => (typeof v.ChangeDate === "string" ? [[oid, v.ChangeDate]] : [])));
+      const stamps = Object.fromEntries(Object.entries(receipt.before).flatMap(([oid, v]) => (v.Moment != null ? [[oid, String(v.Moment)]] : [])));
+      receipt.stamps = stamps;
       receipt.sentCommands = guard(passesOf(projected)[0]!, stamps).commands; // what the first pass sends; replaced below by everything sent
       const result = await sendPasses(transport, projected, stamps);
       ({ outcome: done, unstamped } = result);
@@ -403,13 +423,8 @@ export async function runBatch(transport: Transport, schema: Schema, commands: C
   // A failed command names its asset in what was sent: the guard's
   // with.$oid, or the from of a per-asset command sent as written.
   const sentAs = receipt.sentCommands ?? [];
-  const oidOfSent = (i: number | null): Oid | null => {
-    const body = i === null ? undefined : (sentAs[i] ? bodyOf(sentAs[i]!) : undefined);
-    const id = (body?.with as { $oid?: unknown } | undefined)?.$oid ?? body?.from;
-    return typeof id === "string" && id.includes(":") ? momentless(id) : null;
-  };
-  receipt.failed = [...new Set(done.failures.map((f) => oidOfSent(f.index)).filter((oid): oid is Oid => !!oid && touched.includes(oid) && !hit.includes(oid)))];
-  receipt.skipped = useGuard ? [...new Set([...unstamped, ...touched.filter((oid) => !hit.includes(oid) && !receipt.failed.includes(oid))])] : [];
+  receipt.failed = [...new Set(done.failures.map((f) => (f.index === null ? null : oidOfSent(sentAs[f.index]))).filter((oid): oid is Oid => !!oid && touched.includes(oid) && !hit.includes(oid)))];
+  receipt.conflicts = useGuard ? conflictsOf(touched, done, sentAs, unstamped) : [];
   // What each type can do, from the definitions already loaded (or loadable):
   // an unknown answer keeps the command, as before.
   for (const type of new Set([...done.created, ...hit].map((oid) => typeOfOid(momentless(oid))))) await schema.load(type).catch(() => null);
@@ -434,7 +449,9 @@ export async function runBatch(transport: Transport, schema: Schema, commands: C
     receipt.touched = receipt.touched.map((t) => (names.has(t.oid) ? t : { ...t, ...(more.get(t.oid) ?? unnamed) }));
     // The cascade's descendants too: a later reverse reopens them, and checks them for changes first.
     const all = [...new Set([...done.created, ...hit, ...Object.values(receipt.cascaded).flat()])];
-    receipt.after = all.length ? await stampsOf(transport, all) : {};
+    const versions = all.length ? await versionsOf(transport, all) : {};
+    receipt.after = Object.fromEntries(Object.entries(versions).map(([oid, v]) => [oid, v.moment]));
+    receipt.changedAt = Object.fromEntries(Object.entries(versions).flatMap(([oid, v]) => (v.changedAt ? [[oid, v.changedAt]] : [])));
   } catch (error) {
     throw new BatchRecordError(error, receipt);
   }
@@ -456,20 +473,59 @@ async function statesOf(transport: Transport, oids: Oid[]): Promise<Record<Oid, 
 /** AssetState as the endpoint spells a closed asset: by name, or by the server's code (128). */
 const isClosed = (state: string | undefined): boolean => state === "Closed" || state === "128";
 
+/** Each asset's current Moment and ChangeDate (the same instant, readable), one bounded query per type and chunk. An asset that no longer exists, or of a type with no Moment, is absent. */
+async function versionsOf(transport: Transport, oids: Oid[]): Promise<Record<Oid, { moment: string; changedAt: string | null }>> {
+  const out: Record<Oid, { moment: string; changedAt: string | null }> = {};
+  for (const [type, list] of byType(oids)) {
+    if (UNGUARDABLE_TYPES.includes(type)) continue;
+    for (const part of chunks(list)) {
+      const rows = await assetApi.query<Asset & { Moment?: unknown; ChangeDate?: unknown }>(transport, { from: type, select: ["Moment", "ChangeDate"], filter: ["ID=$oids"], with: { $oids: part }, page: { size: part.length, start: 0 } });
+      for (const r of rows) if (r.Moment != null) out[momentless(r._oid)] = { moment: String(r.Moment), changedAt: r.ChangeDate == null ? null : String(r.ChangeDate) };
+    }
+  }
+  return out;
+}
+
 /**
- * A receipt's reverse batch, minus the assets someone changed since the
- * batch (their ChangeDate is no longer the one recorded just after it),
+ * A receipt in a format this version cannot check for drift: `receipt: 1`
+ * (before 1.0.0-alpha.8) recorded ChangeDates, and the guard now compares
+ * Moments. Its reverse can still be sent with `force`, which checks
+ * nothing; or run the batch again and keep the new receipt.
+ */
+export class ReceiptVersionError extends ApiError {
+  constructor(readonly receiptVersion: unknown, readonly targets: Oid[]) {
+    super(`this receipt is in format ${JSON.stringify(receiptVersion)}, from before 1.0.0-alpha.8: it recorded ChangeDates, and assets are now checked by Moment, so it cannot be checked for changes made since. Reverse it with force (no check: later changes are overwritten), or run the batch again and keep the new receipt.`, 0, "RECEIPT_VERSION", { receiptVersion, targets }, "usage");
+    this.name = "ReceiptVersionError";
+  }
+}
+
+/** Is this value a receipt this version reads (`receipt: 2`)? For a receipt read back from a file. */
+export const isReceipt = (value: unknown): value is Receipt => !!value && typeof value === "object" && (value as { receipt?: unknown }).receipt === 2 && typeof (value as Receipt).reverse === "object";
+
+/** An asset a reverse leaves alone because someone changed it since the batch: its Moment then and now (null: gone), and the same as readable times when known. */
+export interface Drifted { oid: Oid; was: string; now: string | null; wasChangedAt: string | null; nowChangedAt: string | null }
+
+/**
+ * A receipt's reverse batch, minus the assets someone changed since
+ * the batch (their Moment is no longer the one recorded just after it),
  * unless `force`. Send what it returns with runBatch like any batch.
+ *
+ * A receipt from before 1.0.0-alpha.8 (`receipt: 1`) cannot be checked and
+ * throws a ReceiptVersionError (code RECEIPT_VERSION) unless `force`, which
+ * then checks nothing.
  *
  * Agility refuses to Delete a closed asset (Violation'AssetCannotDeleteClosed),
  * so a Delete of an asset that is closed now gets a Reactivate just before
  * it: two commands on one asset, which runBatch sends in two guarded passes
  * (the Delete only if the Reactivate applied). `reactivated` lists them.
  */
-export async function reversible(transport: Transport, receipt: Pick<Receipt, "reverse" | "after">, options: { force?: boolean } = {}): Promise<{ commands: Command[]; drifted: { oid: Oid; was: string; now: string | null }[]; reactivated: Oid[] }> {
+export async function reversible(transport: Transport, receipt: Pick<Receipt, "reverse" | "after"> & { receipt?: unknown; changedAt?: Record<Oid, string> }, options: { force?: boolean } = {}): Promise<{ commands: Command[]; drifted: Drifted[]; reactivated: Oid[] }> {
   const targets = receipt.reverse.commands.map((c) => momentless(String(bodyOf(c).from)));
-  const now = await stampsOf(transport, targets.filter((oid) => receipt.after[oid] !== undefined));
-  const drifted = targets.flatMap((oid) => (receipt.after[oid] !== undefined && now[oid] !== receipt.after[oid] ? [{ oid, was: receipt.after[oid]!, now: now[oid] ?? null }] : []));
+  const current = receipt.receipt === 2;
+  if (!current && !options.force) throw new ReceiptVersionError(receipt.receipt, targets);
+  // An old receipt's stamps are not Moments: with force there is nothing to compare, and nothing is.
+  const now = current ? await versionsOf(transport, targets.filter((oid) => receipt.after[oid] !== undefined)) : {};
+  const drifted: Drifted[] = current ? targets.flatMap((oid) => (receipt.after[oid] !== undefined && now[oid]?.moment !== receipt.after[oid] ? [{ oid, was: receipt.after[oid]!, now: now[oid]?.moment ?? null, wasChangedAt: receipt.changedAt?.[oid] ?? null, nowChangedAt: now[oid]?.changedAt ?? null }] : [])) : [];
   const skip = new Set(options.force ? [] : drifted.map((d) => d.oid));
   const kept = receipt.reverse.commands.filter((c) => !skip.has(momentless(String(bodyOf(c).from))));
   const deletes = kept.flatMap((c) => (bodyOf(c).execute === "Delete" ? [momentless(String(bodyOf(c).from))] : []));
