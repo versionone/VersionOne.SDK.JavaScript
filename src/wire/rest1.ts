@@ -36,10 +36,12 @@
  */
 import { ApiError, UsageError } from "../core/errors";
 import type { Transport } from "../core/transport";
-import { assetStateOf, type Asset, type Oid, type Ref } from "../types/asset";
+import { assetStateOf, dateString, type Asset, type Oid, type Ref } from "../types/asset";
+import type { AttributeLookup } from "../types/metamodel";
 import { momentless } from "../types/oid";
 import type { Query, QueryBody } from "./assetApi";
 import { rejected } from "./queryV1";
+import { resolvePath } from "./select";
 
 export { momentless };
 
@@ -108,6 +110,29 @@ export function fromAssetDocument<Row extends Asset = Asset>(doc: AssetDocument,
   return out as Row;
 }
 
+/**
+ * What a rest-1 read is given beyond its parameters: the schema, so a date
+ * is spelled as every read spells it. rest-1 sends values already typed
+ * (a number is a number) except dates, which it writes its own way, and a
+ * date cannot be told from text by its looks. Without a lookup, or for a
+ * type it has not loaded, values are as rest-1 sent them.
+ */
+export interface ReadContext { lookup?: AttributeLookup }
+
+/** The row's dates in the model's spelling, by the row's own type. */
+function dated<Row extends Asset>(row: Row, lookup: AttributeLookup | undefined): Row {
+  if (!lookup) return row;
+  const type = row._oid.split(":")[0]!;
+  const values = row as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries(values)) {
+    if (key === "_oid" || (typeof value !== "string" && !Array.isArray(value))) continue;
+    const resolution = resolvePath(lookup, type, key);
+    if (resolution.kind !== "resolved" || resolution.definition?.AttributeType !== "Date") continue;
+    values[key] = Array.isArray(value) ? value.map(dateString) : dateString(value);
+  }
+  return row;
+}
+
 /** The query string rest-1 wants, from the model's parameters. */
 export function toQuery(params: ReadParams): Record<string, string | undefined> {
   return {
@@ -129,7 +154,7 @@ export function toQuery(params: ReadParams): Record<string, string | undefined> 
 /** One page of a rest-1 read: the rows, the total when asked for with `needTotal` (null otherwise), and whether more pages follow (as `Page.more`: exact with a total, else whether this page came back full). */
 export interface ReadResult<Row extends Asset = Asset> { rows: Row[]; total: number | null; more: boolean; pageSize: number; pageStart: number }
 
-async function read<Row extends Asset>(transport: Transport, path: string, params: ReadParams, history: boolean): Promise<ReadResult<Row>> {
+async function read<Row extends Asset>(transport: Transport, path: string, params: ReadParams, history: boolean, context: ReadContext = {}): Promise<ReadResult<Row>> {
   if (!params.page) throw new UsageError(`rest-1 read of ${path} without a page: every read must be bounded`);
   let doc: AssetsDocument;
   try {
@@ -138,20 +163,20 @@ async function read<Row extends Asset>(transport: Transport, path: string, param
     // A read rest-1 refused (a bad filter, an unknown attribute) reads like one query.v1 refused.
     throw error instanceof ApiError && error.status === 400 ? rejected(error) : error;
   }
-  const rows = (doc.Assets ?? []).map((a) => fromAssetDocument<Row>(a, { history, select: params.select }));
+  const rows = (doc.Assets ?? []).map((a) => dated(fromAssetDocument<Row>(a, { history, select: params.select }), context.lookup));
   const total = typeof doc.total === "number" && doc.total >= 0 ? doc.total : null;
   return { rows, total, more: total === null ? rows.length === params.page.size : params.page.start + rows.length < total, pageSize: doc.pageSize, pageStart: doc.pageStart };
 }
 
 /** A bounded list read of a type. */
-export const list = <Row extends Asset = Asset>(transport: Transport, type: string, params: ReadParams): Promise<ReadResult<Row>> =>
-  read<Row>(transport, `/rest-1.v1/Data/${encodeURIComponent(type)}`, params, false);
+export const list = <Row extends Asset = Asset>(transport: Transport, type: string, params: ReadParams, context?: ReadContext): Promise<ReadResult<Row>> =>
+  read<Row>(transport, `/rest-1.v1/Data/${encodeURIComponent(type)}`, params, false, context);
 
 /** One asset by OID. */
-export async function get<Row extends Asset = Asset>(transport: Transport, oid: Oid, select?: string[]): Promise<Row> {
+export async function get<Row extends Asset = Asset>(transport: Transport, oid: Oid, select?: string[], context: ReadContext = {}): Promise<Row> {
   const [type, id] = momentless(oid).split(":");
   const doc = await transport.request<AssetDocument>({ method: "GET", path: `/rest-1.v1/Data/${encodeURIComponent(type!)}/${encodeURIComponent(id!)}`, query: { sel: select?.join(",") }, responseType: "json" });
-  return fromAssetDocument<Row>(doc, { select });
+  return dated(fromAssetDocument<Row>(doc, { select }), context.lookup);
 }
 
 /**
@@ -185,17 +210,17 @@ export type Template<Row extends Asset = Asset> = Partial<Omit<Row, "_oid">>;
  * else exposes. Idempotent, like any GET. Without a context the template
  * is empty, and an unknown context is echoed back, not refused.
  */
-export async function template<Row extends Asset = Asset>(transport: Transport, type: string, options: { ctx?: Oid } = {}): Promise<Template<Row>> {
+export async function template<Row extends Asset = Asset>(transport: Transport, type: string, options: { ctx?: Oid } & ReadContext = {}): Promise<Template<Row>> {
   const doc = await transport.request<AssetDocument>({ method: "GET", path: `/rest-1.v1/New/${encodeURIComponent(type)}`, query: { ctx: options.ctx ? momentless(options.ctx) : undefined }, responseType: "json" });
-  const { _oid: _ignored, ...values } = fromAssetDocument<Row>({ ...doc, id: doc.id || `${type}:0` });
+  const { _oid: _ignored, ...values } = dated(fromAssetDocument<Row>({ ...doc, id: doc.id || `${type}:0` }), options.lookup);
   return values as Template<Row>;
 }
 
 /** A bounded history read: one row per moment, _oid carrying the moment. */
-export const history = <Row extends Asset = Asset>(transport: Transport, target: string, params: ReadParams): Promise<ReadResult<Row>> => {
+export const history = <Row extends Asset = Asset>(transport: Transport, target: string, params: ReadParams, context?: ReadContext): Promise<ReadResult<Row>> => {
   const [type, id] = target.split(":");
   const path = id ? `/rest-1.v1/Hist/${encodeURIComponent(type!)}/${encodeURIComponent(id)}` : `/rest-1.v1/Hist/${encodeURIComponent(type!)}`;
-  return read<Row>(transport, path, params, true);
+  return read<Row>(transport, path, params, true, context);
 };
 
 // ---- rest-1 spellings of a query -----------------------------------------------

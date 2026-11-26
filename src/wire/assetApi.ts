@@ -26,7 +26,7 @@
  */
 import { ApiError, UsageError } from "../core/errors";
 import type { Transport } from "../core/transport";
-import type { Asset, Oid, Ref } from "../types/asset";
+import { dateString, type Asset, type Oid, type Ref } from "../types/asset";
 import { parseViolation, type Command, type CommandFailureDetail, type CommandValue, type ExecuteBody, type Outcome, type QueryBody, type UpdateBody } from "../types/command";
 import type { AssetTypeToken, AttributeLookup, AttributeTokenRef, AttributeType } from "../types/metamodel";
 import { momentless } from "../types/oid";
@@ -157,6 +157,8 @@ function scalar(value: unknown, type: AttributeType): unknown {
     case "LongInt":
     case "Rank": // a 32-bit integer sent as a string ("-2000000000"); sorts as a number
       return toNumber(value);
+    case "Date":
+      return dateString(value);
     case "Boolean":
       return value === true || value === "True" || value === "true" ? true : value === false || value === "False" || value === "false" ? false : value;
     default:

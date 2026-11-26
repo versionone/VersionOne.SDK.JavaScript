@@ -28,6 +28,19 @@
   code for a name read off a relation. A read with no select at all (a
   template) keeps every column the server sent, each under its own key
   (`template["Scope.Name"]`), and its Refs are bare too. (a CLI consumer.)
+- **A date has one spelling on every read**: `"2026-09-06T13:52:51.9030000"`
+  (seven decimals; a `Z` on a UTC attribute). The endpoints differ, and
+  rows used to carry whichever spelling the endpoint behind the call
+  used: `query` / `get` answered seven decimals (unchanged), `queryPage`
+  answered `"…51.903"` with trailing zeros dropped, and `history`,
+  `template` and the rest-1 reads answered three decimals and a midnight
+  as the date alone (`"2011-09-20"`). Nothing is cut: seven decimals is
+  the server's precision. Migration: code that compares date strings from
+  `queryPage`, `history` or `template` against stored ones, or slices
+  them by position, should parse them (`new Date(value)`) or expect the
+  one spelling. `rest1.list` / `get` / `history` / `template` from
+  `/wire` spell dates this way when given `{ lookup: client.schema }`,
+  and as rest-1 sent them without. (a CLI consumer.)
 - **A read with an empty `find` throws a `UsageError`** (`kind: "usage"`,
   nothing is sent), on `query`, `queries`, `queryPage`, `pages`, `all` and
   `deleted`. It used to answer no rows, because that is what the server
@@ -44,7 +57,9 @@
   abstract type (`"Workitem"`). `select` and `findin` take plain attribute
   names, and each row has every selected key under that name: its value
   if the row's type defines the attribute, `null` if not, so a Story and a
-  Request both have `Number`. Nothing type-qualified is written or read
+  Request both have `Number`, and a name none of the searched types has
+  is `null` on every row (only a name that is no attribute of anything is
+  refused). Nothing type-qualified is written or read
   in a select; `filter` is sent as written and may be type-qualified,
   since a condition across types has no plain spelling.
   A consumer that built this from `client.data.list("BaseAsset", …)` with
@@ -53,7 +68,8 @@
 - **`client.deleted(type, params)`**: deleted assets of a type, as
   `{ rows, total, more }`.
 - `FakeAgilityClient.onSearch(rows)` and `fake.searched`, to test code
-  that searches.
+  that searches, through the fake or through a client built on
+  `fake.transport`.
 - `@versionone/agility-sdk/services` has `search`. The root exports the
   types `SearchOptions`, `SearchResult`, `SearchRow`.
 

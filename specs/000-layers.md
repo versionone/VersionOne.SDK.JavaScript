@@ -47,6 +47,12 @@ from or are going. A relation is a `Ref` (`{ _oid }`, plus what a sub-select ask
 in `Attributes` and rendering `AssetState` as a number — is translated in
 that endpoint's wire module, once, on the way in and on the way out.
 
+A date is one of those spellings. query.v1 writes seven decimals,
+api/asset drops trailing zeros, rest-1 writes three and a midnight as the
+date alone; the model's `DateString` is `2026-09-06T13:52:51.9030000`
+(with `Z` on a UTC attribute), and every read answers it. The schema says
+which attribute is a date: text that looks like one is never touched.
+
 A row's identity is `_oid`: the key the server sends for it, underscored
 so that it can never collide with an attribute (an asset's own identity
 attribute is `ID`). Every row has it, and so does anything that is a row
@@ -70,7 +76,8 @@ asset through all three paths and compares the rows.
 One addition, for the one read whose page mixes unrelated types
 (`client.search`): **you name an attribute once, plainly, and each row has
 that key — its value if the row's type defines the attribute, null if it
-does not.** This is the only place a row carries a key its own type lacks.
+does not** (so null on every row when none of the searched types has it;
+only a name that is no attribute of any type is refused). This is the only place a row carries a key its own type lacks.
 The caller never writes or reads a type-qualified name (`Story.Number`):
 the schema says which of the searched types define `Number`, the service
 asks each, and the key is `Number`. A relation on such a row is a bare

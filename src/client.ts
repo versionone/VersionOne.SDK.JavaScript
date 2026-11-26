@@ -308,7 +308,8 @@ export class AgilityApiClient {
    */
   async deleted<Row extends { _oid: Oid } = searchService.SearchRow>(type: string, params: Omit<rest1.ReadParams, "deleted">): Promise<searchService.SearchResult<Row>> {
     searchable(type, params.find);
-    const { rows, total, more } = await rest1.list<Row & Asset>(this.transport, type, { ...params, filter: [...(params.filter ?? []), "IsDeleted='true'"], deleted: true, needTotal: params.needTotal ?? true });
+    await this.schema.ensureFor([{ from: type, select: params.select }]);
+    const { rows, total, more } = await rest1.list<Row & Asset>(this.transport, type, { ...params, filter: [...(params.filter ?? []), "IsDeleted='true'"], deleted: true, needTotal: params.needTotal ?? true }, { lookup: this.schema });
     return { rows, total, more };
   }
 
@@ -317,8 +318,9 @@ export class AgilityApiClient {
    * row's `_oid` carrying its moment (`Story:1234:5678`). `target` is an
    * OID token, or an asset type for the history of every asset of it.
    */
-  history<Row extends Asset = Asset>(target: string, params: rest1.ReadParams): Promise<rest1.ReadResult<Row>> {
-    return rest1.history<Row>(this.transport, target, params);
+  async history<Row extends Asset = Asset>(target: string, params: rest1.ReadParams): Promise<rest1.ReadResult<Row>> {
+    await this.schema.ensureFor([{ from: target.split(":")[0]!, select: params.select }]);
+    return rest1.history<Row>(this.transport, target, params, { lookup: this.schema });
   }
 
   /**
@@ -326,8 +328,9 @@ export class AgilityApiClient {
    * a context (a Timebox's next name and dates in a schedule's scope, a
    * Story's carry-over from a Request). Nothing is created.
    */
-  template<F extends From>(type: F, options?: { ctx?: Oid }): Promise<rest1.Template<TypeOf<F>>> {
-    return rest1.template<TypeOf<F>>(this.transport, type, options);
+  async template<F extends From>(type: F, options?: { ctx?: Oid }): Promise<rest1.Template<TypeOf<F>>> {
+    await this.schema.load(type);
+    return rest1.template<TypeOf<F>>(this.transport, type, { ...options, lookup: this.schema });
   }
 
   /**

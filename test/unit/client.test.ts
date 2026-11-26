@@ -142,11 +142,16 @@ describe("client: reads", () => {
   });
 
   it("deleted takes a query's spelling (select, filter), sends rest-1's (sel, where), and asks for deleted assets only, with the total", async () => {
-    const t = fake(() => ({ _type: "Assets", pageSize: 2, pageStart: 0, Assets: [] }));
-    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t });
-    expect(await client.deleted("Story", { select: ["Name"], filter: ["Scope='Scope:0'"], page: { size: 2, start: 0 } })).toEqual({ rows: [], total: null, more: false });
+    // rest-1 writes a date its own way (three decimals; a midnight as the date alone): the client answers the model's spelling.
+    const gone = { _type: "Asset", href: "", id: "Story:7", Attributes: { Name: { _type: "Attribute", name: "Name", value: "2011-09-20" }, ChangeDate: { _type: "Attribute", name: "ChangeDate", value: "2026-07-13T18:06:14.600" }, CreateDate: { _type: "Attribute", name: "CreateDate", value: "2011-09-20" } } };
+    const t = fake(() => ({ _type: "Assets", pageSize: 2, pageStart: 0, Assets: [gone] }));
+    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, types: schema().cache });
+    expect(await client.deleted("Story", { select: ["Name", "ChangeDate", "CreateDate"], filter: ["Scope='Scope:0'"], page: { size: 2, start: 0 } })).toEqual({
+      // The Name is text that happens to look like a date: it is left alone, because the schema says what is a date.
+      rows: [{ _oid: "Story:7", Name: "2011-09-20", ChangeDate: "2026-07-13T18:06:14.6000000", CreateDate: "2011-09-20T00:00:00.0000000" }], total: null, more: false
+    });
     expect(t.calls).toHaveLength(1);
-    expect(t.calls[0]).toMatchObject({ method: "GET", path: "/rest-1.v1/Data/Story", query: expect.objectContaining({ sel: "Name", where: "Scope='Scope:0';IsDeleted='true'", page: "2,0", deleted: "true", needTotal: "true" }) });
+    expect(t.calls[0]).toMatchObject({ method: "GET", path: "/rest-1.v1/Data/Story", query: expect.objectContaining({ sel: "Name,ChangeDate,CreateDate", where: "Scope='Scope:0';IsDeleted='true'", page: "2,0", deleted: "true", needTotal: "true" }) });
     expect((client as unknown as { data?: unknown }).data).toBeUndefined();
   });
 });

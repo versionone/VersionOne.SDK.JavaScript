@@ -18,7 +18,8 @@ import { AgilityApiClient } from "../client";
 export { CONFORMANCE_BASE_URL, fetchFrom, transportConformance } from "./transportConformance";
 export type { ConformanceCheck, ConformanceRequest, ConformanceResponse, ConformanceServer } from "./transportConformance";
 import type { ClientConfig } from "../core/clientConfig";
-import { DEFAULT_SELECT, type SearchOptions, type SearchResult, type SearchRow } from "../services/search";
+import type { SearchOptions, SearchResult, SearchRow } from "../services/search";
+import { ATTRIBUTE_NAMES } from "../types/assets/subtypes";
 import { ApiError, UsageError, apiErrorFromResponse } from "../core/errors";
 import type { RequestOptions, Transport } from "../core/transport";
 import type { Asset, Oid } from "../types/asset";
@@ -55,16 +56,21 @@ const bodyOf = (command: Command): CommandBody => {
 const isQuery = (body: CommandBody): body is QueryBody => typeof (body as QueryBody).from === "string" && !("update" in body) && !("execute" in body) && !("AssetType" in body);
 const typeOfFrom = (from: string): string => (isOidToken(from) ? typeOfOid(from) ?? from : from);
 
+/** What a scripted search answers: rows (the whole result, paged by the fake), a function of the text and options answering one page, or an Error to throw. */
+type SearchAnswer = FakeRows | Error | ((text: string, options: SearchOptions) => FakeRows);
 type ListMatch = string | ((type: string, params: Record<string, string | undefined>) => boolean);
 
 interface Script {
+  searches: SearchAnswer[];
+  /** The options of the search the fake's own client is making right now, for the record. */
+  searching: SearchOptions | null;
   lists: { match: ListMatch; answer: FakeRows | Error | ((type: string, params: Record<string, string | undefined>) => FakeRows) }[];
   metamodel: FakeOptions["metamodel"] | null;
   queries: { match: QueryMatch; answer: QueryAnswer }[];
   sends: SendAnswer[];
   requests: { match: RequestMatch; answer: RequestAnswer }[];
   labels: Record<string, string>;
-  seen: { requests: RequestOptions[]; asked: QueryBody[]; sent: Command[][] };
+  seen: { requests: RequestOptions[]; asked: QueryBody[]; sent: Command[][]; searched: { text: string; options: SearchOptions }[] };
   nextId: number;
   /** The fake's versions: each asset's moment (1 until something writes it), and the assets that are gone. */
   moments: Map<Oid, number>;
@@ -171,6 +177,15 @@ function answerSend(script: Script, commands: Command[], writes: { body: Command
   return out;
 }
 
+/** A type for the fake's instance to have when a search asks for one: concrete, under BaseAsset, with every attribute the product names and every key a scripted search row carries. */
+function anyType(script: Script, token: string): unknown {
+  const scripted = script.searches.flatMap((answer) => (Array.isArray(answer) ? answer : answer && typeof answer === "object" && "rows" in answer ? answer.rows : []) as readonly FakeRow[]).flatMap((row) => Object.keys(row));
+  const root = ["Name", "Description", "AssetType", "AssetState", "ChangeDateUTC", "CreateDateUTC"];
+  const names = token === "BaseAsset" ? root : [...new Set([...ATTRIBUTE_NAMES, ...scripted.map((key) => key.split(".")[0]!)])].filter((name) => name !== "_oid");
+  const Attributes = Object.fromEntries(names.map((Name) => [`${token}.${Name}`, { _type: "AttributeDefinition", Name, Token: `${token}.${Name}`, DisplayName: Name, AttributeType: "Text", IsReadOnly: false, IsRequired: false, IsMultivalue: false, IsCanned: true, IsCustom: false }]));
+  return { _type: "AssetType", Name: token, Token: token, DisplayName: token, Abstract: token === "BaseAsset", ...(token === "BaseAsset" ? {} : { Base: { nameref: "BaseAsset", href: "/meta.v1/BaseAsset" } }), Attributes };
+}
+
 function respond(script: Script, request: RequestOptions): unknown {
   const raw = [...script.requests].reverse().find(({ match }) => (typeof match === "string" ? request.path.startsWith(match) : match instanceof RegExp ? match.test(request.path) : match(request)));
   // A type nothing scripted is a type the fake's instance does not have, so rows are read as scripted. These
@@ -182,6 +197,12 @@ function respond(script: Script, request: RequestOptions): unknown {
     if (!found) throw apiErrorFromResponse(404, { error: "Not Found", exceptions: [{ message: `FakeAgilityClient's metamodel has nothing at ${request.path}` }] });
     request.onResponse?.({ status: 200, headers: { get: () => null } });
     return found;
+  }
+  if (!raw && request.method === "GET" && request.path.startsWith("/meta.v1/") && script.searches.length && !request.path.slice("/meta.v1/".length).includes("/")) {
+    // A search asks the schema which searched type has which attribute. With a search scripted and no metamodel, the fake's
+    // instance has whatever type is asked for, with every attribute a scripted row could carry, so the rows come back as scripted.
+    request.onResponse?.({ status: 200, headers: { get: () => null } });
+    return anyType(script, decodeURIComponent(request.path.slice("/meta.v1/".length)));
   }
   if (!raw && request.method === "GET" && request.path.startsWith("/meta.v1/")) throw apiErrorFromResponse(404, { error: "Not Found", exceptions: [{ message: `FakeAgilityClient knows no asset type at ${request.path}` }] });
   script.seen.requests.push(request);
@@ -197,6 +218,21 @@ function respond(script: Script, request: RequestOptions): unknown {
   if (request.method === "GET" && request.path.startsWith("/rest-1.v1/Data/") && !request.path.slice("/rest-1.v1/Data/".length).includes("/")) {
     const type = decodeURIComponent(request.path.slice("/rest-1.v1/Data/".length));
     const params = (request.query ?? {}) as Record<string, string | undefined>;
+    if (params.find !== undefined && script.searches.length) {
+      // What a search asks today. The options are the fake client's own when it made the search; for a client built on
+      // the fake's transport they are what the request shows.
+      const [size, start] = (params.page ?? "").split(",").map(Number) as [number, number];
+      const types = type === "BaseAsset" ? [...(/^AssetType=([^;]*)/.exec(params.where ?? "")?.[1] ?? "").matchAll(/'([^']*)'/g)].map((m) => m[1]!) : [type];
+      const options: SearchOptions = script.searching ?? { types, page: { size, start } };
+      script.seen.searched.push({ text: params.find, options });
+      const answer = script.searches.at(-1)!;
+      if (answer instanceof Error) throw answer;
+      const answered = typeof answer === "function" ? answer(params.find, options) : answer;
+      const whole = Array.isArray(answered) && typeof answer !== "function";
+      const all = (Array.isArray(answered) ? answered : (answered as { rows: readonly FakeRow[] }).rows) as readonly FakeRow[];
+      const total = Array.isArray(answered) ? (whole ? all.length : undefined) : (answered as { total?: number | null }).total ?? undefined;
+      return { _type: "Assets", total, pageSize: size, pageStart: start, Assets: (whole ? all.slice(start, start + size) : all).map(toAssetDocument) };
+    }
     const hit = [...script.lists].reverse().find(({ match }) => (typeof match === "function" ? match(type, params) : match === type));
     if (hit) {
       if (hit.answer instanceof Error) throw hit.answer;
@@ -344,8 +380,10 @@ function toAssetDocument(row: FakeRow): Record<string, unknown> {
  *   simulation with its own answer. A write scoped by a query cannot be
  *   previewed by the fake (it evaluates no filter): script that preview
  *   with `onRequest`.
- * - `onSearch(rows)` answers `client.search`: rows in the model's shape,
- *   paged by the fake, with the total; what was searched is in `searched`.
+ * - `onSearch(rows)` answers a search, from this client or from one built
+ *   on `fake.transport`: rows in the model's shape, paged by the fake,
+ *   with the total; what was searched is in `searched`. Script it before
+ *   the first search.
  * - `onList(type, rows)` answers rest-1's list read the same way
  *   (`client.deleted`, and `rest1.list` from `/wire`): rows in
  *   the model's shape, a list paged by the fake.
@@ -364,13 +402,16 @@ export class FakeAgilityClient extends AgilityApiClient {
   readonly asked: QueryBody[];
   /** Every batch that carried a write, in order, as sent: a Ref is written as its OID token. */
   readonly sent: Command[][];
-  /** Every search made, in order: its text and options. */
-  readonly searched: { text: string; options: SearchOptions }[] = [];
-  private readonly searches: (FakeRows | Error | ((text: string, options: SearchOptions) => FakeRows))[] = [];
+  /**
+   * Every search made, in order: its text and options. A search made by a
+   * client of your own over `fake.transport` is recorded too, with the
+   * options the request shows: `types` and `page`.
+   */
+  readonly searched: { text: string; options: SearchOptions }[];
   private readonly script: Script;
 
   constructor(config: Partial<ClientConfig> & FakeOptions = {}) {
-    const script: Script = { lists: [], metamodel: config.metamodel ?? null, queries: [], sends: [], requests: [], labels: {}, seen: { requests: [], asked: [], sent: [] }, nextId: 1000, moments: new Map(), gone: new Set(), known: new Set() };
+    const script: Script = { lists: [], metamodel: config.metamodel ?? null, queries: [], sends: [], requests: [], labels: {}, seen: { requests: [], asked: [], sent: [], searched: [] }, searches: [], searching: null, nextId: 1000, moments: new Map(), gone: new Set(), known: new Set() };
     const transport: Transport = {
       // Answers are computed synchronously and delivered as a real response would be: later, and a throw as a rejection.
       request: async <T>(request: RequestOptions): Promise<T> => {
@@ -386,6 +427,7 @@ export class FakeAgilityClient extends AgilityApiClient {
     this.requests = script.seen.requests;
     this.asked = script.seen.asked;
     this.sent = script.seen.sent;
+    this.searched = script.seen.searched;
   }
 
   /**
@@ -418,40 +460,32 @@ export class FakeAgilityClient extends AgilityApiClient {
   }
 
   /**
-   * Script what `client.search` answers: rows in the model's shape (a
-   * list is the whole result: the fake pages it and reports its length
-   * as the total), a function of the text and options answering one page,
-   * or an Error to throw. The answer scripted last wins. No text is
-   * matched and no filter evaluated; each row is cut to the keys the
-   * search selected, null where the row has none, as live.
+   * Script what a search answers: rows in the model's shape (a list is
+   * the whole result: the fake pages it and reports its length as the
+   * total), a function of the text and options answering one page, or an
+   * Error to throw. The answer scripted last wins. No text is matched and
+   * no filter evaluated. The search itself is the client's own, so each
+   * row comes back with exactly the selected keys, null where the row has
+   * none, and it works the same for a client your code builds on
+   * `fake.transport`. Without a `metamodel` the fake's instance has any
+   * type a search names; script the search before the first one is made.
    */
-  onSearch(answer: FakeRows | Error | ((text: string, options: SearchOptions) => FakeRows)): this {
-    this.searches.push(answer);
+  onSearch(answer: SearchAnswer): this {
+    this.script.searches.push(answer);
     return this;
   }
 
   /**
-   * `client.search` on the fake: the same refusals before anything is
-   * asked (no text, no types, no page), then the scripted answer. It sends
-   * no request, so a test does not depend on which endpoint a search uses.
+   * `client.search` on the fake: the client's own search, over the fake's
+   * transport. A search nothing was scripted for says so, rather than
+   * failing on the first thing the search happens to ask the instance.
    */
   override async search<Row extends { _oid: Oid } = SearchRow>(text: string, options: SearchOptions): Promise<SearchResult<Row>> {
-    if (typeof text !== "string" || !text.trim()) throw new UsageError("search needs text: the server answers a search for nothing with no rows, which would read as \"nothing matches\"");
-    if (!options?.page) throw new UsageError("search without a page: every read must be bounded");
-    if (!Array.isArray(options.types) || !options.types.length) throw new UsageError("search needs `types`: the asset types to search, such as [\"Story\", \"Defect\", \"Request\"]; there is no default");
-    this.searched.push({ text, options });
-    const answer = this.searches.at(-1);
-    if (answer === undefined) throw new UsageError(`FakeAgilityClient: no answer scripted for search(${JSON.stringify(text)}); script one with onSearch`);
-    if (answer instanceof Error) throw answer;
-    const answered = typeof answer === "function" ? answer(text, options) : answer;
-    const whole = Array.isArray(answered) && typeof answer !== "function";
-    const all = (Array.isArray(answered) ? answered : (answered as { rows: readonly FakeRow[] }).rows) as readonly FakeRow[];
-    const { size, start } = options.page;
-    const page = whole ? all.slice(start, start + size) : all;
-    const total = Array.isArray(answered) ? (whole ? all.length : null) : (answered as { total?: number | null }).total ?? null;
-    const select = [...new Set(options.select ?? DEFAULT_SELECT)];
-    const rows = page.map((row) => Object.fromEntries([["_oid", row._oid], ...select.map((name) => [name, (row as Record<string, unknown>)[name] ?? null])]) as unknown as Row);
-    return { rows, total, more: total === null ? rows.length === size : start + rows.length < total };
+    if (!this.script.searches.length && !this.script.metamodel && typeof text === "string" && text.trim() && options?.page && options.types?.length) {
+      throw new UsageError(`FakeAgilityClient: no answer scripted for search(${JSON.stringify(text)}); script one with onSearch`);
+    }
+    this.script.searching = options;
+    try { return await super.search<Row>(text, options); } finally { this.script.searching = null; }
   }
 
   /** Script labels for `client.localize`: tag → label. A tag nothing scripted answers itself, as loc-2 answers a tag it does not know. */

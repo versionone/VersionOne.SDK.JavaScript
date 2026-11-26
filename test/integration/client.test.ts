@@ -45,16 +45,28 @@ describeInstance("client reads (live)", () => {
     const made = await client.send([{ AssetType: "Story", Name: fixtureName("rows rule"), Scope: { _oid: "Scope:0" }, Owners: [{ _oid: me._oid }] }], { throwOnFailure: true });
     const story = made.created[0]!;
     try {
-      const select = ["Name", "Owners", "Owners.Name", "Scope.Name"];
-      const keys = ["Name", "Owners", "Owners.Name", "Scope.Name", "_oid"];
+      const select = ["Name", "Owners", "Owners.Name", "Scope.Name", "ChangeDateUTC", "CreateDate"];
+      const keys = ["ChangeDateUTC", "CreateDate", "Name", "Owners", "Owners.Name", "Scope.Name", "_oid"];
       const viaQuery = (await client.query({ from: "Story", select, filter: ["ID=$id"], with: { $id: story }, page: { size: 1, start: 0 } }))[0]! as Record<string, unknown>;
       const viaPage = (await client.queryPage({ from: "Story", select, filter: ["ID=$id"], with: { $id: story }, page: { size: 1, start: 0 } })).rows[0]! as Record<string, unknown>;
-      const viaRest = (await rest1.list(client.transport, "Story", { select, filter: [`ID='${story}'`], page: { size: 1, start: 0 } })).rows[0]! as unknown as Record<string, unknown>;
+      const viaRest = (await rest1.list(client.transport, "Story", { select, filter: [`ID='${story}'`], page: { size: 1, start: 0 } }, { lookup: client.schema })).rows[0]! as unknown as Record<string, unknown>;
+      // A day with no time of day (a sprint's begin date), which rest-1 writes as the date alone: the same value through each.
+      const sprint = { from: "Timebox", select: ["BeginDate"], sort: ["ID"], page: { size: 1, start: 0 } };
+      const [byQuery] = await client.query<{ _oid: string; BeginDate: string }>(sprint);
+      if (byQuery) {
+        const byPage = (await client.queryPage<{ _oid: string; BeginDate: string }>(sprint)).rows[0]!;
+        const byRest = (await rest1.list<{ _oid: string; BeginDate: string }>(client.transport, "Timebox", { select: ["BeginDate"], sort: ["ID"], page: { size: 1, start: 0 } }, { lookup: client.schema })).rows[0]!;
+        expect(byQuery.BeginDate).toMatch(/^\d{4}-\d\d-\d\dT00:00:00\.0000000$/);
+        expect([byPage, byRest]).toEqual([byQuery, byQuery]);
+      }
       for (const row of [viaQuery, viaPage, viaRest]) {
         expect(Object.keys(row).sort()).toEqual(keys);
         expect(row["Owners.Name"]).toEqual([me.Name]); // a parallel array beside the Refs
         expect(typeof row["Scope.Name"]).toBe("string"); // its relation was not selected: the path is still there
         expect((row.Owners as { _oid: string }[]).map((o) => o._oid)).toEqual([me._oid]);
+        // The three endpoints write a date three ways (seven decimals, trailing zeros dropped, three decimals): the model has one.
+        expect(row.ChangeDateUTC).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{7}Z$/);
+        expect(row.CreateDate).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{7}$/);
       }
       // A Ref is bare on all three: the three rows are the same row.
       expect(viaPage).toEqual(viaQuery);

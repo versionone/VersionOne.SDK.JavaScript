@@ -179,6 +179,18 @@ describeInstance("search (live)", () => {
     expect(await client.query({ from: "Workitem", select: ["AssetType"], filter: [`AssetType=${family.map((t) => `'${t}'`).join(",")}`], page: { size: 1, start: 0 } })).toHaveLength(1);
   });
 
+  it("one list of columns serves any choice of types: a column none of the searched types has is null on every row, not an error (a CLI consumer's find with --type)", async () => {
+    const columns = ["Name", "Number", "Status.Name", "Owners.Name", "Owner.Name", "Scope.Name", "ChangeDateUTC"];
+    // Only stories: a Story has no Owner.
+    const stories = await client.search(word, { types: ["Story"], select: columns, findin: ["Name", "Description"], page });
+    expect(stories.rows).toEqual([{ _oid: story, Name: expect.stringContaining(word), Number: storyNumber, "Status.Name": null, "Owners.Name": [], "Owner.Name": null, "Scope.Name": expect.any(String), ChangeDateUTC: expect.stringMatching(/\.\d{7}Z$/) }]);
+    // Only issues: no Status, no Owners.
+    const issues = await client.search(word, { types: ["Issue"], select: columns, page });
+    expect(issues.rows).toEqual([{ _oid: issue, Name: expect.stringContaining(word), Number: issueNumber, "Status.Name": null, "Owners.Name": null, "Owner.Name": null, "Scope.Name": expect.any(String), ChangeDateUTC: expect.stringMatching(/\.\d{7}Z$/) }]);
+    // Goals and topics have neither a Status nor an owner: the search is made (and finds none of the fixtures), where it used to be refused.
+    expect(await client.search(word, { types: ["Goal", "Topic"], select: columns, findin: ["Name", "Estimate"], page })).toEqual({ rows: [], total: 0, more: false });
+  });
+
   it("client.search refuses, before any search is sent: no text, no types, the root type, an unknown type, a name no type defines", async () => {
     const refused = async (run: () => Promise<unknown>, message: RegExp) => {
       const before = requests.filter((r) => r.path.startsWith("/rest-1.v1")).length;
@@ -189,7 +201,8 @@ describeInstance("search (live)", () => {
     await refused(() => client.search(word, { types: [], page }), /needs `types`/);
     await refused(() => client.search(word, { types: ["BaseAsset"], page }), /abstract type/);
     await refused(() => client.search(word, { types: ["NoSuchType"], page }), /no asset type "NoSuchType"/);
-    await refused(() => client.search(word, { types: ["Story", "Issue"], select: ["Name", "Nmae"], page }), /"Nmae" is not an attribute of any type searched \(Story, Issue\)/);
+    await refused(() => client.search(word, { types: ["Story", "Issue"], select: ["Name", "Nmae"], page }), /"Nmae" is not an attribute of any asset type/);
+    await refused(() => client.search(word, { types: ["Goal", "Topic"], findin: ["Estimate"], page }), /nothing to search in/);
   });
 
   it("client.deleted answers deleted assets only, each saying Deleted", async () => {

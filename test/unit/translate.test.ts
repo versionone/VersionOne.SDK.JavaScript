@@ -52,7 +52,7 @@ describe("translate: a row into the model, by schema", () => {
     expect((fromWireRow({ _oid: "Story:1", Owners: [{ _oid: "NULL" }, { _oid: "Member:20" }] }, { lookup: schema, type: "Story" }) as unknown as Record<string, unknown>).Owners).toEqual([{ _oid: "Member:20" }]);
   });
 
-  it("numbers become numbers, booleans booleans, a sub-selected single relation one Ref, a bare one stays a Ref, aggregates numbers, dates and states as sent", () => {
+  it("numbers become numbers, booleans booleans, a sub-selected single relation one Ref, a bare one stays a Ref, aggregates numbers, a date in the model's one spelling, states as sent", () => {
     const row = fromWireRow<Story>(liveRow, { lookup: schema, type: "Story" });
     expect(row._oid).toBe("Story:1226");
     expect(row.Name).toBe("Ship Order");
@@ -61,7 +61,7 @@ describe("translate: a row into the model, by schema", () => {
     expect(row.IsDeleted).toBe(false);
     expect(row.IsClosed).toBe(true);
     expect(row.AssetState).toBe("Closed");
-    expect(row.CreateDate).toBe("2026-06-27T12:28:29.137");
+    expect(row.CreateDate).toBe("2026-06-27T12:28:29.1370000"); // sent as "…29.137" by api/asset; every read spells seven decimals
     expect(row.Order).toBe(-1989738965); // Rank: a 32-bit integer sent as a string, a number in the model
     expect(row.Status).toEqual({ _oid: "StoryStatus:2191", Name: "Accepted", Order: 3 }); // [x] -> x; the nested row is translated by StoryStatus (Order is Rank there too)
     expect(row.Super).toEqual({ _oid: "Epic:1185", Name: "Order Entry" });

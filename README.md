@@ -112,12 +112,15 @@ const { rows, total, more } = await client.search("warehouse ship*", {
 
 - **One request, one order across every type, and the total.** The matching rules above apply.
 - **`types` is required**, at least one: concrete types, or a family by its abstract type (`"Workitem"` is stories, defects, epics, themes, tasks, tests and test sets; requests, issues and goals are not work items, so name them). A default would silently leave types out.
-- **You name an attribute once, plainly, and each row has that key**: its value if the row's type defines it, `null` if not (`Owners` is null on a Request, `Owner` null on a Story; the SDK does not merge differently named attributes). A name none of the types defines is a usage error that lists the types.
+- **You name an attribute once, plainly, and each row has that key**: its value if the row's type defines it, `null` if not (`Owners` is null on a Request, `Owner` null on a Story; the SDK does not merge differently named attributes). That holds when none of the searched types has it too: every row has `null`, so one list of columns serves whatever types a user picks. Only a name that is no attribute of any asset type is a usage error (a misspelling). A `findin` name none of the searched types has is left out; if none is left, the search is refused.
 - `select` defaults to `Name`, `Number`, `AssetType`, `AssetState`; `findin` defaults to `Name` and `Number`.
 - A relation is a bare `{ _oid }`; ask for a display value as a path (`"Scope.Name"`, `"Owners.Name"`).
 - **Selects are plain; filters are sent as written and may be type-qualified.** A select names a value, and the SDK can ask each type for it. A filter is an expression: a condition across types, such as "owned by me" when work items have `Owners` and requests have `Owner`, has no plain spelling, so you write it: `"(Workitem.Owners.IsSelf='true'|Request.Owner.IsSelf='true')"`. A term on an attribute every searched type shares (`AssetState`, `Scope.Name`) needs no qualifying. `sort` is sent as written too.
 - Deleted assets are never found; `client.deleted(type, params)` reads those.
+- The first search loads the schema of each type searched (one request per type, then cached for the client, or shared through a `TypeCache`). A short-lived process that searches once pays that every time: seed the cache (`TypeCache.fromMetamodel`) or keep the client.
 - To find one asset by its exact number, do not search: `client.resolve.numbers(["S-01042"])` is exact and does not wait for the text index.
+
+A date is spelled one way on every read: `"2026-09-06T13:52:51.9030000"`, seven decimals, with a `Z` on a UTC attribute (`ChangeDateUTC`). The endpoints each write dates differently, and the SDK answers this one spelling whichever of them was asked; `new Date(value)` reads it.
 
 Rows are typed from what you select, against the product's metamodel: a selected key is its value or `null`, never `undefined`. For an attribute your instance has and the generated model does not (a custom field's relation, a product module's attribute), name your own row type at the call: `client.query<MyRow>(q)` needs only `_oid` on `MyRow`.
 
@@ -166,7 +169,7 @@ expect(fake.sent[0]).toEqual([{ from: "Story:1", execute: "QuickClose" }]);     
 
 - `onQuery(match, rows)` answers every read (`query`, `get`, `queryPage`, `pages`, …). A list is the whole result: the fake pages it and answers a read by OID with that row. A function gets the query and answers one page. A read nothing was scripted for throws; it never looks like an empty result.
 - Writes need no script: a create answers a new OID, an update or operation by OID answers that OID. `onSend` scripts anything else, failures included.
-- `onSearch(rows)` answers `client.search`: the fake pages the rows, reports the total, and cuts each row to the selected keys; `fake.searched` is what was asked. It sends no request.
+- `onSearch(rows)` answers a search, whether your code calls `fake.search` or builds its own client on `fake.transport`: the fake pages the rows and reports the total, each row comes back with exactly the selected keys, and `fake.searched` is what was asked. Script it before the first search.
 - `sendGuarded` and `batch.run` work on assets addressed by OID that you scripted a row for: `fake.touch(oid)` is someone else changing the asset (the next write stamped earlier is a conflict), `fake.remove(oid)` is it being deleted.
 - `resolve.numbers` finds a number among the scripted rows; `localize` answers `onLocalize` labels and echoes any other tag; `fake.transport` can be the transport of a client your code builds itself.
 - `onList(type, rows)` answers rest-1's list read the same way (`client.deleted`, and `rest1.list` from `/wire`). `onRequest(path, answer)` answers any other endpoint in its own shape; with `new FakeAgilityClient({ metamodel })` (a meta.v1 document) a response captured from a server reads translated, as it would live. An `Error` as an answer is thrown.

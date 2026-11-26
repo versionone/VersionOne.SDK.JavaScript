@@ -21,7 +21,7 @@
 import { UsageError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import type { Asset, Oid } from "../types/asset";
-import { CONCRETE_SUBTYPES } from "../types/assets/subtypes";
+import { ATTRIBUTE_NAMES, CONCRETE_SUBTYPES } from "../types/assets/subtypes";
 import * as rest1 from "../wire/rest1";
 import type { Schema } from "./schema";
 
@@ -40,11 +40,17 @@ export interface SearchOptions {
   types: readonly string[];
   /**
    * Attributes for each row, by plain name; a path (`"Scope.Name"`) is
-   * keyed as written. A row whose type lacks one has null there. Default:
-   * Name, Number, AssetType, AssetState.
+   * keyed as written. A row whose type lacks one has null there, and so
+   * does every row when none of the searched types has it. Default: Name,
+   * Number, AssetType, AssetState.
    */
   select?: readonly string[];
-  /** Attributes to search in, by plain name. Default: Name and Number. Always sent: the server's own default differs by type. */
+  /**
+   * Attributes to search in, by plain name. Default: Name and Number.
+   * Always sent: the server's own default differs by type. One that none
+   * of the searched types has is left out; if none is left, the search is
+   * refused.
+   */
   findin?: readonly string[];
   /**
    * Filter terms, sent as written. Unlike a select, a filter is an
@@ -101,21 +107,24 @@ async function checked(schema: Schema, types: readonly string[]): Promise<string
 }
 
 /**
- * A plain name as the request spells it: itself when every searched asset
- * has it (the root defines it, or one type is searched), otherwise once
- * per type that defines it, qualified. A name no type defines is a
- * mistake in the call.
+ * Plain names as the request spells them. A name every searched asset has
+ * (the root defines it, or one type is searched and has it) goes as
+ * written; otherwise it goes once per searched type that defines it,
+ * qualified. A name none of the searched types defines is left out of the
+ * request (each row then has null there, by the rule: a row has the key's
+ * value if its type has the attribute): which types are searched is often
+ * a user's choice, and a caller's fixed list of columns must not fail for
+ * it. Only a name that is no attribute of anything is a mistake in the
+ * call: not one of the product's attribute names, not a custom field, not
+ * defined by any type searched.
  */
 function spelled(schema: Schema, types: readonly string[], names: readonly string[], what: string): string[] {
-  if (types.length === 1) {
-    for (const name of names) if (!schema.attribute(types[0]!, name.split(".")[0]!)) throw new UsageError(`search: ${what} "${name}" is not an attribute of ${types[0]}`);
-    return [...names];
-  }
+  const one = types.length === 1;
   return names.flatMap((name) => {
     const head = name.split(".")[0]!;
-    if (schema.attribute(ROOT, head)) return [name];
-    const defining = types.filter((t) => schema.attribute(t, head));
-    if (!defining.length) throw new UsageError(`search: ${what} "${name}" is not an attribute of any type searched (${types.join(", ")})`);
+    if (one ? schema.attribute(types[0]!, head) : schema.attribute(ROOT, head)) return [name];
+    const defining = one ? [] : types.filter((t) => schema.attribute(t, head));
+    if (!defining.length && !ATTRIBUTE_NAMES.has(head) && !head.startsWith("Custom_")) throw new UsageError(`search: ${what} "${name}" is not an attribute of any asset type (searched: ${types.join(", ")})`);
     return defining.map((t) => `${t}.${name}`);
   });
 }
@@ -143,15 +152,21 @@ export async function search<Row extends { _oid: Oid } = SearchRow>(transport: T
     variables[name] = value;
   });
   if (!one) filter.unshift(`AssetType=${types.map(quoted).join(",")}`);
+  const searchIn = spelled(schema, types, findin, "findin");
+  if (!searchIn.length) throw new UsageError(`search: none of the types searched (${types.join(", ")}) has any of the attributes in \`findin\` (${findin.join(", ")}): there is nothing to search in`);
+  const asked = spelled(schema, types, select, "select");
+  // The paths' related types too, so a date at the end of a path is spelled as every read spells it.
+  await schema.ensureFor(types.map((from) => ({ from, select: select.filter((name) => schema.attribute(from, name.split(".")[0]!)) })));
   const result = await rest1.list(transport, one ? types[0]! : ROOT, {
     find: text,
-    findin: spelled(schema, types, findin, "findin"),
-    select: spelled(schema, types, select, "select"),
+    findin: searchIn,
+    // Every searched asset has a Name: asked for when nothing selected applies, so the server does not choose the attributes itself.
+    select: asked.length ? asked : ["Name"],
     filter: filter.length ? filter : undefined,
     with: Object.keys(variables).length ? variables : undefined,
     sort: options.sort ? [...options.sort] : undefined,
     page: options.page,
     needTotal: true
-  });
+  }, { lookup: schema });
   return { rows: result.rows.map((row) => shaped<Row>(row, select)), total: result.total, more: result.more };
 }

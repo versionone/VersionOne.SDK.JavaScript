@@ -5,6 +5,7 @@ import { UsageError } from "../../src/core/errors";
 import type { RequestOptions, Transport } from "../../src/core/transport";
 import { Schema } from "../../src/services/schema";
 import { search } from "../../src/services/search";
+import { AgilityApiClient } from "../../src/client";
 import { FakeAgilityClient } from "../../src/testing";
 import { toMetamodel, type MetamodelDocument } from "../../src/wire/meta";
 
@@ -102,26 +103,66 @@ describe("search", () => {
     await refused(() => search(t, s, "x", { types: [], page }), /needs `types`/);
     await refused(() => search(t, s, "x", { types: ["BaseAsset"], page }), /"BaseAsset" is an abstract type whose concrete subtypes the SDK does not know/);
     await refused(() => search(t, s, "x", { types: ["Sotry"], page }), /no asset type "Sotry"/);
-    await refused(() => search(t, s, "x", { types: ["Story", "Issue"], select: ["Nmae"], page }), /select "Nmae" is not an attribute of any type searched \(Story, Issue\)/);
-    await refused(() => search(t, s, "x", { types: ["Story", "Issue"], findin: ["Nmae"], page }), /findin "Nmae"/);
-    await refused(() => search(t, s, "x", { types: ["Issue"], select: ["Estimate"], page }), /"Estimate" is not an attribute of Issue/);
+    await refused(() => search(t, s, "x", { types: ["Story", "Issue"], select: ["Nmae"], page }), /select "Nmae" is not an attribute of any asset type \(searched: Story, Issue\)/);
+    await refused(() => search(t, s, "x", { types: ["Story"], findin: ["Nmae"], page }), /findin "Nmae" is not an attribute of any asset type/);
+    await refused(() => search(t, s, "x", { types: ["Goal", "Topic"], findin: ["Estimate", "Owners"], page }), /none of the types searched \(Goal, Topic\) has any of the attributes in `findin` \(Estimate, Owners\): there is nothing to search in/);
     expect(t.calls).toEqual([]);
+  });
+
+  it("a name none of the searched types has is not a mistake: it is left out of the request and every row has null there, so one list of columns serves any choice of types", async () => {
+    const columns = ["Name", "Number", "Status.Name", "Owners.Name", "Owner.Name", "Estimate", "Custom_Risk"];
+    // One type, which has no Owner and no custom field of that name.
+    const story = recording({ ...live, Assets: [live.Assets[1]] });
+    const one = await search(story, schema(), "printer", { types: ["Story"], select: columns, page });
+    expect(story.calls[0]).toMatchObject({ path: "/rest-1.v1/Data/Story", query: { sel: "Name,Number,Status.Name,Owners.Name,Estimate" } });
+    expect(one.rows).toEqual([{ _oid: "Story:1", Name: "Printer setup", Number: "S-01001", "Status.Name": null, "Owners.Name": ["Ann", "Bo"], "Owner.Name": null, Estimate: 2, Custom_Risk: null }]);
+    // Two types with neither a Status nor an owner nor an Estimate: only what they have is asked for; a findin none has is dropped.
+    const few = recording({ ...live, Assets: [] });
+    await search(few, schema(), "printer", { types: ["Goal", "Topic"], select: columns, findin: ["Name", "Estimate"], page });
+    expect(few.calls[0]!.query).toMatchObject({ sel: "Name,Goal.Number,Topic.Number", findin: "Name" });
+    // Nothing selected applies at all: the search still asks for something of its own, and the rows have the keys.
+    const none = recording({ ...live, Assets: [{ _type: "Asset", href: "", id: "Goal:4", Attributes: { Name: attribute("Name", "Printing goal") } }] });
+    expect((await search(none, schema(), "printer", { types: ["Goal", "Topic"], select: ["Estimate", "Owners"], findin: ["Name"], page })).rows).toEqual([{ _oid: "Goal:4", Estimate: null, Owners: null }]);
+    expect(none.calls[0]!.query).toMatchObject({ sel: "Name" });
+  });
+
+  it("a date is in the model's one spelling, by the row's own type; text that looks like a date is left alone", async () => {
+    const dated = recording({ ...live, Assets: [{ _type: "Asset", href: "", id: "Story:1", Attributes: { Name: attribute("Name", "2011-09-20"), ChangeDateUTC: attribute("ChangeDateUTC", "2026-07-13T22:06:14.600Z"), CreateDate: attribute("CreateDate", "2011-09-20") } }] });
+    expect((await search(dated, schema(), "printer", { types: ["Story", "Issue"], select: ["Name", "ChangeDateUTC", "CreateDate"], page })).rows).toEqual([{ _oid: "Story:1", Name: "2011-09-20", ChangeDateUTC: "2026-07-13T22:06:14.6000000Z", CreateDate: "2011-09-20T00:00:00.0000000" }]);
   });
 });
 
 describe("FakeAgilityClient: search", () => {
-  it("onSearch answers client.search with scripted rows, paged, with the total, each cut to the selected keys; what was searched is recorded and nothing is requested", async () => {
-    const fake = new FakeAgilityClient().onSearch([
-      { _oid: "Story:1", Name: "Printer setup", Number: "S-1", AssetType: "Story", AssetState: "Active", Estimate: 2 },
-      { _oid: "Request:2", Name: "Printer request", Number: "R-2", AssetType: "Request", AssetState: "Active" },
-      { _oid: "Issue:3", Name: "Printer blocker", Number: "I-3", AssetType: "Issue", AssetState: "Active" }
-    ]);
-    const first = await fake.search("printer", { types: ["Story", "Request", "Issue"], select: ["Name", "Number", "Estimate"], page: { size: 2, start: 0 } });
-    expect(first).toEqual({ total: 3, more: true, rows: [{ _oid: "Story:1", Name: "Printer setup", Number: "S-1", Estimate: 2 }, { _oid: "Request:2", Name: "Printer request", Number: "R-2", Estimate: null }] });
+  const scripted = [
+    { _oid: "Story:1", Name: "Printer setup", Number: "S-1", AssetType: "Story", AssetState: "Active", Estimate: 2, Scope: { _oid: "Scope:0", Name: "System" } },
+    { _oid: "Request:2", Name: "Printer request", Number: "R-2", AssetType: "Request", AssetState: "Active" },
+    { _oid: "Issue:3", Name: "Printer blocker", Number: "I-3", AssetType: "Issue", AssetState: "Active" }
+  ];
+
+  it("onSearch answers client.search with scripted rows, paged, with the total, each with exactly the selected keys; what was searched is recorded", async () => {
+    const fake = new FakeAgilityClient().onSearch(scripted);
+    const first = await fake.search("printer", { types: ["Story", "Request", "Issue"], select: ["Name", "Number", "Estimate", "Scope", "Scope.Name"], page: { size: 2, start: 0 } });
+    expect(first).toEqual({ total: 3, more: true, rows: [
+      { _oid: "Story:1", Name: "Printer setup", Number: "S-1", Estimate: 2, Scope: { _oid: "Scope:0" }, "Scope.Name": "System" },
+      { _oid: "Request:2", Name: "Printer request", Number: "R-2", Estimate: null, Scope: null, "Scope.Name": null }
+    ] });
     const rest = await fake.search("printer", { types: ["Story", "Request", "Issue"], page: { size: 2, start: 2 } });
     expect(rest).toEqual({ total: 3, more: false, rows: [{ _oid: "Issue:3", Name: "Printer blocker", Number: "I-3", AssetType: "Issue", AssetState: "Active" }] });
-    expect(fake.searched.map((s) => [s.text, s.options.page.start])).toEqual([["printer", 0], ["printer", 2]]);
-    expect(fake.requests).toEqual([]);
+    expect(fake.searched.map((s) => [s.text, s.options.types, s.options.page.start])).toEqual([["printer", ["Story", "Request", "Issue"], 0], ["printer", ["Story", "Request", "Issue"], 2]]);
+  });
+
+  it("a client the code under test builds on fake.transport gets the same answer: the search is the client's own, and the fake's instance has the types it names (a chat-bot consumer's pattern)", async () => {
+    const fake = new FakeAgilityClient().onSearch(scripted);
+    const own = new AgilityApiClient({ baseUrl: "https://agility.example.com/Fake", retries: 0 }, { transport: fake.transport });
+    const found = await own.search("printer queue", { types: ["Story", "Request", "Issue", "Test"], findin: ["Name", "Description"], filter: ["AssetState!='Closed'"], sort: ["-ChangeDateUTC"], page: { size: 2, start: 0 } });
+    expect(found).toEqual({ total: 3, more: true, rows: [
+      { _oid: "Story:1", Name: "Printer setup", Number: "S-1", AssetType: "Story", AssetState: "Active" },
+      { _oid: "Request:2", Name: "Printer request", Number: "R-2", AssetType: "Request", AssetState: "Active" }
+    ] });
+    expect(fake.searched).toEqual([{ text: "printer queue", options: { types: ["Story", "Request", "Issue", "Test"], page: { size: 2, start: 0 } } }]);
+    // What the code under test typed travels as the search text and nowhere else.
+    expect(fake.requests).toHaveLength(1);
+    expect(fake.requests[0]!.query).toMatchObject({ find: "printer queue", where: "AssetType='Story','Request','Issue','Test';AssetState!='Closed'" });
   });
 
   it("an unscripted search throws, and so do the mistakes the client refuses; a function answers a page, an Error is thrown", async () => {
