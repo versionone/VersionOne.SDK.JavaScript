@@ -120,4 +120,12 @@ describe("the built-in transport under the same rule", () => {
     const slow = (async () => { await later(60, null); return new Response("{\"ok\":true}", { status: 200, headers: { "content-type": "application/json" } }); }) as unknown as typeof fetch;
     expect(await createFetchTransport({ baseUrl: "https://x", timeoutMs: 0, retries: 0, fetchImpl: slow }).request(read)).toEqual({ ok: true });
   });
+
+  it("a person's time is not on the clock: the re-authentication hook runs outside the deadline, however long the sign-in takes", async () => {
+    const answers = [new Response("Unauthorized", { status: 401 }), new Response("{\"ok\":true}", { status: 200, headers: { "content-type": "application/json" } })];
+    const fetchImpl = (async () => answers.shift()!) as unknown as typeof fetch;
+    // The hook takes three times the timeout, as someone typing a password would.
+    const transport = createFetchTransport({ baseUrl: "https://x", timeoutMs: 20, retries: 0, fetchImpl, onUnauthorized: async () => { await later(60, null); return "retry"; } });
+    expect(await transport.request(read)).toEqual({ ok: true });
+  });
 });

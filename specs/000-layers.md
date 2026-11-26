@@ -248,7 +248,10 @@ abandoned request answers later is discarded. A transport therefore owes
 nothing about timing beyond honouring `signal`, which the conformance
 suite checks; one with a shorter timeout of its own simply rejects first.
 A timeout says the client stopped waiting, never that the server did not
-act, which is one more reason a write is not resent.
+act, which is one more reason a write is not resent. The deadline cannot
+tell the network from a person: a custom transport that waits for someone
+inside `request` turns the client's timeout off (`timeoutMs: 0`), and the
+built-in transport's re-authentication hook runs outside the deadline.
 
 Re-authentication follows the same rule. On a 401 (or a status the caller
 lists) the transport calls `onUnauthorized` once per request; "retry" resends

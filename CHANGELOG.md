@@ -25,7 +25,12 @@
   left at its default of none, now gets one. Migration: nothing, if 60
   seconds per attempt suits you; `timeoutMs: <ms>` on the client to
   choose; `timeoutMs: 0` for no client timeout, leaving your transport
-  to decide. The signal your transport receives is now the attempt's own
+  to decide. **Set `timeoutMs: 0` if your transport waits for a person
+  inside `request`** (an HTTP client that shows a sign-in prompt and
+  replays the request when the user is back): the deadline cannot tell
+  that from a slow network, and the replay would carry a signal that has
+  already fired. The built-in transport's `onUnauthorized` hook runs
+  outside the deadline. The signal your transport receives is now the attempt's own
   and not the object the caller passed, so compare by `aborted`, not by
   identity. Code in a transport that maps its client's timeout error to
   `TIMEOUT` is no longer needed for resends. (a browser-app consumer.)
