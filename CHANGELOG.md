@@ -38,6 +38,12 @@
     with a filter and a page). An attribute the type does not have, a
     date in `select` (the endpoint writes dates in the server's culture
     format) and a path in `select` are refused the same way.
+  - Telling a list from another relation walks the related type's
+    ancestors to `List` (for Status: `StoryStatus`, `Status`, `List`), so
+    a cold schema cache pays up to two more type loads. A type in that
+    chain that cannot be loaded is an `ApiError` coded `NOT_FOUND` naming
+    it, never "not a list type" (a test that serves captured meta.v1
+    types needs those two as well).
   - No fallback: on an instance without the endpoint the call fails as
     the server's 404, never as an empty list. From which product release
     the endpoint exists is not established here.
@@ -51,7 +57,10 @@
 - `/testing`: `fake.onValues({ Status: rows })` scripts the valid values
   by attribute (rows, a function of what was asked, or an Error), and
   `fake.valuesAsked` records each request. Name matching and the two
-  errors are the client's own on the fake.
+  errors are the client's own on the fake. Without a `metamodel` the
+  fake does not know what an attribute nobody scripted is and says so
+  in its own words; to test what the client refuses (`Owners`), give
+  the fake a metamodel.
 - `examples/12-list-values.ts`.
 
 ## 1.0.0-alpha.11

@@ -19,6 +19,8 @@ export { CONFORMANCE_BASE_URL, fetchFrom, transportConformance } from "./transpo
 export type { ConformanceCheck, ConformanceRequest, ConformanceResponse, ConformanceServer } from "./transportConformance";
 import type { ClientConfig } from "../core/clientConfig";
 import type { SearchOptions, SearchResult, SearchRow } from "../services/search";
+import * as listsService from "../services/lists";
+import type { ValueInput, ValuesInput } from "../services/lists";
 import { ATTRIBUTE_NAMES, CONCRETE_SUBTYPES } from "../types/assets/subtypes";
 import { ApiError, UsageError, apiErrorFromResponse } from "../core/errors";
 import type { RequestOptions, Transport } from "../core/transport";
@@ -516,6 +518,26 @@ export class FakeAgilityClient extends AgilityApiClient {
     Object.assign(this.script.values, answer);
     return this;
   }
+
+  /**
+   * `client.lists` on the fake. Without a metamodel the fake cannot know
+   * what an attribute nobody scripted is (a list, a relation to members,
+   * a text), so it says that, rather than refuse in words a server's
+   * metamodel would not produce. With a metamodel the client's own checks
+   * run as they do live.
+   */
+  override readonly lists = (() => {
+    const scripted = (what: string, input: { asset?: string; type?: string }, attributes: readonly string[]) => {
+      if (this.script.metamodel) return;
+      const missing = attributes.find((a) => !(a in this.script.values));
+      const type = input.asset ? input.asset.split(":")[0] : input.type;
+      if (missing !== undefined) throw new UsageError(`FakeAgilityClient: no valid values scripted for ${type}.${missing} (${what}); script them with onValues({ ${missing}: [...] }). To test what the client refuses (an attribute that is not a list), give the fake a metamodel: without one it does not know what ${missing} is`);
+    };
+    return {
+      values: async (input: ValuesInput) => { scripted("lists.values", input, input.attributes ?? []); return listsService.values(this.transport, this.schema, input); },
+      value: async (input: ValueInput) => { scripted("lists.value", input, [input.attribute]); return listsService.value(this.transport, this.schema, input); }
+    };
+  })();
 
   /**
    * Script what a search answers: rows in the model's shape (a list is

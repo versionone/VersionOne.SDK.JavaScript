@@ -119,6 +119,15 @@ describe("client.lists", () => {
     await expect(client(fake(() => ({ ...all, total: 0, Assets: [] }))).lists.value({ asset: "Story:1", attribute: "Status", name: "Done" })).rejects.toMatchObject({ code: "NO_SUCH_VALUE", message: 'Story.Status has no value "Done" here. No value is valid here.' });
   });
 
+  it("a type in the chain to List that cannot be loaded is said as that, not as 'not a list' with advice to use another read (a chat-bot consumer finding)", async () => {
+    // A schema that has Story and StoryStatus and nothing above them, as a test serving captured types may.
+    const whole = JSON.parse(readFileSync(join(__dirname, "..", "..", "metamodel.json"), "utf8")) as MetamodelDocument;
+    const partial = new FakeAgilityClient({ metamodel: { AssetTypes: Object.fromEntries(Object.entries(whole.AssetTypes).filter(([name]) => name !== "Status" && name !== "List")) as MetamodelDocument["AssetTypes"] } });
+    const error = await partial.lists.values({ asset: "Story:1", attributes: ["Status"] }).catch((e: unknown) => e as ApiError);
+    expect(error).toMatchObject({ code: "NOT_FOUND", kind: "notFound", message: "could not load the asset type Status to tell whether StoryStatus is a list type" });
+    expect(error.message).not.toContain("client.query");
+  });
+
   it("a failure is never an empty list: the endpoint's error is thrown, also when it is absent from the instance", async () => {
     const gone = fake(() => { throw new ApiError("Not Found", 404); });
     await expect(client(gone).lists.values({ asset: "Story:1", attributes: ["Status"] })).rejects.toMatchObject({ status: 404 });
@@ -141,8 +150,15 @@ describe("FakeAgilityClient.onValues", () => {
       { type: "Story", attribute: "Status", asset: "Story:1077" },
       { type: "Defect", attribute: "Priority", scope: "Scope:5", team: "Team:9" }
     ]);
-    // An attribute nothing was scripted for says so; an Error scripted is thrown.
-    await expect(agility.lists.values({ asset: "Story:1", attributes: ["Source"] })).rejects.toMatchObject({ kind: "usage" });
+    // An attribute nothing was scripted for says so, in the fake's own words: without a metamodel it does not know what
+    // Owners is, and must not refuse in words a server's metamodel would not produce (a CLI consumer finding).
+    for (const attribute of ["Source", "Owners"]) {
+      await expect(agility.lists.values({ asset: "Story:1", attributes: [attribute] })).rejects.toMatchObject({ kind: "usage", message: expect.stringMatching(new RegExp(`^FakeAgilityClient: no valid values scripted for Story\\.${attribute}`)) });
+    }
+    await expect(agility.lists.value({ asset: "Story:1", attribute: "Owners", name: "x" })).rejects.toMatchObject({ message: expect.stringContaining("FakeAgilityClient") });
+    // With a metamodel the client's own refusal is the one a server's metamodel produces.
+    const real = new FakeAgilityClient({ metamodel: JSON.parse(readFileSync(join(__dirname, "..", "..", "metamodel.json"), "utf8")) as MetamodelDocument });
+    await expect(real.lists.values({ asset: "Story:1", attributes: ["Owners"] })).rejects.toMatchObject({ kind: "usage", message: expect.stringContaining("Story.Owners points to Member, which is not a list type") });
     agility.onValues({ Status: new ApiError("Not Found", 404) });
     await expect(agility.lists.values({ asset: "Story:1", attributes: ["Status"] })).rejects.toMatchObject({ status: 404 });
   });

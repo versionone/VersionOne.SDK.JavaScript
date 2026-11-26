@@ -56,13 +56,21 @@ export type ValueInput = ListTarget & {
 
 const typeOf = (target: ListTarget): AssetTypeToken => ("asset" in target ? momentless(target.asset).split(":")[0]! : target.type);
 
-/** Does `type` descend from List (or is it List)? By the schema, loading ancestors as needed. */
+/**
+ * Does `type` descend from List (or is it List)? By the schema, loading
+ * ancestors as needed (StoryStatus → Status → List: up to two more type
+ * loads on a cold cache). A type in the chain that cannot be loaded is an
+ * error of its own: "not a list" would be a guess, and the advice that
+ * goes with it would be wrong.
+ */
 async function isListType(schema: Schema, type: AssetTypeToken): Promise<boolean> {
   const seen = new Set<AssetTypeToken>();
   for (let t: AssetTypeToken | undefined = type; t && !seen.has(t); ) {
     if (t === "List") return true;
     seen.add(t);
-    t = (await schema.load(t))?.Base;
+    const loaded = await schema.load(t);
+    if (!loaded) throw new ApiError(`could not load the asset type ${t} to tell whether ${type} is a list type`, 404, "NOT_FOUND", { type: t });
+    t = loaded.Base;
   }
   return false;
 }
