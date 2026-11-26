@@ -51,7 +51,7 @@ describe("transport for real callers", () => {
     await expect(transport.request({ method: "POST", path: "/api/asset", body: [] })).rejects.toMatchObject({ status: 401 });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(onUnauthorized.mock.calls[0]![0].retryable).toBe(false);
-    // A guarded (idempotent) write may be resent.
+    // A POST marked idempotent (a read sent by POST) may be resent.
     const guarded = vi.fn().mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(json({}));
     await createFetchTransport({ baseUrl: "https://x", fetchImpl: guarded, onUnauthorized }).request({ method: "POST", path: "/api/asset", body: [], idempotent: true });
     expect(guarded).toHaveBeenCalledTimes(2);

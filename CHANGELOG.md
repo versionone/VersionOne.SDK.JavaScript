@@ -21,6 +21,26 @@
   knowing a costly request may then run twice. Applies to the built-in
   transport and to a custom one alike.
 
+- **A guarded write is no longer sent again automatically.** Since
+  alpha.5 a guarded batch with no creates (`client.sendGuarded`,
+  `batch.run` with `guard: true`) was marked idempotent and sent once
+  more after a lost connection or a 5xx. A second send harms no data: it
+  matches nothing, because the first advanced the Moment. But "matched
+  nothing" is how a conflict is reported, so when the first send had
+  landed and only its answer was lost, the caller was told that someone
+  else changed the asset and nothing was applied, about its own change.
+  Now no write is ever resent. A guarded write that gets no answer
+  rejects like any write, `error.request.idempotent` is `false`, and
+  `explain` says "Agility did not confirm the change. It may or may not
+  have been made: check before trying again." with `outcome:
+  "unknown"`. Migration: on that error, read the asset again; you see
+  your change or you do not, and the guard makes sending it again safe.
+  The same holds for the unauthorized hook: `retryable` is now false
+  for a guarded write, so "retry" does not resend it after a 401 and
+  "retry-write" does, as for a plain write.
+  `SendOptions.idempotent` is removed from `/wire`'s `assetApi.send`;
+  drop it from a call that set it.
+
 ### Changed
 
 - **`client.explain` no longer tells a person to try again after a write
@@ -29,7 +49,7 @@
   which for a write whose fate is unknown is how a duplicate gets made.
   Now: a write with no answer, a timeout or a 5xx is "Agility did not
   confirm the change. It may or may not have been made: check before
-  trying again."; a read or a guarded batch that timed out is "Agility
+  trying again."; a read that timed out is "Agility
   did not answer in time. The request may still be running: wait before
   trying again."; a 429 is "Agility is busy. The same request may work in
   a moment."; an error that does not say what was asked is "Agility could
@@ -65,7 +85,7 @@
   in this shape or in its own `Exceptions` list is not confirmed (both
   are recognised).
 - `Explanation.retrySafe`: `true` when sending the same request again is
-  safe (a read, a guarded batch, anything refused with a 429), `false`
+  safe (a read, anything refused with a 429), `false`
   for a write that got no answer or a server failure and for a read the
   server gave up on (the same request would cost and fail the same),
   `null` when the server answered and said why, or when it cannot be
@@ -78,9 +98,8 @@
   server answered a refusal before doing the work: a 4xx (a 429
   included) in answer to a write, a guarded write that met a conflict,
   and each failed command when a batch's failures are explained (that
-  command alone: the others are in the Outcome). `null` for a read, for
-  a guarded batch with no creates (safe to send again, and the guard
-  settles it) and for an error that does not say what was asked. With
+  command alone: the others are in the Outcome). `null` for a read and
+  for an error that does not say what was asked. With
   `retrySafe` these are the two questions a consumer has after a
   failure, as two fields: `retrySafe: false` covers both a write whose
   fate is unknown (`outcome: "unknown"`) and a read that will fail the

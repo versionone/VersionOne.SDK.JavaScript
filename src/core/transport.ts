@@ -20,8 +20,9 @@ export interface RequestOptions {
   responseType?: ResponseType;
   /**
    * May this request be sent again after a network failure or a 5xx? A GET
-   * is, by default; anything else is not. A batch write to api/asset is
-   * never idempotent unless the caller has made it so with a guard.
+   * is, by default; anything else is not, unless it is a read sent by
+   * POST (query.v1). A batch write to api/asset is never idempotent,
+   * guarded or not.
    */
   idempotent?: boolean;
   /**

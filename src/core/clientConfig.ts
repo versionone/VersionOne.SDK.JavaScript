@@ -41,8 +41,8 @@ export interface ClientConfig extends Pick<FetchTransportConfig, "credentials" |
    */
   timeoutMs?: number;
   /**
-   * How many times an idempotent request (a GET, a query.v1 read, a
-   * guarded batch with no creates) is sent again after a failure that
+   * How many times an idempotent request (a GET, a query.v1 read;
+   * never a write, guarded or not) is sent again after a failure that
    * says the server never took it up or fell over: no connection, a 5xx,
    * a 429. Default 1; 0 turns it off. It applies whichever Transport the
    * client has: the built-in one does it itself, and the client does it

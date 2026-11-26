@@ -45,13 +45,15 @@ describeInstance("guard (live)", () => {
     expect(await estimate(b)).toBe("7");
   });
 
-  it("sending the same guarded batch twice applies once: the first send advances the Moment the second was stamped with", async () => {
+  it("sending the same guarded batch twice applies once: the first send advances the Moment the second was stamped with. The second matches nothing and reports no failure, which is how a conflict reads: why a guarded batch is never resent automatically", async () => {
     const first = await sendGuarded(t, [{ from: a, update: { Estimate: 8 } }]);
     const second = await assetApi.send(t, first.details.sent);
     expect(first.modified).toEqual([a]);
     expect(first.conflicts).toEqual([]);
     expect(first.requestId).toEqual(expect.any(String));
     expect(second.assetsModified.count).toBe(0);
+    expect(second.assetsOperatedOn.count).toBe(0);
+    expect(second.commandFailures.count).toBe(0);
     expect(await estimate(a)).toBe("8");
   });
 

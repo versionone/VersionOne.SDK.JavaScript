@@ -39,8 +39,8 @@ const client = new AgilityApiClient({
   credentials: "include",                     // send the session cookie; no accessToken
   onUnauthorized: async ({ retryable }) => {
     if (!(await signInAgain())) return "fail";
-    // "retry" resends what is safe to send twice: a read, a GET, a guarded
-    // batch with no creates. `retryable` says whether this request is one.
+    // "retry" resends what is safe to send twice: a GET, a read. Never a
+    // write, guarded or not. `retryable` says whether this request is one.
     if (retryable) return "retry";
     // A plain write is never resent by "retry": if it ran before the
     // refusal, sending it again would apply it twice. "retry-write" resends

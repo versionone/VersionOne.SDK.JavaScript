@@ -231,8 +231,7 @@ made), which api/asset's `execute` performs but does not report. The transport
 retries only idempotent requests (GET by default, and every query.v1
 POST, since that endpoint cannot write), only on a network
 failure, a 5xx or a 429 (Retry-After honoured, up to 30 s), never
-another 4xx, never after a timeout (below), and once by default (`retries: 1`); a batch write is never retried unless the
-caller has made it idempotent with a guard and says so. That rule is
+another 4xx, never after a timeout (below), and once by default (`retries: 1`); a batch write is never retried, guarded or not (below). That rule is
 the client's, not one transport's: the built-in fetch transport applies it
 itself (it can read Retry-After), and the client applies it around a
 custom Transport (`core/retry`), so a consumer's transport does not
@@ -299,8 +298,8 @@ of the queries, so every query slot is null and the failures are the
 answer (thrown for reads and with throwOnFailure); a disagreement with no
 such failure is an error of its own.
 
-The guard (`services/guard`) is what makes a write batch safe to resend:
-each per-asset command of the server's projection is sent scoped to the
+The guard (`services/guard`) is what makes a write safe to repeat by a
+caller who has looked again: each per-asset command of the server's projection is sent scoped to the
 asset at the Moment read just before (`where { ID, Moment }`) and to that
 version still being the current one (`filter RetireDateUTC=''`), so a stale
 or repeated command matches nothing. The two terms always travel together:
@@ -314,8 +313,17 @@ never a success and never confused with a no-op. A caller may supply the
 moment it read earlier, with the row a person is looking at; the guard then
 compares against what they saw. What the guard cannot see is a change that
 makes no new version of the asset (a child added to it): it protects an
-asset's own attributes. A guarded batch with no creates is sent
-idempotent; a plain one never is. Two commands on one asset are sent in
+asset's own attributes.
+
+**A guarded batch is not resent automatically either.** A second send
+harms no data (it matches nothing), but "matched nothing" is how a
+conflict reads: if the first send landed and its answer was lost, the
+resend would tell the caller that someone else changed the asset and
+nothing was applied, about the caller's own change. An honest "unknown"
+is better than that. So no write is ever marked idempotent; a guarded
+write with no confirmation is explained as an unconfirmed change
+(`outcome: "unknown"`), and the caller reads the asset again and
+decides. Two commands on one asset are sent in
 passes: the second goes only if the first applied, guarded on the Moment
 read just after it (the response does not say the new moment, and a shared
 pre-batch stamp would make the second match nothing). `batch.run` takes

@@ -53,7 +53,7 @@ describe("guard", () => {
     ]).map((u) => [u.index, u.code])).toEqual([[1, "aliasedWrite"], [2, "bareAliasFrom"], [3, "inlineCreate"]]);
   });
 
-  it("sendGuarded: preview, read Moments, send guarded and marked idempotent (no creates); the result is the Outcome plus the assets whose command matched nothing", async () => {
+  it("sendGuarded: preview, read Moments, send guarded, never marked idempotent (a resend of one that landed would read as a conflict); the result is the Outcome plus the assets whose command matched nothing", async () => {
     const t = fakeTransport(
       PROJECTED.slice(0, 2),
       envelope({ queryResult: { results: [[{ _oid: "Story:146020", Moment: "196330" }, { _oid: "Story:146021", Moment: "196333" }]], resultMetaData: [], count: 2 } }),
@@ -63,7 +63,7 @@ describe("guard", () => {
     const res = await sendGuarded(t, [{ from: "Story", filter: ["Number=$n"], with: { $n: ["S-1", "S-2"] }, update: { Estimate: 2 } }]);
     expect(t.calls.map((c) => c.query?.previewOnly ?? "send")).toEqual(["true", "send", "send"]);
     expect(t.calls[1]!.body).toEqual([{ from: "Story", select: ["Moment"], filter: ["ID=$oids"], with: { $oids: ["Story:146020", "Story:146021"] }, page: { size: 2, start: 0 } }]);
-    expect(t.calls[2]!.idempotent).toBe(true);
+    expect(t.calls[2]!.idempotent).toBe(false);
     expect(res.details.stamps).toEqual({ "Story:146020": "196330", "Story:146021": "196333" });
     expect(res).toMatchObject({ requestId: "r", modified: ["Story:146020"], operated: [], failures: [], touched: ["Story:146020", "Story:146021"], conflicts: ["Story:146021"] });
     expect(res.details.sent).toHaveLength(2);
@@ -95,7 +95,7 @@ describe("guard", () => {
     expect(none.calls).toHaveLength(2);
   });
 
-  it("a guarded batch with a create is not marked idempotent — a resend would create twice", async () => {
+  it("a guarded batch with a create is not marked idempotent either: a resend would create twice", async () => {
     const t = fakeTransport(PROJECTED, envelope({ queryResult: { results: [[{ _oid: "Story:146020", Moment: "196330" }, { _oid: "Story:146021", Moment: "196333" }]], resultMetaData: [], count: 2 } }), envelope());
     await sendGuarded(t, [{ from: "Story", update: { Estimate: 2 } }]);
     expect(t.calls[2]!.idempotent).toBe(false);

@@ -93,7 +93,7 @@ export function resendable(error: unknown): boolean {
 
 /**
  * The resend rule, for any Transport: an idempotent request (a GET, or one
- * the caller marked — a query.v1 read, a guarded batch with no creates)
+ * the caller marked: a query.v1 read; never a write, guarded or not)
  * that fails because it never reached the server or the server fell over
  * (no connection, a 5xx other than 504, a 429) is sent again, `retries`
  * times at most, a little later each time. Nothing else is: not a plain

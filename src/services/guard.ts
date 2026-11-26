@@ -43,9 +43,15 @@
  * The Ideas product's types (Idea*) keep no history and have no Moment;
  * nothing of theirs can be guarded.
  *
- * A guarded batch without creates is safe to send twice — an applied
- * command has advanced the Moment, so a resend matches nothing — and is
- * sent marked idempotent (spec 000 section 6).
+ * Sending a guarded batch twice harms no data: an applied command has
+ * advanced the Moment, so a second send matches nothing. But "matched
+ * nothing" is what a conflict looks like, so a second send of a batch
+ * whose first send landed reports the caller's own change as someone
+ * else's ("nothing was applied"). A guarded batch is therefore a write
+ * like any other to the resend rule: never sent again automatically
+ * (spec 000 section 6). When one gets no answer, its outcome is unknown;
+ * the caller reads the asset again, sees its change or not, and decides,
+ * which the guard makes safe.
  */
 import { ApiError, UsageError, WrappedError } from "../core/errors";
 import type { Transport } from "../core/transport";
@@ -227,8 +233,7 @@ export async function sendPasses<Row extends Asset = Asset>(transport: Transport
     const offset = sent.length;
     let done: assetApi.Outcome<Row>;
     try {
-      const creates = commands.some((c) => "AssetType" in bodyOf(c));
-      done = assetApi.outcomeOf(await assetApi.send<Row>(transport, commands, { ...options, idempotent: !creates }));
+      done = assetApi.outcomeOf(await assetApi.send<Row>(transport, commands, options));
     } catch (error) {
       // Nothing applied yet: the error is the whole story, as for a single send.
       if (k === 0) throw error;

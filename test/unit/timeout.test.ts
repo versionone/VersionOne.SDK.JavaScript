@@ -134,7 +134,7 @@ describe("the built-in transport under the same rule", () => {
 describe("what to tell a person when a request got no answer", () => {
   it("a read the server itself gave up on (its SQL execution timeout) is not 'wait and try again': the same request costs the same, so ask for less; a write keeps the sentence about the change", async () => {
     const gaveUp = () => apiErrorFromResponse(500, { error: "Server Error", exceptions: [{ type: "SqlException", message: "Execution Timeout Expired.  The timeout period elapsed prior to completion of the operation or the server is not responding." }, { type: "Win32Exception", message: "The wait operation timed out" }] });
-    for (const request of [read, guarded]) {
+    for (const request of [read, posted]) {
       expect(await say(gaveUp, request)).toMatchObject({ audience: "user", retrySafe: false, sentence: "Agility gave up on this request: it takes more work than the server allows. Sending it again will cost the same. Ask for less: a smaller page, fewer selected paths, a tighter filter." });
     }
     expect(await say(gaveUp, write)).toMatchObject({ retrySafe: false, sentence: "Agility did not confirm the change. It may or may not have been made: check before trying again." });
@@ -150,7 +150,8 @@ describe("what to tell a person when a request got no answer", () => {
     const [said] = await client.explain(error);
     return { stamp: (error as ApiError).request, sentence: said!.sentence, retrySafe: said!.retrySafe, outcome: said!.outcome, audience: said!.audience };
   };
-  const guarded: RequestOptions = { ...write, idempotent: true };
+  /** A read sent by POST and marked idempotent, as query.v1 is. */
+  const posted: RequestOptions = { method: "POST", path: "/query.v1", body: [], idempotent: true };
   const timeout = () => new ApiError("Timed out after 60000 ms", 0, "TIMEOUT");
   const dropped = () => new ApiError("fetch failed", 0, "NETWORK_ERROR");
 
@@ -176,8 +177,8 @@ describe("what to tell a person when a request got no answer", () => {
       expect((await outcome(failure, read))[0]).toBeNull();
     }
     expect(await outcome(sqlTimeout, read)).toEqual([null, false]);
-    // A guarded batch is marked safe to repeat and cannot be told from a read by its error: null, and retrySafe true.
-    expect(await outcome(timeout, guarded)).toEqual([null, true]);
+    // A read sent by POST is a read.
+    expect(await outcome(timeout, posted)).toEqual([null, true]);
     // A conflict applied nothing, stamped or not; an error that does not say what was asked says nothing.
     const bare = new AgilityApiClient({ baseUrl: "https://agility.example.com/I" }, { transport: failing(timeout()) });
     expect((await bare.explain(new ApiError("changed since it was read", 200, "CONFLICT")))[0]!.outcome).toBe("notApplied");
@@ -188,8 +189,8 @@ describe("what to tell a person when a request got no answer", () => {
     expect(one).toMatchObject({ index: 1, outcome: "notApplied", retrySafe: null });
   });
 
-  it("a read, or a guarded batch, that timed out is safe to repeat but may still be running; one that never got through may work in a moment", async () => {
-    for (const request of [read, guarded]) {
+  it("a read, by GET or by POST, that timed out is safe to repeat but may still be running; one that never got through may work in a moment", async () => {
+    for (const request of [read, posted]) {
       for (const failure of [timeout, () => new ApiError("Gateway Timeout", 504), () => new ApiError("Request Timeout", 408)]) {
         expect(await say(failure, request)).toMatchObject({ retrySafe: true, sentence: "Agility did not answer in time. The request may still be running: wait before trying again." });
       }

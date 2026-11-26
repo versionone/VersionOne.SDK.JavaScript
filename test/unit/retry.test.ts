@@ -103,16 +103,21 @@ describe("the resend rule above a custom Transport", () => {
     expect(off.calls).toHaveLength(1);
   });
 
-  it("a plain write is never resent, whatever happened to it; a guarded one with no creates may be", async () => {
+  it("a write is never resent, whatever happened to it, and a guarded one is a write: its lost answer is an unknown outcome, not a second send that would read as a conflict", async () => {
     const write = custom(new ApiError("Bad Gateway", 502), envelope);
     const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: write });
     await expect(client.send([{ from: "Story:1", update: { Name: "x" } }])).rejects.toMatchObject({ status: 502 });
     expect(write.calls).toHaveLength(1);
-    // preview, the Moment read, then the guarded send: it fails once and is sent again, because a resend of it matches nothing if the first one landed.
-    const guarded = custom([{ "@p": { oid: "Story:1", update: { Name: "x" } } }], { ...envelope, assetsModified: { oidTokens: [], count: 0 }, queryResult: { results: [[{ _oid: "Story:1", Moment: "7" }]], resultMetaData: [], count: 1 } }, new ApiError("Bad Gateway", 502), envelope);
-    const result = await new AgilityApiClient({ baseUrl: "https://x" }, { transport: guarded }).sendGuarded([{ from: "Story:1", update: { Name: "x" } }]);
-    expect(result).toMatchObject({ modified: ["Story:1"], conflicts: [] });
-    expect(guarded.calls).toHaveLength(4);
+    // preview, the Moment read, then the guarded send, which fails and is NOT sent again: had the first send landed, the second
+    // would match nothing and tell the caller that someone else changed the asset and nothing was applied.
+    for (const failure of [new ApiError("Bad Gateway", 502), new ApiError("fetch failed", 0, "NETWORK_ERROR")]) {
+      const guarded = custom([{ "@p": { oid: "Story:1", update: { Name: "x" } } }], { ...envelope, assetsModified: { oidTokens: [], count: 0 }, queryResult: { results: [[{ _oid: "Story:1", Moment: "7" }]], resultMetaData: [], count: 1 } }, failure, envelope);
+      const client = new AgilityApiClient({ baseUrl: "https://x", retries: 3 }, { transport: guarded });
+      const error = await client.sendGuarded([{ from: "Story:1", update: { Name: "x" } }]).catch((e: unknown) => e);
+      expect(error).toMatchObject({ status: failure.status, request: { method: "POST", path: "/api/asset", idempotent: false } });
+      expect(guarded.calls).toHaveLength(3);
+      expect((await client.explain(error))[0]).toMatchObject({ outcome: "unknown", retrySafe: false, sentence: "Agility did not confirm the change. It may or may not have been made: check before trying again." });
+    }
   });
 
   it("a 401 or 403 is never resent (re-authentication is the unauthorized hook's business), nor any other 4xx, nor an aborted request", async () => {

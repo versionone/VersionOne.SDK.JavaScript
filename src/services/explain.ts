@@ -56,8 +56,8 @@ export interface Explanation {
   echoed: boolean;
   /**
    * Is it safe to send the same request again? True: nothing was changed
-   * by the failed attempt, or sending it twice changes nothing more (a
-   * read, a guarded batch, anything the server turned away with a 429).
+   * by the failed attempt (a read, anything the server turned away with
+   * a 429).
    * False: a write that got no answer, or a server failure in answer to
    * one; the change may or may not have been made, so look before trying
    * again; or a read the server itself gave up on (SERVER_TIMEOUT), which
@@ -84,11 +84,11 @@ export interface Explanation {
    *     command, that command. For a batch this speaks of that command
    *     alone: what became of the others is in the Outcome (`created`,
    *     `modified`, `failures`), not here.
-   *   - null: a read, where there is nothing to apply; a request the
-   *     SDK marks safe to repeat (a guarded batch with no creates,
-   *     which cannot be told from a read by its error: send it again
-   *     and the guard settles it); and an error that does not say what
-   *     was asked.
+   *   - null: a read, where there is nothing to apply, and an error
+   *     that does not say what was asked.
+   * A guarded write is a write here: with no confirmation it is
+   * "unknown". Sending it again would not show which: a second send of
+   * one that landed matches nothing and reads as a conflict.
    */
   outcome: "unknown" | "notApplied" | null;
   /** The failed command's index in the batch, when this explains one; null otherwise. */
@@ -178,9 +178,8 @@ function failuresOf(input: unknown): CommandFailureDetail[] | null {
  *   - a write (not idempotent) with no answer, a timeout or a 5xx: nobody
  *     knows whether the change was made, and saying "try again" is how a
  *     duplicate happens;
- *   - a read, or a guarded batch (which the guard makes safe to repeat),
- *     that timed out: safe to repeat, but it may still be running, so not
- *     at once;
+ *   - a read that timed out: safe to repeat, but it may still be
+ *     running, so not at once;
  *   - a read that never got through: safe, and may work in a moment;
  *   - a read the server itself gave up on (its SQL execution timeout,
  *     code SERVER_TIMEOUT): harmless to the data and still not to be
