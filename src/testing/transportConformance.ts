@@ -152,7 +152,7 @@ export function transportConformance(make: (server: ConformanceServer) => Transp
       expect(error instanceof ApiError && error.status === 304, "without acceptNotModified a 304 must reject with an ApiError carrying the status");
     } },
     { name: "a refused response rejects with the ApiError that apiErrorFromResponse makes: the status, the server's own words, the body as details", run: async () => {
-      const bodies: [number, unknown][] = [
+      const bodies: [number, unknown, Record<string, string>?][] = [
         [400, { _type: "Error", error: "Invalid WHERE parameter", exceptions: [{ type: "FormatException", message: "Invalid QueryFilter2 token Nope=1" }] }],
         [400, { Exceptions: ["The request body is not valid JSON."] }],
         // A server-side SQL execution timeout, as an instance answers it: told by its body, coded SERVER_TIMEOUT.
@@ -163,12 +163,20 @@ export function transportConformance(make: (server: ConformanceServer) => Transp
         // As query.v1 and rest-1 refuse an expired credential: a 401 with a body. Still kind "auth".
         [401, { error: "Unauthorized" }],
         [401, { _type: "Error", error: "Unauthorized" }],
+        // An ended session, to a request sent with X-Requested-With: a 403 that challenges. Kind "auth", which only the
+        // response's headers can tell: pass them to apiErrorFromResponse(status, body, headers).
+        [403, { error: "Unauthorized" }, { "www-authenticate": "Bearer realm=\"conformance\"" }],
+        // Control: a 403 with no challenge is kind "forbidden".
+        [403, { error: "Forbidden" }],
+        // As rest-1 refuses a write the member has no right to: a 400 whose first exception is a Security violation. Kind "forbidden".
+        [400, { _type: "Error", error: "Bad Request", exceptions: [{ type: "DataException", message: "Violation'Security'Story" }] }],
         [503, ""]
       ];
-      for (const [status, data] of bodies) {
-        const response: ConformanceResponse = typeof data === "string" ? { status, headers: { "content-type": "text/plain" }, body: data } : json(data, status);
+      for (const [status, data, extra] of bodies) {
+        const headers: Record<string, string> = { "content-type": typeof data === "string" ? "text/plain" : "application/json; charset=utf-8", ...extra };
+        const response: ConformanceResponse = { status, headers, body: typeof data === "string" ? data : JSON.stringify(data) };
         const error = await rejection(scripted(response).transport.request({ method: "GET", path: "/x" }));
-        const expected = apiErrorFromResponse(status, data);
+        const expected = apiErrorFromResponse(status, data, headers);
         expect(error instanceof ApiError, `a ${status} must reject with an ApiError`);
         expect(error.status === status && error.kind === expected.kind, `a ${status} must carry its status and the kind it implies (${expected.kind})`);
         expect(error.message === expected.message, `a ${status} must be worded as apiErrorFromResponse words it ("${expected.message}"), got "${error.message}"`);

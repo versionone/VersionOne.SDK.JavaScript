@@ -65,7 +65,8 @@ export function createAxiosTransport(http: AxiosInstance): Transport {
         if (axios.isCancel(error) || options.signal?.aborted) throw aborted(error);
         if (error instanceof AxiosError && error.response) {
           // A refusal: the same error, word for word, as the SDK's own transport throws.
-          throw apiErrorFromResponse(error.response.status, readable(error.response.data, String(error.response.headers["content-type"] ?? "")));
+          // The headers go too: a 403 that carries a WWW-Authenticate challenge is an ended session, not a refusal of rights.
+          throw apiErrorFromResponse(error.response.status, readable(error.response.data, String(error.response.headers["content-type"] ?? "")), error.response.headers);
         }
         // No answer at all. Timing is the client's business, not this transport's: the client's `timeoutMs` hands
         // over a `signal` that fires at the deadline, and honouring it (above) is all a transport owes.

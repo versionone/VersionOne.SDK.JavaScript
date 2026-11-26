@@ -112,11 +112,55 @@ function messageOf(data: unknown, status: number): string {
  * gets a code: a server-side SQL execution timeout, as an instance answers
  * it, is `SERVER_TIMEOUT` (kind transient, never resent), worded by the
  * exception that says so.
+ *
+ * Two refusals are classified by more than their status, so pass the
+ * response's `headers` when you have them:
+ *   - a 403 that carries a `WWW-Authenticate` challenge is kind "auth",
+ *     like a 401: an ended session answers so to a request sent with
+ *     `X-Requested-With: XMLHttpRequest`. A 403 without a challenge, or
+ *     with no headers given, is kind "forbidden" as before;
+ *   - a refusal whose first exception begins `Violation'Security` (how
+ *     rest-1 refuses a write the member has no right to: a 400) is kind
+ *     "forbidden", worded by the violation.
  */
-export function apiErrorFromResponse(status: number, data?: unknown): ApiError {
+export function apiErrorFromResponse(status: number, data?: unknown, headers?: ResponseHeaders): ApiError {
   const gaveUp = serverTimeoutIn(data);
   // "Server Error" says nothing; the exception's own words say what happened.
-  return gaveUp === null ? new ApiError(messageOf(data, status), status, undefined, data) : new ApiError(gaveUp, status, "SERVER_TIMEOUT", data);
+  if (gaveUp !== null) return new ApiError(gaveUp, status, "SERVER_TIMEOUT", data);
+  // A 403 that challenges the caller to authenticate is about the sign-in, not about rights.
+  if (status === 403 && challengeIn(headers)) return new ApiError(messageOf(data, status), status, undefined, data, "auth");
+  // rest-1 refuses a write the member has no right to with a 400 whose first exception is a Security violation.
+  const denied = securityViolationIn(data);
+  if (denied !== null) return new ApiError(denied, status, undefined, data, "forbidden");
+  return new ApiError(messageOf(data, status), status, undefined, data);
+}
+
+/**
+ * A response's headers, as far as the SDK reads them: a `Headers`, anything
+ * with a `get(name)` (an axios response's `headers`), or a plain record of
+ * header names to values (names compared without regard to case). Only a
+ * string value counts as a header's value.
+ */
+export type ResponseHeaders = { get(name: string): unknown } | Readonly<Record<string, unknown>>;
+
+/** One header's value, whichever form the headers came in; null when absent. */
+export function headerOf(headers: ResponseHeaders | undefined, name: string): string | null {
+  if (!headers) return null;
+  if (typeof (headers as { get?: unknown }).get === "function") { const value = (headers as { get(name: string): unknown }).get(name); return typeof value === "string" ? value : null; }
+  const wanted = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) if (key.toLowerCase() === wanted && typeof value === "string") return value;
+  return null;
+}
+
+/** Does the response challenge the caller to authenticate (a `WWW-Authenticate` header with something in it)? */
+const challengeIn = (headers: ResponseHeaders | undefined): boolean => !!headerOf(headers, "www-authenticate")?.trim();
+
+/** The Security violation a refusal's first exception names (`Violation'Security'Story`), or null. */
+function securityViolationIn(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const first = Array.isArray((data as { exceptions?: unknown }).exceptions) ? ((data as { exceptions: unknown[] }).exceptions[0] as { message?: unknown } | undefined) : undefined;
+  const message = typeof first?.message === "string" ? first.message.trim() : "";
+  return message.startsWith("Violation'Security") ? message : null;
 }
 
 /**

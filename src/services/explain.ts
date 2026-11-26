@@ -111,12 +111,15 @@ export interface Explanation {
   message: string;
 }
 
-interface Problem { rule: string | null; attribute: AttributeTokenRef | null; related: string | null }
+interface Problem { rule: string | null; attribute: AttributeTokenRef | null; related: string | null; /** The asset type a violation names without an attribute (Violation'Security'Story). */ type?: string | null }
 
 /** What a failure message says went wrong: a Violation (parseViolation), a Resolution, or nothing readable. */
 function problemOf(message: string): Problem {
   const violation = parseViolation(message);
-  if (violation) return { rule: violation.rule, attribute: violation.attribute, related: null };
+  if (violation) {
+    const named = message.trim().split("'")[2];
+    return { rule: violation.rule, attribute: violation.attribute, related: null, type: !violation.attribute && named && /^[A-Za-z]\w*$/.test(named) && named !== "AttributeDefinition" ? named : null };
+  }
   const parts = message.trim().split("'");
   if (parts[0] === "Resolution" && parts[1] && /^[A-Za-z]\w*\.[A-Za-z]\w*$/.test(parts[2] ?? "")) return { rule: parts[1], attribute: parts[2] as AttributeTokenRef, related: parts[3] || null };
   return { rule: null, attribute: null, related: null };
@@ -127,6 +130,7 @@ const typeTag = (type: string): string => `AssetType'${type}`;
 /** A token that looks like one loc-2 would know: no spaces, apostrophe-delimited. A plain sentence is not asked about. */
 const isTag = (message: string): boolean => /^[A-Za-z]\w*'[^\s]+$/.test(message.trim());
 
+const NOT_ALLOWED = "Agility refused: this member is not allowed to do that.";
 type Said = Pick<Explanation, "sentence" | "audience" | "echoed" | "retrySafe">;
 
 /** What is known of the change an error's request asked for. See `Explanation.outcome`. */
@@ -142,6 +146,8 @@ const forUser = (sentence: string, retrySafe: boolean | null = null): Said => ({
 const forDeveloper = (sentence: string, echoed: boolean): Said => ({ sentence, audience: "developer", echoed, retrySafe: null });
 
 function sentenceOf(problem: Problem, label: string | null, related: string | null, localized: string | null, message: string): Said {
+  // The member has no right to do it: what api/asset reports per command (Violation'Security'Story) and rest-1 as a 400.
+  if (problem.rule === "Security") return forUser(NOT_ALLOWED);
   if (label) {
     switch (problem.rule) {
       case "Required": return forUser(`${label} is required.`);
@@ -205,7 +211,7 @@ function sentenceForError(error: unknown): Said {
   if (!(error instanceof ApiError)) return forDeveloper(error instanceof Error ? error.message : String(error), true);
   switch (error.kind) {
     case "auth": return forUser("Agility did not accept the sign-in: the token is missing, wrong or no longer valid.");
-    case "forbidden": return forUser("Agility refused: this member is not allowed to do that.");
+    case "forbidden": return forUser(NOT_ALLOWED);
     case "transient": return unanswered(error);
     case "aborted": return forUser("The request was cancelled.");
     case "conflict": return forUser("Someone else changed this since it was read; nothing was applied. Look at it again and decide.");
@@ -230,6 +236,7 @@ export async function explain(transport: Transport, input: unknown, options: loc
     const p = problems[i]!;
     if (isTag(f.message)) tags.add(f.message.trim());
     if (p.attribute) { tags.add(attributeTag(p.attribute)); tags.add(typeTag(p.attribute.split(".")[0]!)); }
+    if (p.type) tags.add(typeTag(p.type));
     if (p.related) tags.add(typeTag(p.related));
   });
   let labels: loc2.Localizations = {};
@@ -240,7 +247,7 @@ export async function explain(transport: Transport, input: unknown, options: loc
   const label = (tag: string): string | null => { const l = labels[tag]; return typeof l === "string" && l && l !== tag ? l : null; };
   return failures.map((f, i) => {
     const p = problems[i]!;
-    const [type, name] = p.attribute ? p.attribute.split(".") : [null, null];
+    const [type, name] = p.attribute ? p.attribute.split(".") : [p.type ?? null, null];
     const attributeLabel = p.attribute ? label(attributeTag(p.attribute)) ?? name! : null;
     const typeLabel = type ? label(typeTag(type)) ?? type : null;
     const related = p.related ? label(typeTag(p.related)) ?? p.related : null;

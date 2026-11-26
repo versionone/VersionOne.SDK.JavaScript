@@ -2,11 +2,57 @@
 
 ## Unreleased (to be 1.0.0-alpha.13)
 
+### Breaking
+
+- **A 403 that carries a `WWW-Authenticate` challenge is an auth
+  failure, and a custom transport must pass the response's headers to
+  say so.** `apiErrorFromResponse(status, body, headers)` takes the
+  headers as an optional third argument (a `Headers`, anything with
+  `get(name)`, or a plain record). With them, a 403 that challenges is
+  `kind: "auth"`, like a 401: it is what an ended session answers to a
+  request sent with `X-Requested-With: XMLHttpRequest`. A 403 without a
+  challenge, or with no headers given, is `kind: "forbidden"` as before.
+  - The built-in transport passes them, so nothing changes in how you
+    call it: `onUnauthorized` now runs for such a 403 by default
+    ("retry" and "retry-write" as for a 401), `explain` gives the
+    sign-in sentence instead of "not allowed", and the hook's context
+    has `headers`.
+  - `unauthorizedStatuses` now lists statuses that call the hook in
+    addition to those two (a 401; a challenged 403), which always do. A
+    consumer that set `[401, 403]` loses nothing: a 403 without a
+    challenge still reaches its hook.
+  - `transportConformance` has the case, and a control. Migration for a
+    custom transport: where it builds a refusal, pass the response's
+    headers as the third argument, e.g. with axios
+    `apiErrorFromResponse(response.status, response.data,
+    response.headers)`. A transport that does not is told so by the
+    suite and keeps calling a challenged 403 "forbidden".
+  - What this rests on, from a consumer's checks on one product release
+    with OIDC sign-in: every 401 and 403 seen carried the challenge and
+    was a session problem (missing, invalid, expired), and a genuine
+    permission denial was never a 401 or a 403 (next entry). It could
+    not be reproduced where this SDK's live tier runs, where every
+    request is authenticated as an administrator. Not checked:
+    administration endpoints that might answer 403 for rights, other
+    releases, other ways of signing in. So a hook that prompts a person
+    should still check that the session is gone before it prompts.
+
 ### Changed
 
+- **A write the member has no right to make is said so, to a person, on
+  both write paths.** On the same release it was never a 403: api/asset
+  reports it per command inside a 200 (`Violation'Security'Story`), and
+  rest-1 answers a 400 whose first exception is that violation.
+  - rest-1's 400 is now `kind: "forbidden"`, worded by the violation; it
+    was `kind: "invalid"` with the message "Bad Request". A branch on
+    `kind === "invalid"` no longer sees it.
+  - `client.explain` says "Agility refused: this member is not allowed
+    to do that." (audience "user") for both, with the asset type's label
+    in `typeLabel`; it said "Refused (security)." to a developer for the
+    command failure and echoed "Bad Request" for rest-1. `outcome` is
+    `"notApplied"` for both, as before.
 - **The advice on `X-Requested-With` for a cookie-session browser app
-  was wrong and is replaced** (documentation only; no behaviour
-  changes). `createFetchTransport`'s comment on `credentials` said to
+  was wrong and is replaced.** `createFetchTransport`'s comment on `credentials` said to
   send `X-Requested-With: XMLHttpRequest` "so the server answers 401
   rather than a login page". A browser-app consumer ended a real
   session (one product release, OIDC sign-in) and saw the opposite
@@ -14,16 +60,13 @@
   `WWW-Authenticate: Bearer` challenge and body, neither a redirect.
   Since `onUnauthorized` runs for `unauthorizedStatuses`, default
   `[401]`, an app that followed the advice never had its hook called
-  when a session ended. Migration: if you send that header, set
-  `unauthorizedStatuses: [401, 403]` and have the hook check that the
-  session is really gone before it prompts (a one-row read with
-  `reauthorize: false`), because a 403 may also be a permission denial;
-  or stop sending the header. The built-in transport never sends it by
-  itself. A write refused with that 403 was not applied and landed once
-  when replayed, so what is known about `"retry-write"` extends to it.
-  Not checked: other releases, other ways of signing in, and whether a
-  403 for a genuine permission denial carries the same challenge (so the
-  SDK still classifies every 403 as `kind: "forbidden"`).
+  when a session ended. With the entry under Breaking above, the
+  built-in transport now calls the hook for that 403 without any
+  configuration, so there is nothing to migrate for it; the transport
+  never sends the header by itself. A write refused with that 403 was
+  not applied and landed once when replayed, so what is known about
+  `"retry-write"` extends to it. Not checked: other releases and other
+  ways of signing in.
 
 ## 1.0.0-alpha.12
 
