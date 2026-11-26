@@ -96,6 +96,23 @@ Each entry has the line a consumer follows to migrate.
   `bareAliasFrom`, `inlineCreate`, `noMoment`). Migration: branch on
   `reason.code`, not on the words of `reason.reason`.
 
+- **Idempotent requests are resent once with any Transport, not only the
+  built-in one.** The rule (a GET, a query.v1 read or a guarded batch
+  with no creates is sent once more after a network failure, a timeout,
+  a 5xx or a 429; `retries` says how many times, default 1) was the fetch
+  transport's; it is now the client's, applied around a custom
+  `Transport`. A plain write is never resent, nor a 401 or 403
+  (re-authentication is the transport's own business), nor any other 4xx,
+  nor an aborted request. **This changes behaviour for a consumer with a
+  custom Transport**: its reads start being resent once. Migration:
+  nothing, if that is welcome. To keep the old behaviour, pass `retries:
+  0` in the client's config. A transport that shows an error to the user
+  before it throws (an interceptor's toast) will have shown the first
+  failure of a request that then succeeded: either pass `retries: 0` for
+  that client, or move the reporting to the client's new `onError`, which
+  is told only about a request that finally failed. A custom transport
+  that already resends on its own should pass `retries: 0` or stop doing
+  so, or a read is tried up to four times.
 - **One rule for every row, on every read path**: a relation you select
   is a Ref; a path you select by name is at `row[path]`; nothing arrives
   that you did not select. query.v1 and api/asset rows already followed
@@ -146,6 +163,16 @@ Each entry has the line a consumer follows to migrate.
 
 ### Added
 
+- **`ClientConfig.onError(error, request)`**: told about every request
+  that finally failed, after any resend, with any Transport. It
+  observes: the error is still thrown. For an app-wide toast or a log
+  line, without a wrapper Transport.
+- **`RequestOptions.reauthorize: false`**: a refusal of that request is
+  answered straight away, without calling the transport's
+  `onUnauthorized` hook. For the request a hook itself sends to ask
+  whether the session is alive, which would otherwise wait on itself.
+- `withRetry(transport, retries)`: the resend rule as a function, for a
+  caller that uses a Transport without a client.
 - **`client.explain(error)`**: an error said to a person. One
   `Explanation` per failed command (from a `CommandFailureError`, an
   `Outcome` or its `failures`), or one for any other error: a short

@@ -1,6 +1,7 @@
 import type { ClientConfig } from "./core/clientConfig";
 import { ApiError, UsageError } from "./core/errors";
 import { createFetchTransport } from "./core/fetchTransport";
+import { withErrorHook, withRetry } from "./core/retry";
 import type { Transport } from "./core/transport";
 import * as attachments from "./services/attachments";
 import * as batch from "./services/batch";
@@ -67,6 +68,9 @@ export type Me = Pick<Member, "_oid" | "Name" | "Username" | "Nickname" | "Email
 
 const DEFAULT_LIMIT = 1000;
 
+/** Transports a client has already put its resend rule and error hook around. */
+const dressed = new WeakSet<Transport>();
+
 /** Every read is bounded: the type says so, and for a caller the type did not reach this says so before any request (not even a schema load) is sent. */
 function bounded(qs: readonly assetApi.QueryBody[]): void {
   for (const q of qs) if (!q.page) throw new UsageError(`query of ${q.from} without a page: every read must be bounded`);
@@ -95,7 +99,9 @@ export class AgilityApiClient {
   readonly schema: Schema;
 
   constructor(config: ClientConfig, opts: ClientOptions = {}) {
-    this.transport = opts.transport ?? createFetchTransport({
+    // The built-in transport resends idempotent requests itself (it can read Retry-After); a custom one gets the
+    // same rule from the client. A transport another client of ours already dressed (withSignal) is taken as it is.
+    let transport = opts.transport ?? createFetchTransport({
       baseUrl: config.baseUrl,
       authorization: config.authorization,
       accessToken: config.accessToken,
@@ -106,6 +112,12 @@ export class AgilityApiClient {
       onUnauthorized: config.onUnauthorized,
       unauthorizedStatuses: config.unauthorizedStatuses
     });
+    if (!dressed.has(transport)) {
+      if (opts.transport) transport = withRetry(transport, config.retries ?? 1);
+      if (config.onError) transport = withErrorHook(transport, config.onError);
+      dressed.add(transport);
+    }
+    this.transport = transport;
     this.config = config;
     this.schema = new Schema(this.transport, undefined, opts.types);
   }
@@ -121,6 +133,7 @@ export class AgilityApiClient {
   withSignal(signal: AbortSignal): AgilityApiClient {
     const base = this.transport;
     const transport: Transport = { request: (options) => base.request({ ...options, signal: options.signal ?? signal }) };
+    dressed.add(transport); // `base` already resends and reports errors: not twice
     return new AgilityApiClient(this.config, { transport, types: this.schema.cache });
   }
 

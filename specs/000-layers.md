@@ -200,13 +200,20 @@ retries only idempotent requests (GET by default, and every query.v1
 POST, since that endpoint cannot write), only on a network
 failure, a 5xx or a 429 (Retry-After honoured, up to 30 s), never
 another 4xx, and once by default (`retries: 1`); a batch write is never retried unless the
-caller has made it idempotent with a guard and says so.
+caller has made it idempotent with a guard and says so. That rule is
+the client's, not one transport's: the built-in fetch transport applies it
+itself (it can read Retry-After), and the client applies it around a
+custom Transport (`core/retry`), so a consumer's transport does not
+re-implement it and cannot forget it. `retries: 0` turns it off for a
+client. A 401 or 403 is never resent by it.
 
 Re-authentication follows the same rule. On a 401 (or a status the caller
 lists) the transport calls `onUnauthorized` once per request; "retry" resends
 an idempotent request one more time, outside the `retries` count. A plain
 write is never resent: the hook still runs, so the session can be repaired,
-and the caller decides. A caller's abort (`signal`) ends the request as
+and the caller decides. A request sent with `reauthorize: false` skips
+the hook: it is how a hook asks whether the session is alive without
+waiting on itself. A caller's abort (`signal`) ends the request as
 `ABORTED` and is never retried.
 
 A failure never reads as an empty. api/asset answers 200 and commits per

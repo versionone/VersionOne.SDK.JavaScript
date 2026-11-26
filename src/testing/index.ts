@@ -357,7 +357,8 @@ export class FakeAgilityClient extends AgilityApiClient {
     };
     // The fake's instance has no asset type (every meta.v1 read answers 404), so rows scripted in the model's shape pass through as written.
     const { metamodel: _metamodel, ...clientConfig } = config;
-    super({ baseUrl: "https://agility.example.com/Fake", ...clientConfig }, { transport });
+    // No resends by default: an error a test scripts is seen once, as scripted. Pass `retries` to test a resend.
+    super({ baseUrl: "https://agility.example.com/Fake", retries: 0, ...clientConfig }, { transport });
     this.script = script;
     this.requests = script.seen.requests;
     this.asked = script.seen.asked;

@@ -215,7 +215,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           settle();
         }
 
-        if (config.onUnauthorized && !reauthorized && unauthorizedStatuses.includes(response.status)) {
+        if (config.onUnauthorized && options.reauthorize !== false && !reauthorized && unauthorizedStatuses.includes(response.status)) {
           // One re-authentication per request: a second refusal is final.
           reauthorized = true;
           const decision = await config.onUnauthorized({ error: lastError as ApiError, request: options, retryable: idempotent });

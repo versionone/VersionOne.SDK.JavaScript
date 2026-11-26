@@ -3,6 +3,7 @@ export type { ClientOptions, Me, Page, PagesOptions } from "./client";
 export { ApiError, UsageError, WrappedError, apiErrorFromResponse, kindOf } from "./core/errors";
 export type { ErrorKind } from "./core/errors";
 export { createFetchTransport } from "./core/fetchTransport";
+export { withRetry } from "./core/retry";
 export type { FetchTransportConfig, UnauthorizedContext, UnauthorizedDecision } from "./core/fetchTransport";
 export type { ClientConfig } from "./core/clientConfig";
 export type { RequestBody, RequestOptions, ResponseType, Transport } from "./core/transport";
