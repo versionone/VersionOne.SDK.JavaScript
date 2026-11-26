@@ -1,4 +1,5 @@
 import { ApiError, apiErrorFromResponse } from "./errors";
+import { keysOf, refuseUnknownKeys } from "./knownKeys";
 import { DEFAULT_TIMEOUT_MS, deadline, declareSelfGoverned, resendable } from "./retry";
 import type { RequestBody, RequestOptions, ResponseType, Transport } from "./transport";
 
@@ -175,7 +176,15 @@ function retryDelay(response: { status: number; headers: { get(name: string): st
   return 150 * (attempt + 1);
 }
 
+/** Every key of FetchTransportConfig. A key added to the type and not here, or here and not in the type, does not compile. */
+export const FETCH_TRANSPORT_CONFIG_KEYS = keysOf<FetchTransportConfig>()({ baseUrl: true, authorization: true, accessToken: true, defaultHeaders: true, timeoutMs: true, retries: true, fetchImpl: true, credentials: true, onUnauthorized: true, unauthorizedStatuses: true });
+
+/**
+ * The built-in transport. A config with a key it does not know is refused
+ * here with a UsageError naming the key: nothing is ignored silently.
+ */
 export function createFetchTransport(config: FetchTransportConfig): Transport {
+  refuseUnknownKeys("createFetchTransport's config", config, FETCH_TRANSPORT_CONFIG_KEYS);
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const retries = Math.max(0, config.retries ?? 1);
   const authorization = config.authorization ?? (config.accessToken ? `Bearer ${config.accessToken}` : undefined);

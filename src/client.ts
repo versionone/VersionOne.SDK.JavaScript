@@ -1,4 +1,5 @@
-import type { ClientConfig } from "./core/clientConfig";
+import { CLIENT_CONFIG_KEYS, type ClientConfig } from "./core/clientConfig";
+import { keysOf, refuseUnknownKeys } from "./core/knownKeys";
 import { ApiError, UsageError } from "./core/errors";
 import { createFetchTransport } from "./core/fetchTransport";
 import { DEFAULT_TIMEOUT_MS, withErrorHook, withRequestStamp, withRetry, withTimeout, governsItself } from "./core/retry";
@@ -70,6 +71,8 @@ export type Me = Pick<Member, "_oid" | "Name" | "Username" | "Nickname" | "Email
 
 const DEFAULT_LIMIT = 1000;
 
+const CLIENT_OPTION_KEYS = keysOf<ClientOptions>()({ transport: true, types: true });
+
 /** Transports a client has already put its resend rule and error hook around. */
 const dressed = new WeakSet<Transport>();
 
@@ -107,7 +110,13 @@ export class AgilityApiClient {
   readonly transport: Transport;
   readonly schema: Schema;
 
+  /**
+   * A key the config or the options do not know is refused here with a
+   * UsageError naming it: a misspelt option is never ignored silently.
+   */
   constructor(config: ClientConfig, opts: ClientOptions = {}) {
+    refuseUnknownKeys("the client's config", config, CLIENT_CONFIG_KEYS);
+    refuseUnknownKeys("the client's options", opts, CLIENT_OPTION_KEYS);
     // The built-in transport times its attempts and resends idempotent requests itself (it can read Retry-After); a
     // custom one gets the same two rules from the client. A transport another client of ours already dressed (withSignal) is taken as it is.
     let transport = opts.transport ?? createFetchTransport({

@@ -1,7 +1,14 @@
 import type { ApiError } from "./errors";
 import type { FetchTransportConfig } from "./fetchTransport";
+import { keysOf } from "./knownKeys";
 import type { RequestOptions } from "./transport";
 
+/**
+ * What a client is built from. A key that is not one of these is refused
+ * when the client is constructed (a UsageError naming the key, with the
+ * nearest known one when it looks like a typo): a misspelt option is
+ * never ignored silently.
+ */
 export interface ClientConfig extends Pick<FetchTransportConfig, "credentials" | "onUnauthorized" | "unauthorizedStatuses"> {
   /**
    * The instance base URL: "https://agility.example.com/MyInstance". The
@@ -70,3 +77,6 @@ export interface ClientConfig extends Pick<FetchTransportConfig, "credentials" |
    */
   onError?: (error: ApiError, request: RequestOptions) => void;
 }
+
+/** Every key of ClientConfig. A key added to the type and not here, or here and not in the type, does not compile. */
+export const CLIENT_CONFIG_KEYS = keysOf<ClientConfig>()({ baseUrl: true, authorization: true, accessToken: true, fetchImpl: true, timeoutMs: true, retries: true, defaultHeaders: true, onError: true, credentials: true, onUnauthorized: true, unauthorizedStatuses: true });

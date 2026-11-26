@@ -2,6 +2,29 @@
 
 ## 1.0.0-alpha.12
 
+### Breaking
+
+- **A config object with a key its factory does not know is refused.**
+  `new AgilityApiClient(config, options)`, `createFetchTransport(config)`
+  and `new FakeAgilityClient(config)` each throw a `UsageError` at
+  construction when the object has a key that is not one of theirs. The
+  message names the key or keys, suggests the nearest known key when one
+  looks like a typo (`"retrys" (did you mean "retries"?)`), lists the
+  keys the factory takes, and never repeats a value. Until now such a
+  key was ignored without a word, which a TypeScript caller is told at
+  compile time and a JavaScript or JSDoc-checked caller never was: a
+  consumer's `fetchImpl` on the client's config did nothing for several
+  releases. A key is refused whatever its value, `undefined` included
+  (the name is the mistake); a known key may still be `undefined`.
+  Migration: read each `new AgilityApiClient(…)`,
+  `createFetchTransport(…)` and `new FakeAgilityClient(…)` in your code
+  and remove or correct any key the README does not list for it. The two
+  most likely: an option in the wrong object (`transport` and `types` go
+  in the client's second argument; `onError` is the client's, not the
+  transport's), and a config object shared between the client and
+  something else that added its own keys to it (pass the client its own
+  object).
+
 ### Fixed
 
 - **A built-in transport handed to a client was wrapped in the resend

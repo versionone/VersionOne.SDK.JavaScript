@@ -366,7 +366,8 @@ every `ApiError` has a `kind`: `auth`, `forbidden`, `notFound`, `invalid`,
 `transient`, `aborted`, `commandFailure`, `conflict`, `protocol`, `usage` or
 `unknown`. `status` and `code` say what happened; `kind` says what to do.
 A mistake the SDK catches before any request (an unpaged read, an empty
-batch, a bad OID token) is a `UsageError` (`kind: "usage"`, `status: 0`),
+batch, a bad OID token, a config object with a key its factory does not
+know: named in the message, never with its value) is a `UsageError` (`kind: "usage"`, `status: 0`),
 never a bare `Error` or `TypeError`. An error raised around another (a
 batch send that failed, an upload that failed after its create) is a
 `WrappedError` carrying the cause and the cause's kind, so the branch a
