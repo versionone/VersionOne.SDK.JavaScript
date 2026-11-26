@@ -125,7 +125,7 @@ describe("the built-in transport under the same rule", () => {
     const answers = [new Response("Unauthorized", { status: 401 }), new Response("{\"ok\":true}", { status: 200, headers: { "content-type": "application/json" } })];
     const fetchImpl = (async () => answers.shift()!) as unknown as typeof fetch;
     // The hook takes three times the timeout, as someone typing a password would.
-    const transport = createFetchTransport({ baseUrl: "https://x", timeoutMs: 20, retries: 0, fetchImpl, onUnauthorized: async () => { await later(60, null); return "retry"; } });
+    const transport = createFetchTransport({ baseUrl: "https://x", timeoutMs: 20, retries: 0, fetchImpl, onUnauthorized: async () => { await later(60, null); return "retry" as const; } });
     expect(await transport.request(read)).toEqual({ ok: true });
   });
 });
