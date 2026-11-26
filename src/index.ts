@@ -25,7 +25,7 @@ export { normalizeQuery } from "./wire/rest1";
 export type { LooseQuery, OperationResult, ReadParams, ReadResult, Template } from "./wire/rest1";
 export type { Bytes, EmbeddedImage } from "./wire/attachment";
 export type { Localizations, LocalizeOptions } from "./wire/loc2";
-export type { ConditionalOptions, Tagged } from "./wire/meta";
+export type { ConditionalOptions, MetamodelDocument, Tagged } from "./wire/meta";
 export type { QueryRejection } from "./wire/queryV1";
 export type { FieldsOf } from "./services/fields";
 export { importantName } from "./services/fields";

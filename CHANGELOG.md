@@ -159,6 +159,18 @@ Each entry has the line a consumer follows to migrate.
   SDK's own fetch transport runs it. A new duty of a Transport is from
   now on a new check here and a "Breaking" line. (a browser app consumer
   with an axios transport.)
+- `meta.readMetamodelDocument({ ifNoneMatch })` and
+  `meta.readAssetTypeDocument(token, { ifNoneMatch })` in
+  `@versionone/agility-sdk/wire`: meta.v1's own document form with the
+  conditional read, for a caller whose code parses the document.
+  (`client.meta` answers the model's `Metamodel` and is unchanged.)
+- **`FakeAgilityClient` at the transport's level too**: `new
+  FakeAgilityClient({ metamodel })` gives the fake's instance the asset
+  types of a meta.v1 document, so a response captured from a server and
+  scripted with `onRequest` reads translated, for the fake and for any
+  client built on `fake.transport`; and `onList(type, rows)` scripts
+  `client.data.list` in the model's shape. (a chat-bot consumer and a CLI
+  consumer, whose tests replay captured responses.)
 - **`client.resolve.refs(specs)`**: numbers and OID tokens mixed, each
   one read, in two requests at most; what names nothing is `missing`.
 - **`Outcome.unmatched`**: the indexes of updates and operations

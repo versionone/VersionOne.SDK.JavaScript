@@ -1,8 +1,11 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { AgilityApiClient } from "../../src/client";
 import { ApiError, UsageError, apiErrorFromResponse } from "../../src/core/errors";
 import { FakeAgilityClient } from "../../src/testing";
 import { CommandFailureError } from "../../src/wire/assetApi";
+import type { MetamodelDocument } from "../../src/wire/meta";
 
 /**
  * The consumer-facing fake: a real client over a transport that answers
@@ -132,6 +135,43 @@ describe("FakeAgilityClient", () => {
     expect(calls).toEqual(["/meta.v1/Member", "/query.v1"]);
     expect(fake.asked).toHaveLength(1);
     expect(fake.requests.map((r) => r.path)).toEqual(["/query.v1"]); // the type load is the client's plumbing, not the test's subject
+  });
+
+  it("onList answers client.data.list from rows in the model's shape: Refs, dotted paths, paging, the total and `more`, and the rows rule", async () => {
+    const found = [
+      { _oid: "Story:1", Name: "Logon", Number: "S-01001", AssetState: "Active", Owners: [{ _oid: "Member:20" }], "Owners.Name": ["Dana"], Status: null },
+      { _oid: "Defect:9", Name: "Crash on logon", Number: "D-00009", AssetState: "Closed", Owners: [], Status: { _oid: "StoryStatus:5" } },
+      { _oid: "Story:3", Name: "Logon help", Number: "S-01003", AssetState: "Active", Owners: [], Status: null }
+    ];
+    const fake = new FakeAgilityClient().onList("BaseAsset", found);
+    const page = await fake.data.list("BaseAsset", { find: "logon", findin: ["Name"], select: ["Name", "Number", "AssetState", "Owners", "Owners.Name", "Status"], page: { size: 2, start: 0 }, needTotal: true });
+    // As scripted, read back through the client's own rest-1 translation: so, as live, a selected dotted path is also on its Refs.
+    expect(page.rows).toEqual([{ ...found[0], Owners: [{ _oid: "Member:20", Name: "Dana" }] }, found[1]]);
+    expect(page).toMatchObject({ total: 3, more: true });
+    expect((await fake.data.list("BaseAsset", { page: { size: 2, start: 2 }, needTotal: true })).rows).toEqual([found[2]]);
+    expect(fake.requests[0]).toMatchObject({ method: "GET", path: "/rest-1.v1/Data/BaseAsset", query: { find: "logon", findin: "Name", page: "2,0" } });
+    // A function sees the type and rest-1's own query string, and answers one page.
+    fake.onList((type, q) => type === "Story" && q.deleted === "true", () => ({ rows: [{ _oid: "Story:7", Name: "gone" }], total: 12 }));
+    expect(await fake.data.list("Story", { deleted: true, page: { size: 1, start: 0 }, needTotal: true })).toMatchObject({ rows: [{ _oid: "Story:7", Name: "gone" }], total: 12, more: true });
+    await expect(fake.data.list("Epic", { page: { size: 1, start: 0 } })).rejects.toThrow(/no answer scripted for GET \/rest-1\.v1\/Data\/Epic/);
+  });
+
+  it("with a metamodel the fake's instance has those types: a response captured from a server reads translated, for the fake and for a client built on its transport", async () => {
+    const metamodel = JSON.parse(readFileSync(join(__dirname, "..", "..", "metamodel.json"), "utf8")) as MetamodelDocument;
+    // As query.v1 sent it (every scalar a string, a sub-selected single relation a one-element list).
+    const captured = [[{ _oid: "Story:1055:900", Name: "Sample: Logon", Estimate: "2", IsClosed: "True", Status: [{ _oid: "StoryStatus:137", Name: "Accepted" }], Super: { _oid: "NULL" } }]];
+    const fake = new FakeAgilityClient({ metamodel }).onRequest("/query.v1", captured);
+    const q = { from: "Story", select: ["Name", "Estimate", "IsClosed", { from: "Status", select: ["Name"] }, "Super"], page: { size: 1, start: 0 } };
+    const expected = [{ _oid: "Story:1055", Name: "Sample: Logon", Estimate: 2, IsClosed: true, Status: { _oid: "StoryStatus:137", Name: "Accepted" }, Super: null }];
+    expect(await fake.query(q)).toEqual(expected);
+    const wrapped = new AgilityApiClient({ baseUrl: "https://x" }, { transport: fake.transport });
+    expect(await wrapped.query(q)).toEqual(expected);
+    // Rows scripted in the model's shape still read as scripted, and the type loads are not in `requests`.
+    const scripted = new FakeAgilityClient({ metamodel }).onQuery("Story", [{ _oid: "Story:1", Name: "n", Estimate: 3, IsClosed: false, Status: null }]);
+    expect(await scripted.query({ from: "Story", select: ["Name", "Estimate", "IsClosed", "Status"], page: { size: 1, start: 0 } })).toEqual([{ _oid: "Story:1", Name: "n", Estimate: 3, IsClosed: false, Status: null }]);
+    expect(scripted.requests.map((r) => r.path)).toEqual(["/query.v1"]);
+    expect((await scripted.meta.assetType("Story")).Token).toBe("Story");
+    await expect(scripted.meta.assetType("NoSuchType")).rejects.toMatchObject({ kind: "notFound" });
   });
 
   it("an aborted signal ends a read as ABORTED, like the fetch transport", async () => {

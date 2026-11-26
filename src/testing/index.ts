@@ -23,6 +23,9 @@ import type { RequestOptions, Transport } from "../core/transport";
 import type { Asset, Oid } from "../types/asset";
 import { isOidToken, momentless, typeOfOid } from "../types/oid";
 import type { Command, CommandBody, QueryBody } from "../wire/assetApi";
+import type { MetamodelDocument } from "../wire/meta";
+
+export type { MetamodelDocument } from "../wire/meta";
 
 /** A scripted row: an OID and whatever the code under test selects, in the model's shape. */
 export type FakeRow = Asset & { [attribute: string]: unknown };
@@ -51,7 +54,11 @@ const bodyOf = (command: Command): CommandBody => {
 const isQuery = (body: CommandBody): body is QueryBody => typeof (body as QueryBody).from === "string" && !("update" in body) && !("execute" in body) && !("AssetType" in body);
 const typeOfFrom = (from: string): string => (isOidToken(from) ? typeOfOid(from) ?? from : from);
 
+type ListMatch = string | ((type: string, params: Record<string, string | undefined>) => boolean);
+
 interface Script {
+  lists: { match: ListMatch; answer: FakeRows | Error | ((type: string, params: Record<string, string | undefined>) => FakeRows) }[];
+  metamodel: MetamodelDocument | null;
   queries: { match: QueryMatch; answer: QueryAnswer }[];
   sends: SendAnswer[];
   requests: { match: RequestMatch; answer: RequestAnswer }[];
@@ -119,6 +126,14 @@ function respond(script: Script, request: RequestOptions): unknown {
   const raw = [...script.requests].reverse().find(({ match }) => (typeof match === "string" ? request.path.startsWith(match) : match instanceof RegExp ? match.test(request.path) : match(request)));
   // A type nothing scripted is a type the fake's instance does not have, so rows are read as scripted. These
   // reads are the client's own schema loading, not something the code under test asked for: they are not recorded.
+  if (!raw && request.method === "GET" && request.path.startsWith("/meta.v1/") && script.metamodel) {
+    // The fake's instance has the metamodel's types: serve the document, part by part, as meta.v1 does.
+    const [type, attribute] = request.path.slice("/meta.v1/".length).split("/").map(decodeURIComponent);
+    const found = attribute ? script.metamodel.AssetTypes[type!]?.Attributes[`${type}.${attribute}`] : script.metamodel.AssetTypes[type!];
+    if (!found) throw apiErrorFromResponse(404, { error: "Not Found", exceptions: [{ message: `FakeAgilityClient's metamodel has nothing at ${request.path}` }] });
+    request.onResponse?.({ status: 200, headers: { get: () => null } });
+    return found;
+  }
   if (!raw && request.method === "GET" && request.path.startsWith("/meta.v1/")) throw apiErrorFromResponse(404, { error: "Not Found", exceptions: [{ message: `FakeAgilityClient knows no asset type at ${request.path}` }] });
   script.seen.requests.push(request);
   if (raw) {
@@ -129,6 +144,22 @@ function respond(script: Script, request: RequestOptions): unknown {
     // loc-2 answers a tag it does not know with the tag itself; so does the fake, for every tag onLocalize did not script.
     const encoded = request.method === "GET" ? request.path.slice(request.path.indexOf("?") + 1) : String(request.body);
     return Object.fromEntries((JSON.parse(decodeURIComponent(encoded)) as string[]).map((tag) => [tag, script.labels[tag] ?? tag]));
+  }
+  if (request.method === "GET" && request.path.startsWith("/rest-1.v1/Data/") && !request.path.slice("/rest-1.v1/Data/".length).includes("/")) {
+    const type = decodeURIComponent(request.path.slice("/rest-1.v1/Data/".length));
+    const params = (request.query ?? {}) as Record<string, string | undefined>;
+    const hit = [...script.lists].reverse().find(({ match }) => (typeof match === "function" ? match(type, params) : match === type));
+    if (hit) {
+      if (hit.answer instanceof Error) throw hit.answer;
+      const answered = typeof hit.answer === "function" ? hit.answer(type, params) : hit.answer;
+      const [size, start] = (params.page ?? "").split(",").map(Number) as [number, number];
+      // A list is the whole result and is paged here; a function answers one page itself.
+      const whole = Array.isArray(answered) && typeof hit.answer !== "function";
+      const all = (Array.isArray(answered) ? answered : (answered as { rows: readonly FakeRow[] }).rows) as readonly FakeRow[];
+      const rows = whole ? all.slice(start, start + size) : all;
+      const total = Array.isArray(answered) ? (whole ? all.length : undefined) : (answered as { total?: number | null }).total ?? undefined;
+      return { _type: "Assets", total: params.needTotal === "true" ? total : undefined, pageSize: size, pageStart: start, Assets: rows.map(toAssetDocument) };
+    }
   }
   if (request.method === "POST" && request.path === "/query.v1") return (request.body as QueryBody[]).map((q) => answerQuery(script, q).rows);
   if (request.method === "POST" && request.path === "/api/asset" && Array.isArray(request.body)) {
@@ -163,6 +194,35 @@ function respond(script: Script, request: RequestOptions): unknown {
     };
   }
   throw new UsageError(`FakeAgilityClient: no answer scripted for ${request.method} ${request.path}; script one with fake.onRequest("${request.path}", answer)`);
+}
+
+export interface FakeOptions {
+  /**
+   * A metamodel as meta.v1 delivers it (the document a consumer captures
+   * from `GET /meta.v1`, or this repository's `metamodel.json`). With it
+   * the fake's instance has those asset types: it serves `meta.v1/<Type>`
+   * from the document, so answers go through the real translation — a
+   * response captured from a server, scripted with `onRequest`, reads as
+   * it would live ("5" becomes 5, a sub-selected single relation one Ref)
+   * — for the fake and for any client built on `fake.transport`. Rows
+   * scripted in the model's shape still read as scripted. Without it, the
+   * instance has no types and nothing is translated.
+   */
+  metamodel?: MetamodelDocument;
+}
+
+/** A model row as rest-1 would send it: what `onList` answers with, so the client's own translation reads it back. */
+function toAssetDocument(row: FakeRow): Record<string, unknown> {
+  const isRef = (v: unknown): v is { _oid: string } => !!v && typeof v === "object" && typeof (v as { _oid?: unknown })._oid === "string";
+  const ref = (r: { _oid: string }) => ({ _type: "Asset", href: "", idref: r._oid });
+  const Attributes: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(row)) {
+    if (name === "_oid") continue;
+    if (isRef(value)) Attributes[name] = { _type: "Relation", name, value: ref(value) };
+    else if (Array.isArray(value) && value.length && value.every(isRef)) Attributes[name] = { _type: "Relation", name, value: value.map(ref) };
+    else Attributes[name] = { _type: "Attribute", name, value };
+  }
+  return { _type: "Asset", href: "", id: row._oid, Attributes };
 }
 
 /**
@@ -202,9 +262,12 @@ function respond(script: Script, request: RequestOptions): unknown {
  * - `fake.transport` can be the Transport of another client (one your code
  *   builds and wraps): it reads rows as scripted too, because the fake
  *   answers every meta.v1 type read with 404, "no such type".
+ * - `onList(type, rows)` answers `client.data.list` the same way: rows in
+ *   the model's shape, a list paged by the fake.
  * - `onRequest(match, answer)` answers any other request by path, in the
- *   endpoint's own shape (rest-1 behind `client.data`, attachment bytes,
- *   meta.v1), and wins over everything above. Guarded sends and
+ *   endpoint's own shape (attachment bytes, a captured response), and wins
+ *   over everything above. With `new FakeAgilityClient({ metamodel })` a
+ *   captured query response reads as it would live: translated. Guarded sends and
  *   `batch.run` are not scripted by the fake: their request sequence is
  *   internal to the SDK and changes between alphas, so fake the function
  *   of yours that calls them.
@@ -221,8 +284,8 @@ export class FakeAgilityClient extends AgilityApiClient {
   readonly sent: Command[][];
   private readonly script: Script;
 
-  constructor(config: Partial<ClientConfig> = {}) {
-    const script: Script = { queries: [], sends: [], requests: [], labels: {}, seen: { requests: [], asked: [], sent: [] }, nextId: 1000 };
+  constructor(config: Partial<ClientConfig> & FakeOptions = {}) {
+    const script: Script = { lists: [], metamodel: config.metamodel ?? null, queries: [], sends: [], requests: [], labels: {}, seen: { requests: [], asked: [], sent: [] }, nextId: 1000 };
     const transport: Transport = {
       // Answers are computed synchronously and delivered as a real response would be: later, and a throw as a rejection.
       request: async <T>(request: RequestOptions): Promise<T> => {
@@ -231,7 +294,8 @@ export class FakeAgilityClient extends AgilityApiClient {
       }
     };
     // The fake's instance has no asset type (every meta.v1 read answers 404), so rows scripted in the model's shape pass through as written.
-    super({ baseUrl: "https://agility.example.com/Fake", ...config }, { transport });
+    const { metamodel: _metamodel, ...clientConfig } = config;
+    super({ baseUrl: "https://agility.example.com/Fake", ...clientConfig }, { transport });
     this.script = script;
     this.requests = script.seen.requests;
     this.asked = script.seen.asked;
@@ -251,6 +315,19 @@ export class FakeAgilityClient extends AgilityApiClient {
   /** Script what writes answer from here on: an outcome, a function of the batch, or an Error to throw. */
   onSend(answer: SendAnswer): this {
     this.script.sends.push(answer);
+    return this;
+  }
+
+  /**
+   * Script `client.data.list` (rest-1's list read: text search, deleted
+   * assets) for an asset type or a predicate over the type and the query
+   * string rest-1 is sent (`find`, `where`, `sel`, `deleted`). Rows are in
+   * the model's shape, as for `onQuery`: a list is the whole result (the
+   * fake pages it and reports its length as the total when asked), a
+   * function answers one page. No `find` or filter is evaluated.
+   */
+  onList(match: ListMatch, answer: FakeRows | Error | ((type: string, params: Record<string, string | undefined>) => FakeRows)): this {
+    this.script.lists.push({ match, answer });
     return this;
   }
 
