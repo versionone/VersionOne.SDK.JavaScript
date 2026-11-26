@@ -172,6 +172,10 @@ describe("FakeAgilityClient", () => {
     expect(await scripted.query({ from: "Story", select: ["Name", "Estimate", "IsClosed", "Status"], page: { size: 1, start: 0 } })).toEqual([{ _oid: "Story:1", Name: "n", Estimate: 3, IsClosed: false, Status: null }]);
     expect(scripted.requests.map((r) => r.path)).toEqual(["/query.v1"]);
     expect((await scripted.meta.assetType("Story")).Token).toBe("Story");
+    // A subset is enough: only the types the code under test touches, with no Version. A type left out does not exist there.
+    const { Story, StoryStatus } = metamodel.AssetTypes;
+    const subset = new FakeAgilityClient({ metamodel: { AssetTypes: { Story: Story!, StoryStatus: StoryStatus! } } }).onRequest("/query.v1", captured);
+    expect(await subset.query(q)).toEqual(expected);
     await expect(scripted.meta.assetType("NoSuchType")).rejects.toMatchObject({ kind: "notFound" });
   });
 
@@ -202,7 +206,7 @@ describe("FakeAgilityClient", () => {
     expect((await fake.batch.reversible(receipt)).drifted).toEqual([]);
     fake.touch("Story:2");
     const undo = await fake.batch.reversible(receipt);
-    expect(undo.drifted).toMatchObject([{ oid: "Story:2", was: "2", now: "3" }]);
+    expect(undo.drifted).toMatchObject([{ _oid: "Story:2", was: "2", now: "3" }]);
     expect(undo.commands).toEqual([{ from: "Story:1", update: { Estimate: 3 } }, { from: "Task:1000", execute: "Delete" }]);
     // A conflict at send time is on the receipt, and a dry run sends nothing.
     fake.onQuery("Epic", [{ _oid: "Epic:9", Name: "Nine" }]);

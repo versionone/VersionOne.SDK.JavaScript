@@ -41,8 +41,8 @@ export const CHUNK = 100;
 export interface Described {
   creates: { index: number; alias: string | null; type: string; name: string | null }[];
   queries: { index: number; from: string }[];
-  updates: { oid: Oid; attributes: Record<string, CommandValue> }[];
-  executes: { oid: Oid; op: string; args: Record<string, CommandValue> }[];
+  updates: { _oid: Oid; attributes: Record<string, CommandValue> }[];
+  executes: { _oid: Oid; op: string; args: Record<string, CommandValue> }[];
   /**
    * Aliased updates and executes: preview does not expand them, so they
    * have no per-asset entry above, no snapshot and no reverse. They are
@@ -66,10 +66,10 @@ export function describe(commands: Command[], projected: Command[]): Described {
     const body = bodyOf(p);
     if (typeof body.oid !== "string") continue;
     const oid = momentless(body.oid);
-    if (body.update && typeof body.update === "object") out.updates.push({ oid, attributes: body.update as Record<string, CommandValue> });
+    if (body.update && typeof body.update === "object") out.updates.push({ _oid: oid, attributes: body.update as Record<string, CommandValue> });
     else if (body.execute !== undefined) {
       const e = body.execute as string | { op: string; args?: Record<string, CommandValue> };
-      out.executes.push({ oid, op: typeof e === "string" ? e : e.op, args: typeof e === "string" ? {} : e.args ?? {} });
+      out.executes.push({ _oid: oid, op: typeof e === "string" ? e : e.op, args: typeof e === "string" ? {} : e.args ?? {} });
     }
   }
   return out;
@@ -131,8 +131,8 @@ export async function namesOf(transport: Transport, schema: Schema, oids: Iterab
 export async function snapshot(transport: Transport, described: Described): Promise<Record<Oid, Record<string, unknown>>> {
   const wanted = new Map<Oid, Set<string>>();
   const want = (oid: Oid, attrs: string[]) => { const s = wanted.get(oid) ?? new Set<string>(); attrs.forEach((a) => s.add(a)); wanted.set(oid, s); };
-  for (const u of described.updates) want(u.oid, [...Object.keys(u.attributes), "Moment", "ChangeDate"]);
-  for (const e of described.executes) want(e.oid, ["AssetState", "Moment", "ChangeDate"]);
+  for (const u of described.updates) want(u._oid, [...Object.keys(u.attributes), "Moment", "ChangeDate"]);
+  for (const e of described.executes) want(e._oid, ["AssetState", "Moment", "ChangeDate"]);
   const before: Record<Oid, Record<string, unknown>> = {};
   for (const [type, oids] of byType(wanted.keys())) {
     const select = [...new Set(oids.flatMap((o) => [...wanted.get(o)!]))];
@@ -225,9 +225,9 @@ export function reverseOf(described: Described, before: Record<Oid, Record<strin
   const cannot = (oid: Oid, op: string) => context.canOperate?.(typeOfOid(oid), op) === false;
   const modified = new Set(done.modified.map(momentless)), operated = new Set(done.operated.map(momentless));
   for (const u of described.updates) {
-    if (!modified.has(u.oid)) continue;
-    const was = before[u.oid];
-    if (!was) { notes.push(`${u.oid}: no snapshot, cannot restore`); continue; }
+    if (!modified.has(u._oid)) continue;
+    const was = before[u._oid];
+    if (!was) { notes.push(`${u._oid}: no snapshot, cannot restore`); continue; }
     const update: Record<string, CommandValue> = {};
     for (const [attr, change] of Object.entries(u.attributes)) {
       const prior = was[attr];
@@ -236,29 +236,29 @@ export function reverseOf(described: Described, before: Record<Oid, Record<strin
       if (Array.isArray(prior)) {
         const added = add.filter((v) => !prior.includes(v)), removed = remove.filter((v) => prior.includes(v));
         if (added.length || removed.length) update[attr] = { add: removed, remove: added };
-      } else if (prior === undefined) notes.push(`${u.oid}.${attr}: not in snapshot, cannot restore`);
+      } else if (prior === undefined) notes.push(`${u._oid}.${attr}: not in snapshot, cannot restore`);
       else update[attr] = prior as CommandValue; // a scalar or single relation: put the old value back (null clears)
     }
-    if (Object.keys(update).length) commands.push({ from: u.oid, update });
+    if (Object.keys(update).length) commands.push({ from: u._oid, update });
   }
   for (const e of described.executes) {
-    if (!operated.has(e.oid)) continue;
+    if (!operated.has(e._oid)) continue;
     const inverse = INVERSE[e.op];
-    if (!inverse) { notes.push(`${e.oid}: ${e.op} has no known inverse (was ${String(before[e.oid]?.AssetState ?? "?")})`); continue; }
-    if (cannot(e.oid, inverse)) { notes.push(`${e.oid}: ${typeOfOid(e.oid)} has no ${inverse} operation, so its ${e.op} is not reversed`); continue; }
-    commands.push({ from: e.oid, execute: inverse });
+    if (!inverse) { notes.push(`${e._oid}: ${e.op} has no known inverse (was ${String(before[e._oid]?.AssetState ?? "?")})`); continue; }
+    if (cannot(e._oid, inverse)) { notes.push(`${e._oid}: ${typeOfOid(e._oid)} has no ${inverse} operation, so its ${e.op} is not reversed`); continue; }
+    commands.push({ from: e._oid, execute: inverse });
     if (!CASCADING.has(e.op)) continue;
-    const open = context.openDescendants?.[e.oid] ?? [];
-    const closed = context.cascaded ? context.cascaded[e.oid] ?? [] : undefined;
+    const open = context.openDescendants?.[e._oid] ?? [];
+    const closed = context.cascaded ? context.cascaded[e._oid] ?? [] : undefined;
     if (closed === undefined) {
-      if (open.length) notes.push(`${e.oid}: ${e.op} may also have closed ${open.length} open descendant${open.length === 1 ? "" : "s"} (${open.join(", ")}); they could not be read back, so they are not reopened`);
+      if (open.length) notes.push(`${e._oid}: ${e.op} may also have closed ${open.length} open descendant${open.length === 1 ? "" : "s"} (${open.join(", ")}); they could not be read back, so they are not reopened`);
       continue;
     }
     for (const d of closed) {
-      if (cannot(d, "Reactivate")) notes.push(`${d}: closed with ${e.oid}, but ${typeOfOid(d)} has no Reactivate operation`);
+      if (cannot(d, "Reactivate")) notes.push(`${d}: closed with ${e._oid}, but ${typeOfOid(d)} has no Reactivate operation`);
       else commands.push({ from: d, execute: "Reactivate" });
     }
-    if (closed.length) notes.push(`${e.oid}: ${e.op} also closed ${closed.join(", ")}; reopened after it`);
+    if (closed.length) notes.push(`${e._oid}: ${e.op} also closed ${closed.join(", ")}; reopened after it`);
   }
   for (const oid of [...done.created].reverse().map(momentless)) {
     if (cannot(oid, "Delete")) notes.push(`${oid}: ${typeOfOid(oid)} has no Delete operation, so it is not deleted${typeOfOid(oid) === "Conversation" ? " (the server removes a Conversation once its last Expression is deleted)" : ""}`);
@@ -386,7 +386,7 @@ export async function runBatch(transport: Transport, schema: Schema, commands: C
   for (const d of described.deferred) notes.push(`command ${d.index} (${d.alias}): an aliased ${d.kind}, which preview does not expand; sent as written, not snapshotted, not reversible`);
   receipt.snapshotAt = now();
   receipt.before = await snapshot(transport, described);
-  const closing = described.executes.filter((e) => CASCADING.has(e.op)).map((e) => e.oid);
+  const closing = described.executes.filter((e) => CASCADING.has(e.op)).map((e) => e._oid);
   if (closing.length) receipt.openDescendants = await openDescendantsOf(transport, schema, closing);
   if (options.dryRun) return { ...receipt, stopped: "dryRun" };
   if (options.confirm && !(await options.confirm(receipt))) return { ...receipt, stopped: "declined" };
@@ -513,7 +513,7 @@ export class ReceiptVersionError extends ApiError {
 export const isReceipt = (value: unknown): value is Receipt => !!value && typeof value === "object" && (value as { receipt?: unknown }).receipt === 2 && typeof (value as Receipt).reverse === "object";
 
 /** An asset a reverse leaves alone because someone changed it since the batch: its Moment then and now (null: gone), and the same as readable times when known. */
-export interface Drifted { oid: Oid; was: string; now: string | null; wasChangedAt: string | null; nowChangedAt: string | null }
+export interface Drifted { _oid: Oid; was: string; now: string | null; wasChangedAt: string | null; nowChangedAt: string | null }
 
 /**
  * What `reversible` reads of a receipt: pass the receipt itself. A caller
@@ -544,8 +544,8 @@ export async function reversible(transport: Transport, receipt: ReversibleReceip
   if (!current && !options.force) throw new ReceiptVersionError(receipt.receipt, targets);
   // An old receipt's stamps are not Moments: with force there is nothing to compare, and nothing is.
   const now = current ? await versionsOf(transport, targets.filter((oid) => receipt.after[oid] !== undefined)) : {};
-  const drifted: Drifted[] = current ? targets.flatMap((oid) => (receipt.after[oid] !== undefined && now[oid]?.moment !== receipt.after[oid] ? [{ oid, was: receipt.after[oid]!, now: now[oid]?.moment ?? null, wasChangedAt: receipt.changedAt?.[oid] ?? null, nowChangedAt: now[oid]?.changedAt ?? null }] : [])) : [];
-  const skip = new Set(options.force ? [] : drifted.map((d) => d.oid));
+  const drifted: Drifted[] = current ? targets.flatMap((oid) => (receipt.after[oid] !== undefined && now[oid]?.moment !== receipt.after[oid] ? [{ _oid: oid, was: receipt.after[oid]!, now: now[oid]?.moment ?? null, wasChangedAt: receipt.changedAt?.[oid] ?? null, nowChangedAt: now[oid]?.changedAt ?? null }] : [])) : [];
+  const skip = new Set(options.force ? [] : drifted.map((d) => d._oid));
   const kept = receipt.reverse.commands.filter((c) => !skip.has(momentless(String(bodyOf(c).from))));
   const deletes = kept.flatMap((c) => (bodyOf(c).execute === "Delete" ? [momentless(String(bodyOf(c).from))] : []));
   const states = deletes.length ? await statesOf(transport, deletes) : {};

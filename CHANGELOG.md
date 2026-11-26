@@ -78,7 +78,9 @@ Each entry has the line a consumer follows to migrate.
   defaulted to true). Migration: `client.batch.run(commands)` →
   `client.batch.run(commands, { guard: true })`.
 - **Receipts are `receipt: 2`**: `skipped` → `conflicts`; new `stamps`,
-  `changedAt` and `stopped`; and the assets a receipt names are rows,
+  `changedAt` and `stopped`; `described.updates[i]`,
+  `described.executes[i]` and `batch.reversible`'s `drifted[i]` name
+  their asset as `_oid` (was `oid`); and the assets a receipt names are rows,
   like every other asset the SDK answers: in `created` and `touched`,
   `oid` → `_oid`, `type` → `AssetType`, `number` → `Number`, `name` →
   `Name` (`touched` gains `AssetType`); in `names[oid]`, `number` →
@@ -180,7 +182,10 @@ Each entry has the line a consumer follows to migrate.
   the attribute and the asset type, the parts it was made from (`rule`,
   `attribute`, `attributeLabel`, `typeLabel`), and the server's own
   `localized` sentence where it has one. `Resolution'…` failures are read
-  too. One loc-2 request at most. Migration: a consumer's own failure
+  too. `explained` says whether the sentence is fit to show a user: false
+  when it is only the message as it came (a token the instance has no
+  words for, raw server text, a message for a developer), so a caller
+  can explain any error and show only what is explained. One loc-2 request at most. Migration: a consumer's own failure
   patterns and three-tag loc-2 lookups can go.
 - **`transportConformance(make)`** from `@versionone/agility-sdk/testing`:
   the SDK's expectations of a `Transport` as a list of named checks,
@@ -199,7 +204,8 @@ Each entry has the line a consumer follows to migrate.
   (`client.meta` answers the model's `Metamodel` and is unchanged.)
 - **`FakeAgilityClient` at the transport's level too**: `new
   FakeAgilityClient({ metamodel })` gives the fake's instance the asset
-  types of a meta.v1 document, so a response captured from a server and
+  types of meta.v1 documents (only the types the code under test
+  touches are needed), so a response captured from a server and
   scripted with `onRequest` reads translated, for the fake and for any
   client built on `fake.transport`; and `onList(type, rows)` scripts
   `client.data.list` in the model's shape. `sendGuarded` and `batch.run`
@@ -220,9 +226,10 @@ Each entry has the line a consumer follows to migrate.
   and on the receipt of an unguarded `batch.run`, for aliased commands
   by OID as for bare ones.
 - `assetStateKind(value)`: an AssetState name or code as `"open"`
-  (Active), `"closed"` (Closed), `"template"` (code 200) or `"deleted"`
+  (Active, and only Active), `"future"` (Future: not begun),
+  `"closed"` (Closed), `"template"` (code 200) or `"deleted"`
   (Deleted), each checked against a server, and `"other"` for every
-  other state: it does not guess at Future, Dead or a split story.
+  other state: it does not guess at Dead or a split story.
 - The fetch transport calls the global `fetch` as it is at each request
   (it captured it when the transport was made), so a stub installed
   later is used without passing `fetchImpl`.

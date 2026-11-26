@@ -42,7 +42,7 @@ describe("explain", () => {
       "Agility Warning: Attempting to delete a closed item.  This change was not saved."
     ]);
     expect(explained[0]).toEqual({
-      sentence: "Project is required.", index: 0, rule: "Required", attribute: "Story.Scope", attributeLabel: "Project", typeLabel: "Backlog Item",
+      sentence: "Project is required.", explained: true, index: 0, rule: "Required", attribute: "Story.Scope", attributeLabel: "Project", typeLabel: "Backlog Item",
       localized: LOC2["Violation'Required'AttributeDefinition'Scope'Story"], message: "Violation'Required'AttributeDefinition'Scope'Story"
     });
     // A Resolution failure names the attribute as a token and then the related type; loc-2 has no label for these here, so their own names stand in.
@@ -50,6 +50,10 @@ describe("explain", () => {
     // A plain sentence is not a tag: nothing is asked about it and nothing is invented.
     expect(explained[2]).toMatchObject({ rule: null, attribute: null, attributeLabel: null, localized: null });
     expect(explained[4]).toMatchObject({ rule: "AssetCannotDeleteClosed", attribute: null });
+    // Which sentences are fit to show a user: the ones made for one. The raw server text is not.
+    expect(explained.map((e) => e.explained)).toEqual([true, true, false, true, true]);
+    // A rule the instance has no words for (seen live: closing a closed story) stays a token, and says it explains nothing.
+    expect((await explain(loc2(), [failure(0, "Violation'AssetCannotInactivateClosed")]))[0]).toMatchObject({ sentence: "Violation'AssetCannotInactivateClosed", explained: false, rule: "AssetCannotInactivateClosed", localized: null });
   });
 
   it("takes an Outcome, a CommandFailureError or its failures alike; no failures, no request", async () => {
@@ -67,12 +71,16 @@ describe("explain", () => {
     const say = async (e: unknown) => (await explain(t, e))[0]!.sentence;
     expect(await say(new ApiError("Unauthorized", 401))).toBe("Agility did not accept the sign-in: the token is missing, wrong or no longer valid.");
     expect(await say(new ApiError("Forbidden", 403))).toBe("Agility refused: this member is not allowed to do that.");
-    expect(await say(new ApiError("fetch failed", 0, "NETWORK_ERROR"))).toBe("Agility could not be reached, or is busy (fetch failed). The same request may work in a moment.");
+    expect(await say(new ApiError("fetch failed", 0, "NETWORK_ERROR"))).toBe("Agility could not be reached, or is busy. The same request may work in a moment.");
     expect(await say(new ApiError("Request aborted", 0, "ABORTED"))).toBe("The request was cancelled.");
     // The SDK's own sentences and the server's (a rejected query) are said as they are.
     expect(await say(new UsageError("query of Story without a page: every read must be bounded"))).toBe("query of Story without a page: every read must be bounded");
     expect(await say(new ApiError("Invalid WHERE parameter; Invalid QueryFilter2 token Nope=1", 400, "QUERY_REJECTED"))).toBe("Invalid WHERE parameter; Invalid QueryFilter2 token Nope=1");
     expect(await say(new Error("boom"))).toBe("boom");
+    // A developer's message is passed through and marked as not for a user; a consumer can call explain on anything and show only what is explained.
+    const fit = async (e: unknown) => (await explain(t, e))[0]!.explained;
+    expect([await fit(new ApiError("Unauthorized", 401)), await fit(new ApiError("down", 503)), await fit(new ApiError("x", 200, "CONFLICT"))]).toEqual([true, true, true]);
+    expect([await fit(new UsageError("query of Story without a page")), await fit(new ApiError("Invalid WHERE parameter", 400, "QUERY_REJECTED")), await fit(new ApiError("not JSON", 200, "BAD_JSON")), await fit(new Error("boom"))]).toEqual([false, false, false, false]);
     expect(t.calls).toHaveLength(0);
     const down: Transport = { request: async () => { throw new ApiError("down", 503); } };
     expect((await explain(down, [failure(0, "Violation'Required'AttributeDefinition'Scope'Story")]))[0]).toMatchObject({ sentence: "Scope is required.", attributeLabel: "Scope", typeLabel: "Story", localized: null });

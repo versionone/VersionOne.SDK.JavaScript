@@ -69,7 +69,7 @@ describeInstance("batch (live)", () => {
     const receipt = await client.batch.run([{ from: b, update: { Estimate: 2 } }], { guard: true });
     await assetApi.send(t, [{ from: b, update: { Estimate: 3 } }], { throwOnFailure: true }); // someone else
     const { commands, drifted } = await client.batch.reversible(receipt);
-    expect(drifted.map((d) => d.oid)).toEqual([b]);
+    expect(drifted.map((d) => d._oid)).toEqual([b]);
     expect(commands).toEqual([]);
     expect((await client.batch.reversible(receipt, { force: true })).commands).toEqual([{ from: b, update: { Estimate: null } }]);
   });

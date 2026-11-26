@@ -63,8 +63,8 @@ group("batch", () => {
   it("describe reads creates and queries off the request, and updates and executes per asset off the projection", () => {
     const d = describe(REQUEST, PREVIEW);
     expect(d.creates).toEqual([{ index: 0, alias: "@t", type: "Task", name: "new task" }]);
-    expect(d.updates.map((u) => u.oid)).toEqual(["Story:1", "Story:2"]);
-    expect(d.executes).toEqual([{ oid: "Epic:9", op: "Inactivate", args: {} }]);
+    expect(d.updates.map((u) => u._oid)).toEqual(["Story:1", "Story:2"]);
+    expect(d.executes).toEqual([{ _oid: "Epic:9", op: "Inactivate", args: {} }]);
   });
 
   it("runBatch: preview, name, snapshot, send guarded on the snapshot's Moments, then a receipt — created with alias and number, touched, conflicts, after-stamps, reverse", async () => {
@@ -263,8 +263,8 @@ group("batch", () => {
     const t = server({ preview: [], lookup: (q) => q.with!.$oids!.flatMap((oid) => (now[oid] ? [{ _oid: oid, ...now[oid] }] : [])), send: () => envelope() });
     const r = await reversible(t, receipt);
     expect(r.drifted).toEqual([
-      { oid: "Story:1", was: "101", now: "140", wasChangedAt: "2026-11-04T17:00:00.1", nowChangedAt: "2026-11-04T18:00:00.9" },
-      { oid: "Task:5", was: "77", now: null, wasChangedAt: null, nowChangedAt: null }
+      { _oid: "Story:1", was: "101", now: "140", wasChangedAt: "2026-11-04T17:00:00.1", nowChangedAt: "2026-11-04T18:00:00.9" },
+      { _oid: "Task:5", was: "77", now: null, wasChangedAt: null, nowChangedAt: null }
     ]);
     expect(r.commands).toEqual([{ from: "Epic:9", execute: "Reactivate" }]);
     expect((await reversible(t, receipt, { force: true })).commands).toHaveLength(3);

@@ -58,7 +58,7 @@ type ListMatch = string | ((type: string, params: Record<string, string | undefi
 
 interface Script {
   lists: { match: ListMatch; answer: FakeRows | Error | ((type: string, params: Record<string, string | undefined>) => FakeRows) }[];
-  metamodel: MetamodelDocument | null;
+  metamodel: FakeOptions["metamodel"] | null;
   queries: { match: QueryMatch; answer: QueryAnswer }[];
   sends: SendAnswer[];
   requests: { match: RequestMatch; answer: RequestAnswer }[];
@@ -253,17 +253,21 @@ function respond(script: Script, request: RequestOptions): unknown {
 
 export interface FakeOptions {
   /**
-   * A metamodel as meta.v1 delivers it (the document a consumer captures
-   * from `GET /meta.v1`, or this repository's `metamodel.json`). With it
-   * the fake's instance has those asset types: it serves `meta.v1/<Type>`
-   * from the document, so answers go through the real translation — a
-   * response captured from a server, scripted with `onRequest`, reads as
-   * it would live ("5" becomes 5, a sub-selected single relation one Ref)
-   * — for the fake and for any client built on `fake.transport`. Rows
-   * scripted in the model's shape still read as scripted. Without it, the
-   * instance has no types and nothing is translated.
+   * Asset types as meta.v1 delivers them, for the fake's instance to have:
+   * `{ AssetTypes: { Story: <the document GET /meta.v1/Story answers>, … } }`.
+   * Only the types the code under test touches are needed — the ones its
+   * queries read from and select through — and those are small; the whole
+   * `GET /meta.v1` document (several megabytes) works too, `Version`
+   * included or not. With it the fake serves `meta.v1/<Type>` from these,
+   * so answers go through the real translation: a response captured from
+   * a server, scripted with `onRequest`, reads as it would live ("5"
+   * becomes 5, "False" false, a sub-selected single relation one Ref),
+   * for the fake and for any client built on `fake.transport`. A type that
+   * is not among them does not exist on the fake's instance, and its rows
+   * read as sent. Rows scripted in the model's shape still read as
+   * scripted. Without this option the instance has no types at all.
    */
-  metamodel?: MetamodelDocument;
+  metamodel?: { Version?: string; AssetTypes: MetamodelDocument["AssetTypes"] };
 }
 
 /** A model row as rest-1 would send it: what `onList` answers with, so the client's own translation reads it back. */

@@ -136,6 +136,9 @@ describeInstance("client reads (live)", () => {
     // A template is state 200, which query.v1 sends as "200" and the model names Template. (None on an empty instance: then nothing is asserted.)
     const [template] = await client.query<{ _oid: string; AssetState: string }>({ from: "Story", select: ["AssetState"], filter: ["AssetState='200'"], page: { size: 1, start: 0 } });
     if (template) expect(assetStateKind(template.AssetState)).toBe("template");
+    // Future is a state the server names (a Timebox ahead of its dates); it is its own kind, not "open".
+    const [future] = await client.query<{ _oid: string; AssetState: string }>({ from: "Timebox", select: ["AssetState"], filter: ["AssetState='Future'"], page: { size: 1, start: 0 } });
+    if (future) expect([future.AssetState, assetStateKind(future.AssetState)]).toEqual(["Future", "future"]);
   });
 
   it("the asset page URL answers for a real asset (assetdetail.v1 redirects to the type's detail page)", async () => {

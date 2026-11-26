@@ -53,13 +53,14 @@ describe("unmatched, asset state kinds and the fetch a transport calls", () => {
     expect(unmatchedOf([{ from: "Story:1", execute: "QuickClose" }], { modified: ["Story:1"], operated: [], failures: [] })).toEqual([0]);
   });
 
-  it("assetStateKind names the four states whose meaning is established against a server, by name or code, and calls everything else other", () => {
+  it("assetStateKind names the five states whose meaning is established against a server, by name or code, and calls everything else other", () => {
     expect(["Active", 64, "64"].map(assetStateKind)).toEqual(["open", "open", "open"]);
     expect(["Closed", 128].map(assetStateKind)).toEqual(["closed", "closed"]);
     expect(["200", 200, "Template"].map(assetStateKind)).toEqual(["template", "template", "template"]); // the server sends "200"; Template is this SDK's name for it
     expect(["Deleted", 255].map(assetStateKind)).toEqual(["deleted", "deleted"]);
-    // Not claimed: Future, Dead (a range, not a state rows carry), a split story (dead, not deleted), Deprecated, the unknown.
-    expect(["Future", 0, "Dead", 192, "OldBrokenDownStory", 208, "Deprecated", "Whatever"].map(assetStateKind)).toEqual(Array(8).fill("other"));
+    expect(["Future", 0].map(assetStateKind)).toEqual(["future", "future"]); // not begun: not "open", which is Active alone
+    // Not claimed: Dead (a range, not a state rows carry), a split story (dead, not deleted), Deprecated, the unknown.
+    expect(["Dead", 192, "OldBrokenDownStory", 208, "Deprecated", "Whatever"].map(assetStateKind)).toEqual(Array(6).fill("other"));
     expect([null, undefined].map(assetStateKind)).toEqual([null, null]);
   });
 
