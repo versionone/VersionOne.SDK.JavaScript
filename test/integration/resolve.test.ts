@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { AgilityApiClient } from "../../src/client";
 import { assetApi } from "../../src/wire";
-import { describeInstance, fixtureName, instance } from "./instance";
+import { deleteFixtures, describeInstance, fixtureName, instance } from "./instance";
 
 /**
  * resolve against a real instance. Brings its own data: a Story (resolved
@@ -28,7 +28,7 @@ describeInstance("resolve (live)", () => {
     issue = { oid: assetApi.momentless(i!._oid), number: i!.Number };
   });
   afterAll(async () => {
-    for (const oid of created) await assetApi.send(t, [{ from: oid, execute: "Delete" }]);
+    await deleteFixtures(t, created);
   });
 
   it("one request resolves a workitem's number and another root's, case-insensitively, and reports the number nothing has as missing — the expect-zero control", async () => {

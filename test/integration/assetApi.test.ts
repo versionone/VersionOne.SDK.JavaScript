@@ -4,7 +4,7 @@ import { CommandFailureError } from "../../src/wire/assetApi";
 import type { Member } from "../../src/types/assets/Member";
 import type { Story } from "../../src/types/assets/Story";
 import { assetApi } from "../../src/wire";
-import { describeInstance, fixtureName, instance } from "./instance";
+import { deleteFixtures, describeInstance, fixtureName, instance } from "./instance";
 
 /**
  * The api/asset wire module against a real instance: what the fakes cannot
@@ -15,8 +15,7 @@ describeInstance("assetApi (live)", () => {
   const name = fixtureName("story");
   const created: string[] = [];
   afterAll(async () => {
-    if (!created.length) return;
-    await assetApi.send(t, created.map((oid) => ({ from: oid, execute: "Delete" })));
+    await deleteFixtures(t, created);
   });
 
   it("a create with a Ref relation is written as an OID token, the read-back speaks the model's shape, and results are positional", async () => {

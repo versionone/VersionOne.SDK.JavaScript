@@ -25,6 +25,7 @@ import { join } from "node:path";
 import { describe } from "vitest";
 import { createFetchTransport } from "../../src/core/fetchTransport";
 import type { Transport } from "../../src/core/transport";
+import { send } from "../../src/wire/assetApi";
 import { apiTestInstances, isHosted, permitted, trim } from "./instanceGuard";
 
 export interface Instance {
@@ -85,3 +86,22 @@ export const describeLocalInstance: typeof describe = ((name: string, fn: () => 
 
 /** A fixture name nobody will mistake for real data, unique per run. */
 export const fixtureName = (what: string): string => `sdk-integration ${what} ${new Date().toISOString().replace(/[:.]/g, "-")}`;
+
+/**
+ * Deletes a suite's fixtures by exact OID, in the order given, and throws
+ * if any is still there: a fixture left behind is a failure, not a shrug.
+ * Agility refuses to delete a closed asset, so one that would not delete
+ * is reactivated and deleted again. An asset already gone is fine (the
+ * server answers a command for it with success).
+ */
+export async function deleteFixtures(transport: Transport, oids: readonly string[]): Promise<void> {
+  const left: string[] = [];
+  for (const oid of oids) {
+    const first = await send(transport, [{ from: oid, execute: "Delete" }]);
+    if (!first.commandFailures?.count) continue;
+    const second = await send(transport, [{ from: oid, execute: "Reactivate" }, { from: oid, execute: "Delete" }]);
+    const failed = second.commandFailures?.commands ?? [];
+    if (failed.some((c) => JSON.stringify(c).includes("Delete"))) left.push(`${oid}: ${JSON.stringify(failed.at(-1)?.error)}`);
+  }
+  if (left.length) throw new Error(`fixtures left behind:\n${left.join("\n")}`);
+}

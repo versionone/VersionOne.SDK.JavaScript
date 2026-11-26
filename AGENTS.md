@@ -38,6 +38,7 @@ src/testing    What a consumer's tests import: a fake client and the Transport c
 src/index.ts   The root's public exports.
 test/unit          Runs with nothing. A fake Transport answering what the server answers.
 test/integration   The same modules against a real instance. Writes fixtures.
+examples       One runnable program per task, as a consumer would write it (examples/README.md).
 scripts        Metamodel download, type generation, the integration launcher.
 metamodel.json The product's metamodel for one release; the generated types come from it.
 ```
@@ -85,7 +86,9 @@ change, by design: `layers.test.ts` (imports point down the layer table),
 - **Live calls go only where fixtures may be written**: a local dev
   instance, or a hosted instance set aside for API testing and named in
   `SDK_TEST_ALLOWED_INSTANCES`. Fixtures are named `sdk-integration …` and
-  deleted by exact OID by the test that made them. Every query is paged.
+  deleted by exact OID by the test that made them, with `deleteFixtures`
+  (test/integration/instance.ts), which fails the suite if one is left.
+  Every query is paged.
 - **Nothing private in the tree.** See `CONTRIBUTING.md`. A URL in an
   example uses `agility.example.com`.
 - **A failure never reads as an empty result**, and no read is unbounded
@@ -95,6 +98,10 @@ change, by design: `layers.test.ts` (imports point down the layer table),
 - **One shape for a row** on every read path (spec 000 §2): a selected
   relation is a Ref, a path selected by name is at `row[path]`, nothing
   unselected arrives, and a row's identity is `_oid`.
+- **The examples stay true.** `npm run typecheck` compiles `examples/`
+  against the source and the integration tier runs each one. A change to
+  the public API that an example uses changes the example in the same
+  pull request; a new task a consumer would do gets a new numbered file.
 - **A change a consumer can see gets a changelog entry with its migration
   line.** Until 1.0.0, breaking changes are allowed between alphas and are
   listed under "Breaking".

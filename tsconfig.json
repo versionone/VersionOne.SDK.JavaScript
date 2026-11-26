@@ -15,8 +15,12 @@
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
     "outDir": "dist",
-    "types": ["node", "vitest/globals"]
+    "types": ["node", "vitest/globals"],
+    "paths": {
+      "@versionone/agility-sdk": ["./src/index.ts"],
+      "@versionone/agility-sdk/testing": ["./src/testing/index.ts"]
+    }
   },
-  "include": ["src", "test", "vitest.config.ts", "tsup.config.ts"],
+  "include": ["src", "test", "examples", "vitest.config.ts", "tsup.config.ts"],
   "exclude": ["dist", "node_modules"]
 }
