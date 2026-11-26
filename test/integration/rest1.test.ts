@@ -12,8 +12,8 @@ describeInstance("rest1 (live)", () => {
 
   it("a cross-type BaseAsset read with type-qualified Number sels comes back keyed by the plain name, with the real total, AssetState by name, and relation display columns folded onto Refs", async () => {
     const { rows, total } = await rest1.list<Story>(t, "BaseAsset", {
-      where: ["AssetType='Story','Defect'"],
-      sel: ["AssetType", "Name", "AssetState", "Story.Number", "Defect.Number", "Workitem.Owners", "PrimaryWorkitem.Status"],
+      filter: ["AssetType='Story','Defect'"],
+      select: ["AssetType", "Name", "AssetState", "Story.Number", "Defect.Number", "Workitem.Owners", "PrimaryWorkitem.Status"],
       sort: ["-ChangeDateUTC"],
       page: { size: 3, start: 0 },
       deleted: false,
@@ -32,23 +32,23 @@ describeInstance("rest1 (live)", () => {
   });
 
   it("find narrows to names and descriptions; a nonexistent term returns nothing — the expect-zero control", async () => {
-    const hit = await rest1.list(t, "Story", { sel: ["Name"], find: "order", findin: ["Name", "Description"], page: { size: 2, start: 0 }, needTotal: true });
+    const hit = await rest1.list(t, "Story", { select: ["Name"], find: "order", findin: ["Name", "Description"], page: { size: 2, start: 0 }, needTotal: true });
     expect(hit.rows.length).toBeGreaterThan(0);
     expect(hit.total).toBeGreaterThan(0);
-    const none = await rest1.list(t, "Story", { sel: ["Name"], find: "zzqqxxnothing", findin: ["Name", "Description"], page: { size: 2, start: 0 }, needTotal: true });
+    const none = await rest1.list(t, "Story", { select: ["Name"], find: "zzqqxxnothing", findin: ["Name", "Description"], page: { size: 2, start: 0 }, needTotal: true });
     expect(none.rows).toEqual([]);
     expect(none.total).toBe(0);
   });
 
   it("get reads one asset with its relations as Refs, and history reads the same asset one moment per row", async () => {
-    const { rows: [any] } = await rest1.list<Story>(t, "Story", { sel: ["Name"], page: { size: 1, start: 0 } });
+    const { rows: [any] } = await rest1.list<Story>(t, "Story", { select: ["Name"], page: { size: 1, start: 0 } });
     expect(any).toBeDefined();
     const one = await rest1.get<Story>(t, any!._oid, ["Name", "Scope", "Owners", "Super"]);
     expect(one._oid).toBe(any!._oid);
     expect(one.Name).toBe(any!.Name);
     expect(one.Scope).toMatchObject({ _oid: expect.stringMatching(/^Scope:\d+$/) });
     expect(typeof one.Scope?.Name).toBe("string"); // rest-1 adds Scope.Name beside a selected Scope; folded onto the Ref
-    const moments = await rest1.history<Story>(t, any!._oid, { sel: ["Name", "ChangeDate"], page: { size: 3, start: 0 } });
+    const moments = await rest1.history<Story>(t, any!._oid, { select: ["Name", "ChangeDate"], page: { size: 3, start: 0 } });
     expect(moments.rows.length).toBeGreaterThan(0);
     for (const m of moments.rows) expect(m._oid).toMatch(new RegExp(`^${any!._oid}:\\d+$`));
   });

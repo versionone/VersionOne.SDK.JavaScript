@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RequestOptions, Transport } from "../../src/core/transport";
 import type { Story } from "../../src/types/assets/Story";
-import { fromAssetDocument, get, history, list, operate, template, toQuery, type AssetDocument, type AssetsDocument } from "../../src/wire/rest1";
+import { UsageError, apiErrorFromResponse } from "../../src/core/errors";
+import { fromAssetDocument, get, history, list, normalizeQuery, operate, template, toQuery, type AssetDocument, type AssetsDocument } from "../../src/wire/rest1";
 
 function fakeTransport(...answers: unknown[]): Transport & { calls: RequestOptions[] } {
   const calls: RequestOptions[] = [];
@@ -36,9 +37,36 @@ describe("rest1: translation", () => {
     expect(row.Super).toBeNull();
     expect(row.Status).toEqual({ _oid: "StoryStatus:137", Name: "Accepted" });
     expect(row.Owners).toEqual([{ _oid: "Member:1035", Name: "Alfred Smith", Nickname: "alfred" }, { _oid: "Member:20", Name: "Betty Builder", Nickname: "betty" }]);
-    // The dotted columns stay too, for a caller that selected them by name.
-    expect((row as unknown as Record<string, unknown>)["Status.Name"]).toBe("Accepted");
-    expect((row as unknown as Record<string, unknown>)["Owners.Name"]).toEqual(["Alfred Smith", "Betty Builder"]);
+    // rest-1 sent those display columns uninvited: they are on the Refs, and the row has no key nobody selected.
+    expect(Object.keys(row).filter((k) => k.includes("."))).toEqual([]);
+  });
+
+  it("the rows rule on rest-1: a path selected by name keeps its key (a parallel array beside bare-looking Refs for a multi-value relation); one with no Ref to fold onto is kept as sent", () => {
+    const selected = fromAssetDocument<Story>(storyDoc, { select: ["Name", "Owners", "Owners.Name", "Status.Name"] }) as unknown as Record<string, unknown>;
+    expect(selected["Owners.Name"]).toEqual(["Alfred Smith", "Betty Builder"]);
+    expect(selected["Status.Name"]).toBe("Accepted");
+    expect(selected["Owners.Nickname"]).toBeUndefined(); // uninvited: on the Refs only
+    expect((selected.Owners as { Nickname: string }[]).map((o) => o.Nickname)).toEqual(["alfred", "betty"]);
+    // A dotted or type-qualified key whose relation is not in the row has nothing to fold onto: it is all there is of the value, so it stays.
+    const lone: AssetDocument = { _type: "Asset", href: "", id: "Story:1", Attributes: { "Scope.Name": { _type: "Attribute", name: "Scope.Name", value: "Release 1" }, "Story.Number": { _type: "Attribute", name: "Story.Number", value: "S-1" } } };
+    expect(fromAssetDocument(lone)).toEqual({ _oid: "Story:1", "Scope.Name": "Release 1", "Story.Number": "S-1" });
+    expect(fromAssetDocument(lone, { select: ["Name"] })).toEqual({ _oid: "Story:1", "Scope.Name": "Release 1", "Story.Number": "S-1" });
+  });
+
+  it("a read rest-1 refuses is a QUERY_REJECTED with the server's sentences, like one query.v1 refuses; a page has `more`", async () => {
+    // rest-1's answer to where=Nope=1, verbatim (the API-testing instance, 2026-11-26).
+    const refusal = apiErrorFromResponse(400, { _type: "Error", error: "Invalid WHERE parameter", exceptions: [{ type: "FormatException", message: "Invalid QueryFilter2 token Nope=1" }, { type: "NoViableAltException", message: "Position 6: unexpected token: [\"1\",<24>,col=6]" }] });
+    const t = { request: vi.fn(async () => { throw refusal; }) } as unknown as Transport;
+    await expect(list(t, "Story", { filter: ["Nope=1"], page: { size: 1, start: 0 } })).rejects.toMatchObject({
+      kind: "invalid", code: "QUERY_REJECTED", status: 400,
+      message: "Invalid WHERE parameter; Invalid QueryFilter2 token Nope=1; Position 6: unexpected token: [\"1\",<24>,col=6]",
+      details: [{ type: "FormatException", message: "Invalid QueryFilter2 token Nope=1" }, { type: "NoViableAltException", message: "Position 6: unexpected token: [\"1\",<24>,col=6]" }]
+    });
+    const page = (total: number | undefined, n: number) => fakeTransport({ _type: "Assets", total, pageSize: 2, pageStart: 0, Assets: Array.from({ length: n }, (_, i) => ({ _type: "Asset", href: "", id: `Story:${i}` })) });
+    expect((await list(page(5, 2), "Story", { page: { size: 2, start: 0 }, needTotal: true })).more).toBe(true);
+    expect((await list(page(2, 2), "Story", { page: { size: 2, start: 0 }, needTotal: true })).more).toBe(false);
+    expect(await list(page(undefined, 2), "Story", { page: { size: 2, start: 0 } })).toMatchObject({ total: null, more: true });
+    expect((await list(page(undefined, 1), "Story", { page: { size: 2, start: 0 } })).more).toBe(false);
   });
 
   it("keeps the moment on a history row's _oid and strips it on a data row", () => {
@@ -48,7 +76,7 @@ describe("rest1: translation", () => {
   });
 
   it("spells the query string the way rest-1 wants: sel and findin comma-joined, where ';'-joined, with in $name=a,b|… form, page size-first", () => {
-    expect(toQuery({ sel: ["Name", "Story.Number"], where: ["AssetType='Story'", "AssetState!='Closed'"], with: { $oids: ["Story:1", "Story:2"], $url: "u" }, find: "order", findin: ["Name", "Description"], sort: ["-ChangeDateUTC"], page: { size: 20, start: 40 }, deleted: false, needTotal: true }))
+    expect(toQuery({ select: ["Name", "Story.Number"], filter: ["AssetType='Story'", "AssetState!='Closed'"], with: { $oids: ["Story:1", "Story:2"], $url: "u" }, find: "order", findin: ["Name", "Description"], sort: ["-ChangeDateUTC"], page: { size: 20, start: 40 }, deleted: false, needTotal: true }))
       .toEqual({ sel: "Name,Story.Number", where: "AssetType='Story';AssetState!='Closed'", with: "$oids=Story:1,Story:2|$url=u", find: "order", findin: "Name,Description", sort: "-ChangeDateUTC", page: "20,40", deleted: "false", needTotal: "true", asof: undefined });
   });
 });
@@ -57,7 +85,7 @@ describe("rest1: calls", () => {
   it("list reads Data/<Type> with the query, translates every row, and surfaces total only when the server sent one; a read without a page is refused", async () => {
     const envelope: AssetsDocument = { _type: "Assets", total: 54, pageSize: 1, pageStart: 0, Assets: [storyDoc] };
     const t = fakeTransport(envelope);
-    const { rows, total, pageSize } = await list<Story>(t, "Story", { sel: ["Name"], page: { size: 1, start: 0 }, needTotal: true });
+    const { rows, total, pageSize } = await list<Story>(t, "Story", { select: ["Name"], page: { size: 1, start: 0 }, needTotal: true });
     expect(t.calls[0]).toMatchObject({ method: "GET", path: "/rest-1.v1/Data/Story", responseType: "json" });
     expect(t.calls[0]!.query).toMatchObject({ sel: "Name", page: "1,0", needTotal: "true" });
     expect(rows[0]!.Owners).toHaveLength(2);
@@ -66,7 +94,7 @@ describe("rest1: calls", () => {
     const noTotal = fakeTransport({ _type: "Assets", pageSize: 1, pageStart: 0, Assets: [] });
     expect((await list(noTotal, "Story", { page: { size: 1, start: 0 } })).total).toBeNull();
     const unpaged = fakeTransport();
-    await expect(list(unpaged, "Story", { sel: ["Name"] } as never)).rejects.toThrow(/without a page/);
+    await expect(list(unpaged, "Story", { select: ["Name"] } as never)).rejects.toThrow(/without a page/);
     expect(unpaged.calls).toHaveLength(0);
   });
 
@@ -75,7 +103,7 @@ describe("rest1: calls", () => {
     const one = await get<Story>(t, "Story:2104:99", ["Name", "Owners"]);
     expect(t.calls[0]).toMatchObject({ path: "/rest-1.v1/Data/Story/2104", query: { sel: "Name,Owners" } });
     expect(one._oid).toBe("Story:2104");
-    const moments = await history(t, "Story:2104", { sel: ["Name"], page: { size: 2, start: 0 } });
+    const moments = await history(t, "Story:2104", { select: ["Name"], page: { size: 2, start: 0 } });
     expect(t.calls[1]!.path).toBe("/rest-1.v1/Hist/Story/2104");
     expect(moments.rows.map((r) => r._oid)).toEqual(["Story:2104:2797", "Story:2104:2650"]);
   });
@@ -110,3 +138,25 @@ describe("rest-1: operate and template (the two things api/asset cannot answer)"
   });
 });
 
+
+describe("normalizeQuery: a query written with rest-1's spellings", () => {
+  it("sel becomes select, a textual where becomes filter, comma-joined lists become lists, and a \"size,start\" page becomes { size, start }", () => {
+    expect(normalizeQuery({ from: "Story", sel: "Name,Owners[Name='a,b'].Name,Status.Name", where: "Scope='Scope:0';AssetState!='Closed'", sort: "-ChangeDate,Name", findin: "Name,Description", find: "logon", page: "20,40", needTotal: "true", asof: "2026-01-01" }))
+      .toEqual({ from: "Story", select: ["Name", "Owners[Name='a,b'].Name", "Status.Name"], filter: ["Scope='Scope:0';AssetState!='Closed'"], sort: ["-ChangeDate", "Name"], findin: ["Name", "Description"], find: "logon", page: { size: 20, start: 40 }, needTotal: true, asof: "2026-01-01" });
+    expect(normalizeQuery({ from: "Story", sel: ["Name", { from: "Children", sel: "Name", where: ["AssetState!='Dead'"] }], where: ["A='1'", "B='2'"], page: { size: "5", start: 0 } }))
+      .toEqual({ from: "Story", select: ["Name", { from: "Children", select: ["Name"], filter: ["AssetState!='Dead'"] }], filter: ["A='1'", "B='2'"], page: { size: 5, start: 0 } });
+  });
+
+  it("a QueryBody comes back equal: a where object is a query's own where, and keys it does not know are kept", () => {
+    const q = { from: "Story", select: ["Name"], filter: ["Estimate>$n"], where: { Name: "x" }, with: { $n: 3 }, sort: ["Name"], page: { size: 1, start: 0 }, group: ["Status"] };
+    expect(normalizeQuery(q)).toEqual(q);
+  });
+
+  it("saying one thing twice, asking for deleted assets, a bad page or no from is a UsageError: nothing is guessed", () => {
+    expect(() => normalizeQuery({ from: "Story", sel: "Name", select: ["Name"] })).toThrow(/both `sel` and `select`/);
+    expect(() => normalizeQuery({ from: "Story", where: "A='1'", filter: ["B='2'"] })).toThrow(/both a textual `where` and `filter`/);
+    expect(() => normalizeQuery({ from: "Story", deleted: true })).toThrow(/client\.data\.list/);
+    expect(() => normalizeQuery({ from: "Story", page: "ten" })).toThrow(UsageError);
+    expect(() => normalizeQuery({ sel: "Name" } as never)).toThrow(UsageError);
+  });
+});

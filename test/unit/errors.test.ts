@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ApiError, UsageError, WrappedError, kindOf } from "../../src/core/errors";
+import { ApiError, UsageError, WrappedError, apiErrorFromResponse, kindOf } from "../../src/core/errors";
+import { createFetchTransport } from "../../src/core/fetchTransport";
 import { AttachmentUploadError } from "../../src/services/attachments";
 import { BatchSendError } from "../../src/services/batch";
 import { UnguardableError } from "../../src/services/guard";
@@ -18,7 +19,7 @@ describe("error kinds", () => {
     expect(kindOf(0, "NETWORK_ERROR")).toBe("transient");
     expect(kindOf(0, "ABORTED")).toBe("aborted");
     expect(kindOf(200, "BAD_RESPONSE")).toBe("protocol");
-    expect(kindOf(200, "CommandFailure")).toBe("commandFailure");
+    expect(kindOf(200, "COMMAND_FAILURE")).toBe("commandFailure");
     expect(kindOf(400, "QUERY_REJECTED")).toBe("invalid");
     expect(kindOf(404, "NOT_FOUND")).toBe("notFound");
     expect(kindOf(413, "TOO_LARGE")).toBe("invalid");
@@ -40,7 +41,7 @@ describe("error kinds", () => {
     expect(e).toBeInstanceOf(ApiError);
     expect(e.kind).toBe("usage");
     expect(e.status).toBe(0);
-    expect(new UnguardableError([{ index: 0, reason: "r" }])).toBeInstanceOf(UsageError);
+    expect(new UnguardableError([{ index: 0, code: "aliasedWrite", reason: "r" }])).toBeInstanceOf(UsageError);
   });
 
   it("an error wrapped around another keeps the cause's kind and status, so the service errors still branch", () => {
@@ -52,7 +53,7 @@ describe("error kinds", () => {
     expect(new WrappedError("x", "X", new Error("plain")).kind).toBe("unknown");
     const receipt = { receipt: 1 } as never;
     expect(new BatchSendError(cause, receipt).kind).toBe("transient");
-    expect(new AttachmentUploadError({ oid: "Attachment:1", id: "1", name: null, filename: null, contentType: null, description: null, createDate: null, createdBy: null }, new ApiError("too big", 413, "TOO_LARGE")).kind).toBe("invalid");
+    expect(new AttachmentUploadError({ _oid: "Attachment:1", id: "1", Name: null, Filename: null, ContentType: null, Description: null }, new ApiError("too big", 413, "TOO_LARGE")).kind).toBe("invalid");
   });
 
   it("a command failure is kind commandFailure, and its violations are parsed", () => {
@@ -69,5 +70,35 @@ describe("error kinds", () => {
     expect(parseViolation("Violation'AssetCannotDeleteClosed")).toEqual({ rule: "AssetCannotDeleteClosed", attribute: null, tag: null });
     expect(parseViolation("Unknown AttributeDefinition: Story.Nmae")).toBeNull();
     expect(parseViolation("")).toBeNull();
+  });
+});
+
+describe("apiErrorFromResponse: a custom Transport's errors match the fetch transport's", () => {
+  const bodies: [number, unknown, string, string][] = [
+    // rest-1 and query.v1: { error, exceptions: [{ message }] }; api/asset's parser: { Exceptions: [...] }; a bare message; text; nothing.
+    [400, { _type: "Error", error: "Bad Request", exceptions: [{ type: "X", message: "Unknown token" }] }, "Bad Request", "invalid"],
+    [400, { Exceptions: ["The request body is not valid JSON.", "Second"] }, "The request body is not valid JSON.; Second", "invalid"],
+    [403, { message: "No permission" }, "No permission", "forbidden"],
+    [401, "  Unauthorized  ", "Unauthorized", "auth"],
+    [503, undefined, "HTTP 503", "transient"],
+    [404, "", "HTTP 404", "notFound"]
+  ];
+
+  it("reads the message from the shapes the endpoints send, keeps the body as details, and the status gives the kind", () => {
+    for (const [status, data, message, kind] of bodies) {
+      const error = apiErrorFromResponse(status, data);
+      expect(error).toBeInstanceOf(ApiError);
+      expect({ status: error.status, message: error.message, kind: error.kind, details: error.details }).toEqual({ status, message, kind, details: data });
+    }
+  });
+
+  it("is what the fetch transport itself throws for the same response", async () => {
+    for (const [status, data] of bodies) {
+      const body = data === undefined ? null : typeof data === "string" ? data : JSON.stringify(data);
+      const fetchImpl = async () => new Response(body, { status, headers: typeof data === "object" ? { "content-type": "application/json" } : {} });
+      const thrown = (await createFetchTransport({ baseUrl: "https://x", retries: 0, fetchImpl: fetchImpl as typeof fetch }).request({ method: "GET", path: "/x" }).catch((e: unknown) => e)) as ApiError;
+      const built = apiErrorFromResponse(status, data === undefined ? "" : data);
+      expect({ status: thrown.status, message: thrown.message, kind: thrown.kind, code: thrown.code }).toEqual({ status: built.status, message: built.message, kind: built.kind, code: built.code });
+    }
   });
 });

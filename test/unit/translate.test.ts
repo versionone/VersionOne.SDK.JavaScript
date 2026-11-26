@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AgilityApiClient } from "../../src/client";
 import type { RequestOptions, Transport } from "../../src/core/transport";
-import { Schema } from "../../src/services/schema";
+import { Schema, TypeCache } from "../../src/services/schema";
 import type { Story } from "../../src/types/assets/Story";
 import { fromWireRow, send, type AssetApiResponse } from "../../src/wire/assetApi";
 import { toMetamodel, type MetamodelDocument } from "../../src/wire/meta";
@@ -131,13 +131,13 @@ describe("translate: through send and the client", () => {
     const metaDoc = JSON.parse(readFileSync(join(__dirname, "..", "..", "metamodel.json"), "utf8")) as MetamodelDocument;
     const t = fakeTransport(metaDoc.AssetTypes.Story, metaDoc.AssetTypes.StoryStatus, envelope([[liveRow]]));
     const client = new AgilityApiClient({ baseUrl: "http://x" }, { transport: t });
-    const [row] = await client.assets.query<Story>({ from: "Story", select: ["Estimate", { from: "Status", select: ["Name"] }], page: { size: 1, start: 0 } });
+    const { rows: [row] } = await client.queryPage<Story>({ from: "Story", select: ["Estimate", { from: "Status", select: ["Name"] }], page: { size: 1, start: 0 } });
     expect(t.calls.map((c) => c.path)).toEqual(["/meta.v1/Story", "/meta.v1/StoryStatus", "/api/asset"]);
     expect(row!.Estimate).toBe(5);
     expect(row!.Status).toEqual({ _oid: "StoryStatus:2191", Name: "Accepted", Order: 3 });
     // A seeded client fetches no meta at all.
-    const seeded = new AgilityApiClient({ baseUrl: "http://x" }, { transport: fakeTransport(envelope([[liveRow]])), metamodel });
-    const [again] = await seeded.assets.query<Story>({ from: "Story", select: ["Estimate"], page: { size: 1, start: 0 } });
+    const seeded = new AgilityApiClient({ baseUrl: "http://x" }, { transport: fakeTransport(envelope([[liveRow]])), types: TypeCache.fromMetamodel(metamodel) });
+    const { rows: [again] } = await seeded.queryPage<Story>({ from: "Story", select: ["Estimate"], page: { size: 1, start: 0 } });
     expect(again!.IsClosed).toBe(true);
   });
 });

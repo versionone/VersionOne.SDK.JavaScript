@@ -23,8 +23,9 @@ beforeAll(async () => {
   const installed = join(dir, "node_modules", "@versionone", "agility-sdk");
   // tsup reads entries as glob patterns, where "\\" is an escape: on Windows an
   // absolute path (D:\\source\\…) matches nothing. Forward slashes work everywhere.
-  const entry = join(root, "src", "index.ts").replace(/\\/g, "/");
-  await build({ config: false, entry: [entry], format: ["cjs"], outDir: join(installed, "dist"), target: "node18", dts: false, sourcemap: false, silent: true });
+  const entry = (...parts: string[]) => join(root, "src", ...parts).replace(/\\/g, "/");
+  // The package's own entries and splitting (tsup.config.ts): shared code in chunks, so the three import paths share one copy of every class.
+  await build({ config: false, entry: { index: entry("index.ts"), wire: entry("wire", "index.ts"), services: entry("services", "index.ts"), testing: entry("testing", "index.ts") }, format: ["cjs"], splitting: true, outDir: join(installed, "dist"), target: "node22", dts: false, sourcemap: false, silent: true });
   copyFileSync(join(root, "package.json"), join(installed, "package.json"));
 }, 30_000);
 afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }); });
@@ -33,7 +34,7 @@ afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }); });
 const CONSUMER = String.raw`
 const assert = require("node:assert/strict");
 const sdk = require("@versionone/agility-sdk");
-for (const name of ["AgilityApiClient", "createFetchTransport", "ApiError", "CommandFailureError", "assetApi", "rest1", "meta", "loc2", "Schema", "parseOid", "momentless"]) {
+for (const name of ["AgilityApiClient", "createFetchTransport", "ApiError", "CommandFailureError", "TypeCache", "parseOid", "momentless", "normalizeQuery"]) {
   assert.ok(sdk[name], "missing export " + name);
 }
 const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
@@ -49,10 +50,34 @@ const fetchImpl = async (url) => {
   const transport = sdk.createFetchTransport({ baseUrl: "https://v1.example/inst", accessToken: "t", fetchImpl });
   const client = new sdk.AgilityApiClient({ baseUrl: "https://v1.example/inst" }, { transport });
   assert.deepEqual(await client.localize(["Plural'Story"]), { "Plural'Story": "Backlog Items" });
-  const err = await client.assets.send([{ AssetType: "Story", Name: "x" }], { throwOnFailure: true }).catch((e) => e);
+  const err = await client.send([{ AssetType: "Story", Name: "x" }], { throwOnFailure: true }).catch((e) => e);
   assert.ok(err instanceof sdk.CommandFailureError && err instanceof sdk.ApiError && err instanceof Error);
   assert.equal(err.failures[0].index, 0);
   assert.equal(sdk.momentless("Story:1:99"), "Story:1");
+  // The other import paths resolve, and share the root's classes: one ApiError, one client.
+  const wire = require("@versionone/agility-sdk/wire");
+  const { FakeAgilityClient } = require("@versionone/agility-sdk/testing");
+  for (const name of ["assetApi", "queryV1", "rest1", "meta", "loc2", "attachment", "fields", "select"]) {
+    assert.ok(wire[name], "missing wire module " + name);
+    assert.equal(sdk[name], undefined, "the root no longer exports the wire module " + name);
+  }
+  assert.equal(wire.assetApi.CommandFailureError, sdk.CommandFailureError);
+  const services = require("@versionone/agility-sdk/services");
+  for (const name of ["attachments", "batch", "fields", "guard", "resolve", "schema"]) assert.ok(services[name], "missing service module " + name);
+  for (const name of ["sendGuarded", "runBatch", "resolveNumbers", "NUMBER_ROOTS", "stampsOf"]) assert.equal(sdk[name], undefined, "the root no longer exports the free function " + name);
+  assert.equal(services.guard.unguardable, sdk.unguardable);
+  assert.equal(services.guard.ConflictError, sdk.ConflictError);
+  assert.equal(services.schema.TypeCache, sdk.TypeCache);
+  assert.equal(sdk.toBase64(new Uint8Array([104, 105])), "aGk=");
+  // The package's own manifest is reachable, for tools that read a dependency's version: by require and by import.
+  assert.equal(require("@versionone/agility-sdk/package.json").name, "@versionone/agility-sdk");
+  const manifest = await import("@versionone/agility-sdk/package.json", { with: { type: "json" } });
+  assert.equal(manifest.default.version, require("@versionone/agility-sdk/package.json").version);
+  const fake = new FakeAgilityClient().onQuery("Story", [{ _oid: "Story:1", Name: "n" }]);
+  assert.ok(fake instanceof sdk.AgilityApiClient);
+  assert.deepEqual(await fake.query({ from: "Story", select: ["Name"], page: { size: 5, start: 0 } }), [{ _oid: "Story:1", Name: "n" }]);
+  const unscripted = await fake.query({ from: "Epic", page: { size: 1, start: 0 } }).catch((e) => e);
+  assert.ok(unscripted instanceof sdk.UsageError);
   process.stdout.write("ok " + seen.length);
 })().catch((e) => { process.stderr.write(String(e && e.stack || e)); process.exit(1); });
 `;
@@ -71,5 +96,9 @@ describe("CommonJS consumers", () => {
     const entry = pkg.exports["."]!;
     expect(entry.require).toEqual({ types: "./dist/index.d.cts", default: "./dist/index.cjs" });
     expect(entry.import).toEqual({ types: "./dist/index.d.ts", default: "./dist/index.js" });
+    expect((pkg.exports as unknown as Record<string, unknown>)["./package.json"]).toBe("./package.json");
+    for (const path of ["wire", "services", "testing"]) {
+      expect(pkg.exports[`./${path}`]).toEqual({ import: { types: `./dist/${path}.d.ts`, default: `./dist/${path}.js` }, require: { types: `./dist/${path}.d.cts`, default: `./dist/${path}.cjs` } });
+    }
   });
 });

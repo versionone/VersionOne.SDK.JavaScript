@@ -64,7 +64,7 @@ describe("queryV1", () => {
 
   it("client.query loads the types its queries touch and translates through the client's schema", async () => {
     const t = fakeTransport([[wireStory]]);
-    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, schema });
+    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, types: schema.cache });
     const [row] = await client.query(storyQuery);
     expect(row).toMatchObject({ Estimate: 2, IsClosed: true });
     expect(t.calls.map((c) => c.path)).toEqual(["/query.v1"]);

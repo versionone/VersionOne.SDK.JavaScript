@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [master, proposed_type_script_api_version]
+    branches: [master]
 
 permissions:
   contents: read

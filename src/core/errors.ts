@@ -10,12 +10,14 @@
  *   transient       no answer, or a 5xx/408/429: the same request may succeed later
  *   aborted         the caller's signal ended it
  *   commandFailure  api/asset answered 200 with failed commands inside (CommandFailureError)
+ *   conflict        a guarded write found the asset changed since it was read (ConflictError):
+ *                   nothing was applied to it; read it again and decide
  *   protocol        the server answered something the SDK cannot read
  *   usage           a mistake caught before any request (UsageError): nothing was sent, so
  *                   do not blame the server — fix the call (status is 0 here)
  *   unknown         none of the above
  */
-export type ErrorKind = "auth" | "forbidden" | "notFound" | "invalid" | "transient" | "aborted" | "commandFailure" | "protocol" | "usage" | "unknown";
+export type ErrorKind = "auth" | "forbidden" | "notFound" | "invalid" | "transient" | "aborted" | "commandFailure" | "conflict" | "protocol" | "usage" | "unknown";
 
 /** The kind an HTTP status and an SDK code imply. A code wins over a status. */
 export function kindOf(status: number, code?: string): ErrorKind {
@@ -26,7 +28,9 @@ export function kindOf(status: number, code?: string): ErrorKind {
     case "BAD_JSON":
     case "BAD_RESPONSE": return "protocol";
     case "USAGE": return "usage";
-    case "CommandFailure": return "commandFailure";
+    case "COMMAND_FAILURE": return "commandFailure";
+    case "CONFLICT": return "conflict";
+    case "RECEIPT_VERSION": return "usage";
     case "QUERY_REJECTED":
     case "TOO_LARGE": return "invalid";
     case "NOT_FOUND": return "notFound";
@@ -46,6 +50,12 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code?: string;
   readonly details?: unknown;
+  /**
+   * What to do about it (see ErrorKind). "usage" means the SDK refused the
+   * call before sending anything: no request reached the server, `status`
+   * is 0, and the fix is in the calling code, so a formatter should not
+   * word it as a server error.
+   */
   readonly kind: ErrorKind;
 
   constructor(message: string, status: number, code?: string, details?: unknown, kind: ErrorKind = kindOf(status, code)) {
@@ -57,6 +67,40 @@ export class ApiError extends Error {
     this.details = details;
     this.kind = kind;
   }
+}
+
+/**
+ * The message of an error response, from the shapes the Agility endpoints
+ * actually send: rest-1's { _type: "Error", error, exceptions: [{ message }] },
+ * api/asset's { Exceptions: ["…"] } (a request it could not parse — 400
+ * with the parser's message since 2026-11, an opaque 500 before), a bare
+ * { message }, or text.
+ */
+function messageOf(data: unknown, status: number): string {
+  if (data && typeof data === "object") {
+    const d = data as Record<string, unknown>;
+    const first = Array.isArray(d.exceptions) && d.exceptions[0] && typeof d.exceptions[0] === "object" ? (d.exceptions[0] as Record<string, unknown>).message : undefined;
+    const listed = Array.isArray(d.Exceptions) ? d.Exceptions.filter((x): x is string => typeof x === "string" && !!x).join("; ") : undefined;
+    for (const candidate of [d.error, first, listed, d.message]) {
+      if (typeof candidate === "string" && candidate) return candidate;
+    }
+  }
+  if (typeof data === "string" && data.trim()) return data.trim().slice(0, 200);
+  return `HTTP ${status}`;
+}
+
+/**
+ * The ApiError for a response the server refused: what the fetch transport
+ * throws for a status outside 2xx, for a custom Transport to throw too, so
+ * its errors carry the same message, `kind` and `details` whichever
+ * transport sent the request. `data` is the response body as read — the
+ * parsed JSON when the server sent JSON, else the text. The message comes
+ * from the shapes the endpoints send (rest-1's `exceptions`, api/asset's
+ * `Exceptions`, a bare `message`, or the text itself), `HTTP <status>`
+ * when the body says nothing; `details` is `data` unchanged.
+ */
+export function apiErrorFromResponse(status: number, data?: unknown): ApiError {
+  return new ApiError(messageOf(data, status), status, undefined, data);
 }
 
 /**

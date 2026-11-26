@@ -157,6 +157,22 @@ export async function readMetamodel(transport: Transport, options: ConditionalOp
   return read && { value: toMetamodel(read.value), etag: read.etag };
 }
 
+/**
+ * The metamodel as meta.v1 spells it — references as `{ nameref, href }`
+ * and `{ tokenref, href }`, operations keyed by token — with its tag; null
+ * when `ifNoneMatch` still matches (nothing was downloaded). For a caller
+ * whose own code reads the document form; `readMetamodel` answers the
+ * model's.
+ */
+export async function readMetamodelDocument(transport: Transport, options: ConditionalOptions = {}): Promise<Tagged<MetamodelDocument> | null> {
+  return conditional<MetamodelDocument>(transport, "/meta.v1", options);
+}
+
+/** One type as meta.v1 spells it, with the schema's tag; null when `ifNoneMatch` still matches. */
+export async function readAssetTypeDocument(transport: Transport, token: AssetTypeToken, options: ConditionalOptions = {}): Promise<Tagged<AssetTypeDocument> | null> {
+  return conditional<AssetTypeDocument>(transport, `/meta.v1/${encodeURIComponent(token)}`, options);
+}
+
 export async function getAssetType(transport: Transport, token: AssetTypeToken): Promise<AssetType> {
   return toAssetType(await transport.request<AssetTypeDocument>({ method: "GET", path: `/meta.v1/${encodeURIComponent(token)}`, responseType: "json" }));
 }

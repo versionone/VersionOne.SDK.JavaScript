@@ -13,7 +13,7 @@ describeInstance("queryV1 (live)", () => {
   const q = { from: "Story", select: ["Name", "Number", "Estimate", "IsClosed", "Scope", "Owners", { from: "Status", select: ["Name"] }], sort: ["ID"], page: { size: 3, start: 0 } };
 
   it("the same query through query.v1 and api/asset translates to the same rows", async () => {
-    const [viaQueryV1, viaAssets] = await Promise.all([client.query(q), client.assets.query(q)]);
+    const [viaQueryV1, viaAssets] = await Promise.all([client.query(q), client.queryPage(q).then((p) => p.rows)]);
     expect(viaQueryV1.length).toBeGreaterThan(0);
     expect(viaQueryV1).toEqual(viaAssets);
   });

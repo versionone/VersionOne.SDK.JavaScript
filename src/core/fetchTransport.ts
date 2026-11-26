@@ -1,4 +1,4 @@
-import { ApiError } from "./errors";
+import { ApiError, apiErrorFromResponse } from "./errors";
 import type { RequestBody, RequestOptions, ResponseType, Transport } from "./transport";
 
 /**
@@ -51,22 +51,41 @@ export interface FetchTransportConfig {
    * the place to re-authenticate — open a login popup, re-run setup. Resolve
    * "retry" to send the request once more, "fail" to throw the error.
    *
-   * A retry is offered only for an idempotent request (every GET; a write the
-   * caller marked idempotent). A plain api/asset write is never resent
-   * automatically, even after a 401: the hook still runs, so the session
-   * can be repaired, and the caller decides whether to send again.
+   * "retry" is honoured only for an idempotent request (every GET; a write
+   * the caller marked idempotent). A plain api/asset write is never resent
+   * on it, even after a 401: the hook still runs, so the session can be
+   * repaired, and the caller decides whether to send again. "retry-write"
+   * resends a plain write too, once, on the hook's own assertion that the
+   * refusal means nothing ran (see UnauthorizedDecision).
    */
   onUnauthorized?: (context: UnauthorizedContext) => UnauthorizedDecision | Promise<UnauthorizedDecision>;
   /** Which statuses call onUnauthorized. Default [401]; a cookie-session app may add 403. */
   unauthorizedStatuses?: readonly number[];
 }
 
-export type UnauthorizedDecision = "retry" | "fail";
+/**
+ * What the hook decides after re-authenticating:
+ *   "fail"         throw the refusal.
+ *   "retry"        send the request once more if it is idempotent; a plain
+ *                  write is not resent and its refusal is thrown.
+ *   "retry-write"  send the request once more whatever it is, a plain
+ *                  write included. By answering this the hook ASSERTS that
+ *                  on its server a refusal with one of
+ *                  `unauthorizedStatuses` means nothing in the request was
+ *                  executed — the sign-in was checked before any command
+ *                  ran — so sending it again cannot apply anything twice.
+ *                  The SDK cannot know that and does not check it: its own
+ *                  tests run where every request is authenticated. Answer
+ *                  it only where that holds (a session that expired; not a
+ *                  permission problem, which api/asset reports per command
+ *                  inside a 200). Honoured once per request, like "retry".
+ */
+export type UnauthorizedDecision = "retry" | "retry-write" | "fail";
 
 export interface UnauthorizedContext {
   error: ApiError;
   request: RequestOptions;
-  /** Whether a "retry" will be honoured: false for a non-idempotent write. */
+  /** Whether a "retry" will be honoured: false for a non-idempotent write (which only "retry-write" resends). */
   retryable: boolean;
 }
 
@@ -118,26 +137,6 @@ async function readBody(response: Response, responseType: ResponseType): Promise
   return response.text();
 }
 
-/**
- * The message of an error response, from the shapes the Agility endpoints
- * actually send: rest-1's { _type: "Error", error, exceptions: [{ message }] },
- * api/asset's { Exceptions: ["…"] } (a request it could not parse — 400
- * with the parser's message since 2026-11, an opaque 500 before), a bare
- * { message }, or text.
- */
-function messageOf(data: unknown, status: number): string {
-  if (data && typeof data === "object") {
-    const d = data as Record<string, unknown>;
-    const first = Array.isArray(d.exceptions) && d.exceptions[0] && typeof d.exceptions[0] === "object" ? (d.exceptions[0] as Record<string, unknown>).message : undefined;
-    const listed = Array.isArray(d.Exceptions) ? d.Exceptions.filter((x): x is string => typeof x === "string" && !!x).join("; ") : undefined;
-    for (const candidate of [d.error, first, listed, d.message]) {
-      if (typeof candidate === "string" && candidate) return candidate;
-    }
-  }
-  if (typeof data === "string" && data.trim()) return data.trim().slice(0, 200);
-  return `HTTP ${status}`;
-}
-
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** The longest a Retry-After is honoured before the request is given up instead. */
@@ -164,7 +163,6 @@ function retryDelay(response: { status: number; headers: { get(name: string): st
 const retriable = (status: number): boolean => status === 429 || status >= 500;
 
 export function createFetchTransport(config: FetchTransportConfig): Transport {
-  const fetchImpl = config.fetchImpl ?? fetch;
   const timeoutMs = config.timeoutMs ?? 60_000;
   const retries = Math.max(0, config.retries ?? 1);
   const authorization = config.authorization ?? (config.accessToken ? `Bearer ${config.accessToken}` : undefined);
@@ -200,7 +198,8 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
         try {
           const init: RequestInit = { method: options.method, headers, body, signal: controller.signal };
           if (config.credentials) init.credentials = config.credentials;
-          response = await fetchImpl(url, init);
+          // Looked up at each request, not when the transport was made: whatever replaces the global fetch later (a test's stub, an instrumented fetch) is what gets called.
+          response = await (config.fetchImpl ?? globalThis.fetch)(url, init);
         } catch (error) {
           settle();
           // The caller gave up: final, whatever attempt this was.
@@ -227,7 +226,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           // An answer, not a failure to get one. 5xx may be retried when
           // idempotent; anything else is final.
           const data = await readBody(response, responseType === "bytes" ? "text" : responseType === "json" ? "auto" : responseType);
-          lastError = new ApiError(messageOf(data, response.status), response.status, undefined, data);
+          lastError = apiErrorFromResponse(response.status, data);
         } catch (error) {
           if (callerSignal?.aborted) throw abortedError(callerSignal);
           throw error;
@@ -235,12 +234,12 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           settle();
         }
 
-        if (config.onUnauthorized && !reauthorized && unauthorizedStatuses.includes(response.status)) {
+        if (config.onUnauthorized && options.reauthorize !== false && !reauthorized && unauthorizedStatuses.includes(response.status)) {
           // One re-authentication per request: a second refusal is final.
           reauthorized = true;
           const decision = await config.onUnauthorized({ error: lastError as ApiError, request: options, retryable: idempotent });
           if (callerSignal?.aborted) throw abortedError(callerSignal);
-          if (decision === "retry" && idempotent) {
+          if ((decision === "retry" && idempotent) || decision === "retry-write") {
             // Not counted against `retries`: those are for failures to get an answer.
             attempt -= 1;
             continue;

@@ -5,7 +5,7 @@ import { AgilityApiClient } from "../../src/client";
 import { createFetchTransport } from "../../src/core/fetchTransport";
 import type { RequestOptions, Transport } from "../../src/core/transport";
 import { Schema, TypeCache } from "../../src/services/schema";
-import { etag, readAssetType, readMetamodel, type MetamodelDocument } from "../../src/wire/meta";
+import { etag, readAssetType, readAssetTypeDocument, readMetamodel, readMetamodelDocument, type MetamodelDocument } from "../../src/wire/meta";
 
 /**
  * meta.v1's one strong ETag for the whole schema, and what the SDK does
@@ -41,6 +41,19 @@ describe("conditional meta reads", () => {
     expect(state.bodies).toBe(1);
     state.current = NEXT;
     expect((await readMetamodel(transport, { ifNoneMatch: TAG }))?.etag).toBe(NEXT);
+  });
+
+  it("readMetamodelDocument and readAssetTypeDocument answer meta.v1's own spelling (references as { nameref }), conditionally, for a caller whose code reads the document", async () => {
+    const { state, transport } = metaServer();
+    const first = await readMetamodelDocument(transport);
+    expect(first?.etag).toBe(TAG);
+    expect(first!.value.AssetTypes.Story!.Base).toEqual({ nameref: "PrimaryWorkitem", href: "/meta.v1/PrimaryWorkitem" });
+    expect((await readMetamodel(transport))!.value.AssetTypes.Story!.Base).toBe("PrimaryWorkitem"); // the model's spelling, for contrast
+    expect(await readMetamodelDocument(transport, { ifNoneMatch: TAG })).toBeNull();
+    expect(state.bodies).toBe(2);
+    const type = await readAssetTypeDocument(transport, "Story");
+    expect(type?.value.Attributes["Story.Scope"]!.RelatedAsset).toMatchObject({ nameref: "Scope" });
+    expect(await readAssetTypeDocument(transport, "Story", { ifNoneMatch: TAG })).toBeNull();
   });
 
   it("readAssetType and etag do the same with one type and with the smallest resource", async () => {

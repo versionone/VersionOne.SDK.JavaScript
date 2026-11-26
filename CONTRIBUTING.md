@@ -86,5 +86,6 @@ and consumers pin commits by SHA), and nothing new is added to it.
 npm run verify   # typecheck, build, unit tests (including the public-tree check)
 ```
 
-Open the pull request against `proposed_type_script_api_version`. A
-change to an invariant changes `specs/000-layers.md` in the same commit.
+Open the pull request against `master`. A change to an invariant changes
+`specs/000-layers.md` in the same commit, and a change a consumer can see
+gets a `CHANGELOG.md` entry with its migration line.
