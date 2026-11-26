@@ -33,6 +33,14 @@ describeInstance("attachments (live)", () => {
     const small = await client.attachments.add(story, text("hello attachment\n"), { filename: "sdk-integration small.txt", contentType: "text/plain" });
     const large = await client.attachments.add(story, new Blob([text("two-step bytes\n")], { type: "text/plain" }), { filename: "sdk-integration large.txt", inlineLimit: 0, description: "two-step" });
     made.push(small._oid, large._oid);
+    // add answers what it wrote and not the server's stamps, which it never read: they are absent, not null.
+    for (const added of [small, large]) {
+      expect(added).not.toHaveProperty("CreateDate");
+      expect(added).not.toHaveProperty("CreatedBy.Name");
+    }
+    const read = await client.attachments.info(small.id);
+    expect(typeof read?.CreateDate).toBe("string");
+    expect(typeof read?.["CreatedBy.Name"]).toBe("string");
     expect(decode((await client.attachments.get(small.id)).bytes)).toBe("hello attachment\n");
     const got = await client.attachments.get(large._oid);
     expect(decode(got.bytes)).toBe("two-step bytes\n");
