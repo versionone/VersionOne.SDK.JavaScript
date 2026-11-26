@@ -69,6 +69,10 @@ const fetchImpl = async (url) => {
   assert.equal(services.guard.ConflictError, sdk.ConflictError);
   assert.equal(services.schema.TypeCache, sdk.TypeCache);
   assert.equal(sdk.toBase64(new Uint8Array([104, 105])), "aGk=");
+  // The package's own manifest is reachable, for tools that read a dependency's version: by require and by import.
+  assert.equal(require("@versionone/agility-sdk/package.json").name, "@versionone/agility-sdk");
+  const manifest = await import("@versionone/agility-sdk/package.json", { with: { type: "json" } });
+  assert.equal(manifest.default.version, require("@versionone/agility-sdk/package.json").version);
   const fake = new FakeAgilityClient().onQuery("Story", [{ _oid: "Story:1", Name: "n" }]);
   assert.ok(fake instanceof sdk.AgilityApiClient);
   assert.deepEqual(await fake.query({ from: "Story", select: ["Name"], page: { size: 5, start: 0 } }), [{ _oid: "Story:1", Name: "n" }]);
@@ -92,6 +96,7 @@ describe("CommonJS consumers", () => {
     const entry = pkg.exports["."]!;
     expect(entry.require).toEqual({ types: "./dist/index.d.cts", default: "./dist/index.cjs" });
     expect(entry.import).toEqual({ types: "./dist/index.d.ts", default: "./dist/index.js" });
+    expect((pkg.exports as unknown as Record<string, unknown>)["./package.json"]).toBe("./package.json");
     for (const path of ["wire", "services", "testing"]) {
       expect(pkg.exports[`./${path}`]).toEqual({ import: { types: `./dist/${path}.d.ts`, default: `./dist/${path}.js` }, require: { types: `./dist/${path}.d.cts`, default: `./dist/${path}.cjs` } });
     }

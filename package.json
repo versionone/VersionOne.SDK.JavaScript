@@ -56,7 +56,8 @@
         "types": "./dist/testing.d.cts",
         "default": "./dist/testing.cjs"
       }
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",

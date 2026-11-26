@@ -247,6 +247,9 @@ Each entry has the line a consumer follows to migrate.
   later is used without passing `fetchImpl`.
 - A read's explicit row type can be the caller's own: `client.query<Card>(…)`
   needs only `_oid` on `Card`, not the SDK's `Asset`.
+- `@versionone/agility-sdk/package.json` resolves, by `require` and by
+  `import`: the exports map did not list it, so a tool reading the
+  package's version that way was refused.
 - `ReadResult.more` on rest-1 reads, as on `queryPage`.
 - `toBase64` / `fromBase64` on the root; an inline attachment read also
   answers `base64`, the content as it arrived.
