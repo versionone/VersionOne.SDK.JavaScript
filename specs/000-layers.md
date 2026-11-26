@@ -21,7 +21,9 @@ client, and `src/testing` (§5a) stands on the client. Nothing imports
   (`src/types/assets/`, one file per asset type, the `extends` chain from
   the metamodel's `Base` chain) and the hand-written roots in
   `src/types/asset.ts` (`Asset`, `Ref`, `Oid`, `DateString`,
-  `AssetStateValue`, `CustomAttributes`).
+  `AssetStateValue`, `CustomAttributes`), and the vocabulary of a batch in
+  `src/types/command.ts`: what a caller writes (`QueryBody`, `Command`)
+  and what a batch did in the model's terms (`Outcome`).
 - **`wire`** is one module per endpoint (`assetApi`, `rest1`, `queryV1`,
   `meta`, `loc2`, `attachment`, `fields`, …). Each knows exactly two
   things: the envelope its endpoint takes and returns, typed as the server
@@ -199,7 +201,7 @@ command, so a failed command is reported inside the envelope
 it there by default and throws a `CommandFailureError` (an `ApiError`
 carrying every failure by index and the whole translated response, so
 what did commit is still known) when asked with `throwOnFailure`. Reads —
-`assetApi.query`/`queries`, and the client's `assets.query`/`queries` —
+`assetApi.query`/`queries`, and the client's `query`/`queries`/`queryPage` —
 always throw: a query the server rejected must not come back as `[]`.
 The server drops a failed query's slot from `queryResult.results` (later
 results shift up); `send` restores it as `null` by `sourceCommandIndex`, so

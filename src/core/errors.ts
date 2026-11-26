@@ -26,7 +26,7 @@ export function kindOf(status: number, code?: string): ErrorKind {
     case "BAD_JSON":
     case "BAD_RESPONSE": return "protocol";
     case "USAGE": return "usage";
-    case "CommandFailure": return "commandFailure";
+    case "COMMAND_FAILURE": return "commandFailure";
     case "QUERY_REJECTED":
     case "TOO_LARGE": return "invalid";
     case "NOT_FOUND": return "notFound";

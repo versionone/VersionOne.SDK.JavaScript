@@ -39,8 +39,11 @@ export function assetStateOf(value: unknown): AssetStateValue | string | null {
 }
 
 /**
- * A reference to another asset: always at least its OID, plus whatever a
- * select pulled through (Owners.Name lands on the Ref as Name).
+ * A reference to another asset: always its OID. It carries more only when
+ * asked to: a sub-select (`{ from: "Owners", select: ["Name"] }`) puts
+ * `Name` on each Ref. A dotted path selected by name (`"Owners.Name"`) is
+ * not folded onto the Ref: it arrives under its own key, `row["Owners.Name"]`,
+ * like everything a query selects.
  */
 export type Ref<T extends Asset = Asset> = { _oid: Oid } & Partial<Omit<T, "_oid">>;
 

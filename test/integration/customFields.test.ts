@@ -42,7 +42,7 @@ describeLocalInstance("custom fields (live, via the classic UI gadget)", () => {
   it("a Story's custom values, written through api/asset, read back as number and boolean through the client — and as strings without the schema", async () => {
     const client = new AgilityApiClient({ baseUrl: instance!.url }, { transport: t });
     const numToken = customTokenOf(numeric), flagToken = customTokenOf(flag);
-    const res = await client.assets.send<Story>([
+    const res = await client.send<Story>([
       { "@s": { AssetType: "Story", Name: fixtureName("custom fields"), Scope: { _oid: "Scope:0" }, [numToken]: 7, [flagToken]: true } },
       { from: "@s", select: ["Name", numToken, flagToken] }
     ]);

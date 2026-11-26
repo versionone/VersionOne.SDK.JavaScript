@@ -19,7 +19,7 @@ describe("FakeAgilityClient", () => {
     const fake = new FakeAgilityClient();
     expect(fake).toBeInstanceOf(AgilityApiClient);
     expectTypeOf(fake).toMatchTypeOf<AgilityApiClient>();
-    await expect(fake.query({ from: "Story" })).rejects.toThrow(/without a page/);
+    await expect(fake.query({ from: "Story" } as never)).rejects.toThrow(/without a page/);
     expect(fake.requests).toEqual([]);
     expect(fake.urls.asset("Story:1")).toBe("https://agility.example.com/Fake/assetdetail.v1?oid=Story:1");
   });
@@ -60,13 +60,13 @@ describe("FakeAgilityClient", () => {
 
   it("a write needs no script: a create answers a new OID, an update or operation by OID answers that OID, and the batch is recorded as sent", async () => {
     const fake = new FakeAgilityClient();
-    const outcome = await fake.assets.send([
+    const outcome = await fake.send([
       { AssetType: "Story", Name: "new", Scope: { _oid: "Scope:0" } },
       { from: "Story:7", update: { Name: "renamed" } },
       { from: "Story:8:123", execute: "QuickClose" }
     ]);
     expect(outcome).toMatchObject({ created: ["Story:1000"], modified: ["Story:7"], operated: ["Story:8"], failures: [] });
-    expect((await fake.assets.send([{ AssetType: "Task", Name: "t" }])).created).toEqual(["Task:1001"]);
+    expect((await fake.send([{ AssetType: "Task", Name: "t" }])).created).toEqual(["Task:1001"]);
     // As sent: the Ref is written as its OID token.
     expect(fake.sent[0]![0]).toEqual({ AssetType: "Story", Name: "new", Scope: "Scope:0" });
     expect(fake.sent).toHaveLength(2);
@@ -74,17 +74,17 @@ describe("FakeAgilityClient", () => {
 
   it("onSend scripts an outcome, failures included: returned by default, thrown with throwOnFailure, parsed like the server's", async () => {
     const fake = new FakeAgilityClient().onSend({ failures: [{ index: 0, message: "Violation'Required'AttributeDefinition'Scope'Story" }] });
-    const outcome = await fake.assets.send([{ AssetType: "Story", Name: "x" }]);
+    const outcome = await fake.send([{ AssetType: "Story", Name: "x" }]);
     expect(outcome.failures[0]).toMatchObject({ index: 0, violation: { rule: "Required", attribute: "Story.Scope" } });
-    await expect(fake.assets.send([{ AssetType: "Story", Name: "x" }], { throwOnFailure: true })).rejects.toBeInstanceOf(CommandFailureError);
+    await expect(fake.send([{ AssetType: "Story", Name: "x" }], { throwOnFailure: true })).rejects.toBeInstanceOf(CommandFailureError);
     fake.onSend((commands) => ({ created: commands.map((_, i) => `Story:${50 + i}`) }));
-    expect((await fake.assets.send([{ AssetType: "Story", Name: "a" }, { AssetType: "Story", Name: "b" }])).created).toEqual(["Story:50", "Story:51"]);
+    expect((await fake.send([{ AssetType: "Story", Name: "a" }, { AssetType: "Story", Name: "b" }])).created).toEqual(["Story:50", "Story:51"]);
   });
 
   it("an Error as an answer is thrown, as the client would throw it", async () => {
     const fake = new FakeAgilityClient().onQuery("Story", apiErrorFromResponse(401, { error: "Unauthorized" })).onSend(new ApiError("down", 503));
     await expect(fake.query({ from: "Story", page: { size: 1, start: 0 } })).rejects.toMatchObject({ kind: "auth", status: 401, message: "Unauthorized" });
-    await expect(fake.assets.send([{ AssetType: "Story", Name: "x" }])).rejects.toMatchObject({ kind: "transient" });
+    await expect(fake.send([{ AssetType: "Story", Name: "x" }])).rejects.toMatchObject({ kind: "transient" });
   });
 
   it("onRequest answers any other endpoint by path, in the endpoint's shape, and an unscripted one is a UsageError", async () => {
@@ -99,10 +99,10 @@ describe("FakeAgilityClient", () => {
 
   it("a batch that creates and reads back through an alias answers the scripted row of that type under the created OID", async () => {
     const fake = new FakeAgilityClient().onQuery("Story", [{ _oid: "Story:1", Number: "S-01001", Name: "template" }]);
-    const outcome = await fake.assets.send([{ "@story": { AssetType: "Story", Name: "new", Scope: "Scope:0" } }, { from: "@story", select: ["Number"], page: { size: 1, start: 0 } }]);
+    const outcome = await fake.send([{ "@story": { AssetType: "Story", Name: "new", Scope: "Scope:0" } }, { from: "@story", select: ["Number"], page: { size: 1, start: 0 } }]);
     expect(outcome.created).toEqual(["Story:1000"]);
     expect(outcome.queryResults).toEqual([[{ _oid: "Story:1000", Number: "S-01001", Name: "template" }]]);
-    await expect(new FakeAgilityClient().assets.send([{ "@e": { AssetType: "Epic", Name: "x" } }, { from: "@e", page: { size: 1, start: 0 } }])).rejects.toThrow(/query of @e \(the Epic the batch creates\).*onQuery\("Epic"/);
+    await expect(new FakeAgilityClient().send([{ "@e": { AssetType: "Epic", Name: "x" } }, { from: "@e", page: { size: 1, start: 0 } }])).rejects.toThrow(/query of @e \(the Epic the batch creates\).*onQuery\("Epic"/);
   });
 
   it("resolve finds a number among every scripted row, whatever its type, and reports the rest missing; the test names no number root", async () => {
@@ -130,6 +130,7 @@ describe("FakeAgilityClient", () => {
     expect(await wrapped.query({ from: "Member", select: ["Name", "IsSelf"], page: { size: 1, start: 0 } })).toEqual([{ _oid: "Member:20", Name: "Dana", IsSelf: true }]);
     expect(calls).toEqual(["/meta.v1/Member", "/query.v1"]);
     expect(fake.asked).toHaveLength(1);
+    expect(fake.requests.map((r) => r.path)).toEqual(["/query.v1"]); // the type load is the client's plumbing, not the test's subject
   });
 
   it("an aborted signal ends a read as ABORTED, like the fetch transport", async () => {

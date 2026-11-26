@@ -16,23 +16,21 @@ export type { AssetType, AttributeDefinition, AttributeLookup, AttributeType, At
 export type * from "./types/assets/index";
 export type { CreateType, CustomList, From, RowOf, RowsOf, SelectKey, SelectPath, SelectValue, Selected, TypeOf } from "./types/query";
 
-// The wire layer: one module per endpoint. Also importable from
-// "@versionone/agility-sdk/wire", which is where these six move for good:
-// the root re-exports of the modules go in the next alpha.
-export { assetApi, rest1, meta, loc2, queryV1, attachment, fields } from "./wire";
-export type { OperationResult, Template } from "./wire/rest1";
-export type { FieldsOf } from "./services/fields";
-export { importantName } from "./services/fields";
-export type { Bytes, EmbeddedImage } from "./wire/attachment";
-export * as select from "./wire/select";
-export type { AssetApiResponse, Command, CommandBody, CommandFailureDetail, Outcome, CommandValue, CreateBody, ExecuteBody, QueryBody, UpdateBody, ReadOptions, RowContext, SendOptions } from "./wire/assetApi";
-export { CommandFailureError, parseViolation } from "./wire/assetApi";
-export type { Violation } from "./wire/assetApi";
-export type { AssetDocument, AssetsDocument, LooseQuery, ReadParams, ReadResult } from "./wire/rest1";
+// What a caller writes and what a batch answers (src/types/command.ts).
+export type { Alias, Command, CommandBody, CommandFailureDetail, CommandValue, CreateBody, ExecuteBody, Outcome, Query, QueryBody, UpdateBody, Violation } from "./types/command";
+export { parseViolation } from "./types/command";
+export { CommandFailureError } from "./wire/assetApi";
+export type { SendOptions } from "./wire/assetApi";
 export { normalizeQuery } from "./wire/rest1";
+export type { LooseQuery, OperationResult, ReadParams, ReadResult, Template } from "./wire/rest1";
+export type { Bytes, EmbeddedImage } from "./wire/attachment";
 export type { Localizations, LocalizeOptions } from "./wire/loc2";
 export type { ConditionalOptions, Tagged } from "./wire/meta";
 export type { QueryRejection } from "./wire/queryV1";
+export type { FieldsOf } from "./services/fields";
+export { importantName } from "./services/fields";
+// The wire modules themselves (assetApi, queryV1, rest1, meta, loc2, attachment, fields, select) and the
+// endpoints' envelope types are at "@versionone/agility-sdk/wire".
 
 // Services: what to do.
 export { Schema, TypeCache } from "./services/schema";

@@ -138,8 +138,8 @@ describe("attachments service", () => {
 
   it("the client exposes attachments and embedded images, with URLs on its own base", () => {
     const client = new AgilityApiClient({ baseUrl: "https://agility.example.com/MyInstance/" }, { transport: fake() });
-    expect(client.attachments.url("Attachment:5")).toBe("https://agility.example.com/MyInstance/attachment.img/5");
-    expect(client.embeddedImages.url(12)).toBe("https://agility.example.com/MyInstance/embedded.img/12");
+    expect(client.urls.attachment("Attachment:5")).toBe("https://agility.example.com/MyInstance/attachment.img/5");
+    expect(client.urls.embeddedImage(12)).toBe("https://agility.example.com/MyInstance/embedded.img/12");
   });
 });
 

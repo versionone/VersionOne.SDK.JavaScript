@@ -38,7 +38,7 @@ import { ApiError, UsageError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import { assetStateOf, type Asset, type Oid, type Ref } from "../types/asset";
 import { momentless } from "../types/oid";
-import type { QueryBody } from "./assetApi";
+import type { Query, QueryBody } from "./assetApi";
 
 export { momentless };
 
@@ -55,12 +55,8 @@ export interface AssetsDocument { _type: "Assets" | "History"; total?: number; p
 export interface ReadParams {
   /** Attributes to select, as a query's `select`; a type-qualified name (Story.Number) reaches a subtype's attribute from a base type. */
   select?: string[];
-  /** @deprecated rest-1's own spelling of `select`; kept for one alpha. */
-  sel?: string[];
   /** Filter terms, as a query's `filter`, joined with ';' (AND). */
   filter?: string[];
-  /** @deprecated rest-1's own spelling of `filter`; kept for one alpha. */
-  where?: string[];
   /** The filter context: { $oids: [...] } — sent in rest-1's spelling, $name=a,b|$other=c. */
   with?: Record<string, string | string[]>;
   find?: string;
@@ -115,8 +111,8 @@ export function fromAssetDocument<Row extends Asset = Asset>(doc: AssetDocument,
 /** The query string rest-1 wants, from the model's parameters. */
 export function toQuery(params: ReadParams): Record<string, string | undefined> {
   return {
-    sel: (params.select ?? params.sel)?.join(","),
-    where: (params.filter ?? params.where)?.length ? (params.filter ?? params.where)!.join(";") : undefined,
+    sel: params.select?.join(","),
+    where: params.filter?.length ? params.filter.join(";") : undefined,
     with: params.with ? Object.entries(params.with).map(([k, v]) => `${k}=${[].concat(v as never).join(",")}`).join("|") : undefined,
     find: params.find,
     findin: params.findin?.join(","),
@@ -239,11 +235,14 @@ const listOf = (value: string | string[]): string[] => (typeof value === "string
  * comma-joined `select` / `sort` / `findin` become lists, and a
  * "size,start" page becomes `{ size, start }`; sub-selects are normalised
  * the same way, and every other key is kept as written. A query that
- * already is a QueryBody comes back equal. Nothing is sent. Saying one
+ * already is a QueryBody comes back equal; one written with a page is
+ * typed as a read takes it (`Query`). Nothing is sent. Saying one
  * thing twice (`sel` and `select`, a textual `where` and `filter`) is a
  * UsageError rather than a guess at which was meant, and so is `deleted`:
  * a QueryBody cannot ask for deleted assets (`client.data.list` can).
  */
+export function normalizeQuery(query: LooseQuery & { page: NonNullable<LooseQuery["page"]> }): Query;
+export function normalizeQuery(query: LooseQuery): QueryBody;
 export function normalizeQuery(query: LooseQuery): QueryBody {
   if (!query || typeof query !== "object" || typeof query.from !== "string" || !query.from) throw new UsageError("a query needs a `from`: an asset type token or an OID token");
   const { sel, select, where, filter, sort, findin, page, ...rest } = query;

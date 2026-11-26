@@ -1,11 +1,12 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { AgilityApiClient } from "../../src/client";
+import { ApiError } from "../../src/core/errors";
 import type { Transport } from "../../src/core/transport";
 import { Schema } from "../../src/services/schema";
 import type { Asset, AttributeValue, Ref } from "../../src/types/asset";
 import type { Story } from "../../src/types/assets/Story";
 import type { StoryStatus } from "../../src/types/assets/StoryStatus";
-import type { QueryBody } from "../../src/wire/assetApi";
+import type { Query } from "../../src/types/command";
 
 /**
  * What the types say about a query (src/types/query.ts). The assertions
@@ -13,8 +14,9 @@ import type { QueryBody } from "../../src/wire/assetApi";
  * time the fake answers nothing of interest.
  */
 const request = vi.fn(async (o: { path: string }) => (o.path === "/api/asset" ? { queryResult: { results: [[{ _oid: "Story:1", Name: "n" }]], resultMetaData: [{ total: 1 }] } } : [[{ _oid: "Story:1", Name: "n" }]]));
-const t: Transport = { request: request as unknown as Transport["request"] };
-const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, schema: Schema.fromMetamodel({ Version: "0", AssetTypes: {} }) });
+// No type is known to this instance (meta.v1 answers 404), so rows pass through and the scripted answers go to the queries.
+const t: Transport = { request: (async (o: { path: string }) => { if (o.path.startsWith("/meta.v1/")) throw new ApiError("Not Found", 404); return request(o); }) as unknown as Transport["request"] };
+const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, types: Schema.fromMetamodel({ Version: "0", AssetTypes: {} }).cache });
 
 describe("typed queries", () => {
   it("a literal from and select type the rows by what was selected; an unselected key is a compile error", async () => {
@@ -73,7 +75,7 @@ describe("typed queries", () => {
     const loose = await client.query({ from, select, page: { size: 1, start: 0 } });
     expectTypeOf(loose[0]!._oid).toEqualTypeOf<string>();
     expectTypeOf(loose[0]!.Anything).toEqualTypeOf<unknown>();
-    const body: QueryBody = { from: "Story", select: ["Name", { from: "Status", select: ["Name"] }], page: { size: 1, start: 0 } };
+    const body: Query = { from: "Story", select: ["Name", { from: "Status", select: ["Name"] }], page: { size: 1, start: 0 } };
     const typed = await client.query(body);
     expectTypeOf(typed).toEqualTypeOf<Asset[]>();
     // A type the model does not know, and any path, are still accepted.

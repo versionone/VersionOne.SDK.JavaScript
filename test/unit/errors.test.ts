@@ -19,7 +19,7 @@ describe("error kinds", () => {
     expect(kindOf(0, "NETWORK_ERROR")).toBe("transient");
     expect(kindOf(0, "ABORTED")).toBe("aborted");
     expect(kindOf(200, "BAD_RESPONSE")).toBe("protocol");
-    expect(kindOf(200, "CommandFailure")).toBe("commandFailure");
+    expect(kindOf(200, "COMMAND_FAILURE")).toBe("commandFailure");
     expect(kindOf(400, "QUERY_REJECTED")).toBe("invalid");
     expect(kindOf(404, "NOT_FOUND")).toBe("notFound");
     expect(kindOf(413, "TOO_LARGE")).toBe("invalid");

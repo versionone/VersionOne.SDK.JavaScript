@@ -51,7 +51,7 @@ describeInstance("attachments (live)", () => {
     const a = await client.attachments.add(story, text("inline read\n"), { filename: "sdk-integration inline.txt", contentType: "text/plain", description: "one request" });
     made.push(a._oid);
     const calls: string[] = [];
-    const counting = new AgilityApiClient({ baseUrl: instance!.url }, { transport: { request: (o) => { calls.push(o.path); return t.request(o); } }, schema: client.schema });
+    const counting = new AgilityApiClient({ baseUrl: instance!.url }, { transport: { request: (o) => { calls.push(o.path); return t.request(o); } }, types: client.schema.cache });
     const got = await counting.attachments.get(a._oid, { inline: true });
     expect(calls).toEqual(["/query.v1"]);
     expect(decode(got.bytes)).toBe("inline read\n");

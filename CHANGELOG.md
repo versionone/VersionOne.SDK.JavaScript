@@ -1,5 +1,63 @@
 # Changelog
 
+## 1.0.0-alpha.8 — the last breaking batch before 1.0
+
+Each entry has the line a consumer follows to migrate.
+
+### Breaking
+
+- **Writes are on the client itself**: `client.assets.send` →
+  `client.send`; `client.assets.preview` → `client.preview`;
+  `client.assets.sendGuarded` → `client.sendGuarded`. `client.assets` is
+  gone. Migration: delete `.assets`.
+- **The wire modules are at `@versionone/agility-sdk/wire` only.** The
+  root no longer exports `assetApi`, `queryV1`, `rest1`, `meta`, `loc2`,
+  `attachment`, `fields`, `select`, nor the endpoints' envelope types
+  (`AssetApiResponse`, `AssetDocument`, `AssetsDocument`, `RowContext`,
+  `ReadOptions`). Migration: `import { assetApi } from
+  "@versionone/agility-sdk/wire"`. What a caller writes and reads stays
+  on the root: `QueryBody`, `Command`, `CreateBody`, `UpdateBody`,
+  `ExecuteBody`, `Outcome`, `CommandFailureDetail`, `Violation`,
+  `CommandFailureError`, `parseViolation`, `normalizeQuery`.
+- **The aliases deprecated in alpha.3 are removed**:
+  - `client.queryV1.query` / `.queries` → `client.query` /
+    `client.queries`
+  - `client.assets.query` / `.queries` → `client.query` /
+    `client.queries`, or `client.queryPage` for a total
+  - `client.attachments.url`, `client.embeddedImages.url` →
+    `client.urls.attachment`, `client.urls.embeddedImage`
+  - rest-1 `sel` / `where` on `client.data.list` and `history` →
+    `select` / `filter`
+  - `new AgilityApiClient(config, transport)` → `new
+    AgilityApiClient(config, { transport })`
+- **A read's `page` is required by the type.** `client.query`,
+  `queries`, `queryPage`, `pages` and `all` take a `Query` (a `QueryBody`
+  with its page), so an unpaged read no longer compiles; it threw a
+  `UsageError` at run time before, and still does for a caller the types
+  do not reach — now before any request, a schema load included.
+  Migration: add `page: { size, start }`; a variable typed `QueryBody`
+  that is passed to a read becomes `Query`. A sub-select stays a
+  `QueryBody`.
+- **`needTotal` is no longer a key of `QueryBody`.** `client.queryPage`
+  is how a total is asked for. Migration: remove the key; call
+  `queryPage`.
+- **One way to hand the client its types**: `ClientOptions.metamodel` and
+  `ClientOptions.schema` are gone; `types` (a `TypeCache`) stays.
+  Migration: `{ metamodel }` → `{ types: TypeCache.fromMetamodel(metamodel)
+  }`; `{ schema }` → `{ types: schema.cache }`.
+- **Error codes are spelled one way**: `code: "CommandFailure"` →
+  `"COMMAND_FAILURE"`. `kind` (`"commandFailure"`) is unchanged and is
+  what to branch on. Migration: a comparison with the old code string
+  changes; one on `kind` or `instanceof CommandFailureError` does not.
+
+### Changed
+
+- `FakeAgilityClient.requests` leaves out the client's own unscripted
+  meta.v1 type loads: it lists what the code under test asked for.
+- The `Ref` type's doc said a dotted path lands on the Ref; it does not.
+  A sub-select puts attributes on a Ref; a path selected by name arrives
+  under its own key.
+
 ## 1.0.0-alpha.7 — what a browser app consumer asked for
 
 One breaking change, to attachments; everything else is additive. Each

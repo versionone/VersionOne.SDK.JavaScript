@@ -81,7 +81,7 @@ describeInstance("rest-1 operate, template and fields (live)", () => {
   const client = new AgilityApiClient({ baseUrl: instance!.url }, { transport: instance!.transport });
 
   it("copy answers the new story's OID, which api/asset's execute does not; the copy is then deleted", async () => {
-    const created = await client.assets.send([{ AssetType: "Story", Name: fixtureName("copy source"), Scope: "Scope:0" }], { throwOnFailure: true });
+    const created = await client.send([{ AssetType: "Story", Name: fixtureName("copy source"), Scope: "Scope:0" }], { throwOnFailure: true });
     const source = created.created[0]!;
     const made: string[] = [source];
     try {
@@ -91,13 +91,13 @@ describeInstance("rest-1 operate, template and fields (live)", () => {
       expect(copy).not.toBe(source);
       const row = await client.get(copy, ["Name"]);
       expect(row?.Name).toMatch(/^Copy Of sdk-integration/);
-      const viaBulk = await client.assets.send([{ from: source, execute: "Copy" }], { throwOnFailure: true });
+      const viaBulk = await client.send([{ from: source, execute: "Copy" }], { throwOnFailure: true });
       expect(viaBulk.created).toEqual([]); // the control: api/asset reports only the operated source
       expect(viaBulk.operated).toEqual([source]);
       const strays = await client.query({ from: "Story", select: ["Name"], filter: ["Name=$n"], with: { $n: `Copy Of ${created.created.length ? (await client.get(source, ["Name"]))!.Name : ""}` }, page: { size: 5, start: 0 } });
       made.push(...strays.map((s) => s._oid).filter((o) => !made.includes(o)));
     } finally {
-      await client.assets.send(made.map((oid) => ({ from: oid, execute: "Delete" })));
+      await client.send(made.map((oid) => ({ from: oid, execute: "Delete" })));
     }
   }, 60_000);
 

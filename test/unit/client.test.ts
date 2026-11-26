@@ -43,16 +43,16 @@ describe("client: reads", () => {
 
   it("get reads one asset by OID through query.v1 (the OID is the `from`), null when nothing has it; the OID loses its moment", async () => {
     const t = fake(() => [[wireStory]]);
-    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, schema: schema() });
+    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, types: schema().cache });
     const row = await client.get<Story>("Story:1055:777", ["Name"]);
     expect(row).toMatchObject({ _oid: "Story:1055", Name: "Sample: Logon" });
     expect(t.calls[0]!.body).toEqual([{ from: "Story:1055", select: ["Name"], page: { size: 1, start: 0 } }]);
-    expect(await new AgilityApiClient({ baseUrl: "https://x" }, { transport: fake(() => [[]]), schema: schema() }).get("Story:9")).toBeNull();
+    expect(await new AgilityApiClient({ baseUrl: "https://x" }, { transport: fake(() => [[]]), types: schema().cache }).get("Story:9")).toBeNull();
   });
 
   it("queryPage goes to api/asset with needTotal and answers rows, total and more", async () => {
     const t = fake(() => envelope({ queryResult: { results: [[wireStory, wireStory]], resultMetaData: [{ total: 5 }], count: 1 } }));
-    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, schema: schema() });
+    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, types: schema().cache });
     const page = await client.queryPage<Story>({ from: "Story", select: ["Estimate"], page: { size: 2, start: 2 } });
     expect(t.calls[0]).toMatchObject({ path: "/api/asset", method: "POST" });
     expect((t.calls[0]!.body as unknown[])[0]).toMatchObject({ needTotal: true });
@@ -63,7 +63,7 @@ describe("client: reads", () => {
   it("pages walks query.v1 page by page, stops at a short page, and never reads past the limit; all collects the rows", async () => {
     const rows = Array.from({ length: 7 }, (_, i) => ({ _oid: `Story:${i}`, Name: `s${i}` }));
     const t = fake((o) => { const q = (o.body as { page: { size: number; start: number } }[])[0]!; return [rows.slice(q.page.start, q.page.start + q.page.size)]; });
-    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, schema: schema() });
+    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, types: schema().cache });
     const seen: number[] = [];
     for await (const page of client.pages({ from: "Story", select: ["Name"], page: { size: 3, start: 0 } })) seen.push(page.length);
     expect(seen).toEqual([3, 3, 1]);
@@ -71,23 +71,22 @@ describe("client: reads", () => {
     const capped = await client.all({ from: "Story", select: ["Name"], page: { size: 3, start: 0 } }, { limit: 4 });
     expect(capped.map((r) => r._oid)).toEqual(["Story:0", "Story:1", "Story:2", "Story:3"]);
     expect(t.calls.slice(3).map((c) => (c.body as { page: unknown }[])[0]!.page)).toEqual([{ size: 3, start: 0 }, { size: 1, start: 3 }]);
-    await expect(client.all({ from: "Story", select: ["Name"] })).rejects.toBeInstanceOf(UsageError);
+    await expect(client.all({ from: "Story", select: ["Name"] } as never)).rejects.toBeInstanceOf(UsageError);
   });
 
   it("me asks for the member whose IsSelf is true", async () => {
     const t = fake(() => [[{ _oid: "Member:1000", Name: "SDK Test Account", Username: "sdk-test-account", Nickname: "SDK", Email: "" }]]);
-    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, schema: schema() });
+    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, types: schema().cache });
     const me = await client.me();
     expect(me).toMatchObject({ _oid: "Member:1000", Username: "sdk-test-account" });
     expect((t.calls[0]!.body as unknown[])[0]).toMatchObject({ from: "Member", filter: ["IsSelf='true'"], page: { size: 1, start: 0 } });
-    await expect(new AgilityApiClient({ baseUrl: "https://x" }, { transport: fake(() => [[]]), schema: schema() }).me()).rejects.toMatchObject({ kind: "notFound" });
+    await expect(new AgilityApiClient({ baseUrl: "https://x" }, { transport: fake(() => [[]]), types: schema().cache }).me()).rejects.toMatchObject({ kind: "notFound" });
   });
 
-  it("data.list takes a query's spelling (select, filter) and sends rest-1's (sel, where); the old names still work", async () => {
+  it("data.list takes a query's spelling (select, filter) and sends rest-1's (sel, where)", async () => {
     const t = fake(() => ({ _type: "Assets", pageSize: 2, pageStart: 0, Assets: [] }));
     const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t });
     await client.data.list("Story", { select: ["Name"], filter: ["AssetState='Closed'"], deleted: true, page: { size: 2, start: 0 } });
-    await client.data.list("Story", { sel: ["Name"], where: ["AssetState='Closed'"], page: { size: 2, start: 0 } });
     for (const call of t.calls) expect(call).toMatchObject({ method: "GET", path: "/rest-1.v1/Data/Story", query: expect.objectContaining({ sel: "Name", where: "AssetState='Closed'", page: "2,0" }) });
     expect(t.calls[0]!.query).toMatchObject({ deleted: "true" });
   });
@@ -100,15 +99,15 @@ describe("client: writes", () => {
       commandFailures: { commands: [{ "@0f3c": { AssetType: "Story" }, error: { message: "Violation'Required'AttributeDefinition'Scope'Story", sourceCommandIndex: 1 } }], count: 1 },
       queryResult: { results: [[wireStory]], resultMetaData: [], count: 1 }
     }));
-    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, schema: schema() });
-    const outcome = await client.assets.send<Story>([{ AssetType: "Story", Name: "a", Scope: "Scope:0" }, { AssetType: "Story" }, { from: "Story", select: ["Estimate"], page: { size: 1, start: 0 } }]);
+    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, types: schema().cache });
+    const outcome = await client.send<Story>([{ AssetType: "Story", Name: "a", Scope: "Scope:0" }, { AssetType: "Story" }, { from: "Story", select: ["Estimate"], page: { size: 1, start: 0 } }]);
     expect(outcome.created).toEqual(["Story:5"]);
     expect(outcome.requestId).toBe("r");
     expect(outcome.failures).toEqual([expect.objectContaining({ index: 1, violation: { rule: "Required", attribute: "Story.Scope", tag: "AttributeDefinition'Scope'Story" } })]);
     expect(outcome.queryResults).toEqual([[expect.objectContaining({ Estimate: 2 })]]);
     expect(outcome).not.toHaveProperty("assetsCreated");
-    const failing = new AgilityApiClient({ baseUrl: "https://x" }, { transport: fake(() => envelope({ assetsCreated: { oidTokens: ["Story:5:10"], count: 1 }, commandFailures: { commands: [{ error: { message: "Violation'Required'AttributeDefinition'Scope'Story", sourceCommandIndex: 1 } }], count: 1 } })), schema: schema() });
-    const err = (await failing.assets.send([{ AssetType: "Story", Name: "a", Scope: "Scope:0" }, { AssetType: "Story" }], { throwOnFailure: true }).catch((e: unknown) => e)) as CommandFailureError;
+    const failing = new AgilityApiClient({ baseUrl: "https://x" }, { transport: fake(() => envelope({ assetsCreated: { oidTokens: ["Story:5:10"], count: 1 }, commandFailures: { commands: [{ error: { message: "Violation'Required'AttributeDefinition'Scope'Story", sourceCommandIndex: 1 } }], count: 1 } })), types: schema().cache });
+    const err = (await failing.send([{ AssetType: "Story", Name: "a", Scope: "Scope:0" }, { AssetType: "Story" }], { throwOnFailure: true }).catch((e: unknown) => e)) as CommandFailureError;
     expect(err).toBeInstanceOf(CommandFailureError);
     expect(err.kind).toBe("commandFailure");
     expect(err.outcome.created).toEqual(["Story:5"]);
@@ -123,14 +122,13 @@ describe("client: urls", () => {
     expect(() => client.urls.asset("hello")).toThrow(UsageError);
     expect(client.urls.attachment("Attachment:9")).toBe("https://agility.example.com/MyInstance/attachment.img/9");
     expect(client.urls.embeddedImage(12)).toBe("https://agility.example.com/MyInstance/embedded.img/12");
-    expect(client.attachments.url(9)).toBe(client.urls.attachment(9));
   });
 });
 
 describe("client: data.operate, copy, data.template", () => {
   it("copy answers the copy's OID through rest-1; template reads New/<Type>", async () => {
     const t = fake((o) => (o.path.startsWith("/rest-1.v1/New/") ? { _type: "Asset", href: "", id: "", Attributes: { Scope: { _type: "Relation", name: "Scope", act: "set", value: { _type: "Asset", href: "", idref: "Scope:0" } } } } : { _type: "Asset", href: "", id: "Story:9:1" }));
-    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, schema: schema() });
+    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, types: schema().cache });
     expect(await client.copy("Story:1")).toBe("Story:9");
     expect(await client.data.operate("Story:1", "Inactivate")).toEqual({ oid: "Story:9", moment: "1" });
     const tpl = await client.data.template("Story", { ctx: "Scope:0" });

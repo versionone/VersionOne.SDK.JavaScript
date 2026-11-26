@@ -44,7 +44,7 @@ describe("fields service", () => {
 
   it("describe joins meta's required, visibleFields and the scope's scheme into one answer", async () => {
     const t = fake((o) => (o.path.startsWith("/api/visibleFields") ? visibleAnswer : { requestId: "r", queryResult: { results: [[{ _oid: "Scope:0", Scheme: [{ _oid: "Scheme:1000", ImportantFields: ["Story.Owners", "Defect.Resolution", "Workitem.Estimate"], IsRequiredAtClose: "True" }] }]], resultMetaData: [], count: 1 } }));
-    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, schema: schema() });
+    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, types: schema().cache });
     const f = await client.fields.describe("Story", "Scope:0:7");
     expect(f).toEqual({ type: "Story", scope: "Scope:0", scheme: "Scheme:1000", required: ["Name", "Scope"], visible: visibleAnswer[0]!.fields, important: ["Estimate", "Owners"], requiredAtClose: true });
     const body = (t.calls.find((c) => c.path === "/api/asset")!.body as unknown[])[0];

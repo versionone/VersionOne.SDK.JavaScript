@@ -34,7 +34,7 @@ afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }); });
 const CONSUMER = String.raw`
 const assert = require("node:assert/strict");
 const sdk = require("@versionone/agility-sdk");
-for (const name of ["AgilityApiClient", "createFetchTransport", "ApiError", "CommandFailureError", "assetApi", "rest1", "meta", "loc2", "Schema", "parseOid", "momentless"]) {
+for (const name of ["AgilityApiClient", "createFetchTransport", "ApiError", "CommandFailureError", "TypeCache", "Schema", "parseOid", "momentless", "normalizeQuery"]) {
   assert.ok(sdk[name], "missing export " + name);
 }
 const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
@@ -50,14 +50,18 @@ const fetchImpl = async (url) => {
   const transport = sdk.createFetchTransport({ baseUrl: "https://v1.example/inst", accessToken: "t", fetchImpl });
   const client = new sdk.AgilityApiClient({ baseUrl: "https://v1.example/inst" }, { transport });
   assert.deepEqual(await client.localize(["Plural'Story"]), { "Plural'Story": "Backlog Items" });
-  const err = await client.assets.send([{ AssetType: "Story", Name: "x" }], { throwOnFailure: true }).catch((e) => e);
+  const err = await client.send([{ AssetType: "Story", Name: "x" }], { throwOnFailure: true }).catch((e) => e);
   assert.ok(err instanceof sdk.CommandFailureError && err instanceof sdk.ApiError && err instanceof Error);
   assert.equal(err.failures[0].index, 0);
   assert.equal(sdk.momentless("Story:1:99"), "Story:1");
   // The other import paths resolve, and share the root's classes: one ApiError, one client.
   const wire = require("@versionone/agility-sdk/wire");
   const { FakeAgilityClient } = require("@versionone/agility-sdk/testing");
-  assert.equal(wire.assetApi.send, sdk.assetApi.send);
+  for (const name of ["assetApi", "queryV1", "rest1", "meta", "loc2", "attachment", "fields", "select"]) {
+    assert.ok(wire[name], "missing wire module " + name);
+    assert.equal(sdk[name], undefined, "the root no longer exports the wire module " + name);
+  }
+  assert.equal(wire.assetApi.CommandFailureError, sdk.CommandFailureError);
   const fake = new FakeAgilityClient().onQuery("Story", [{ _oid: "Story:1", Name: "n" }]);
   assert.ok(fake instanceof sdk.AgilityApiClient);
   assert.deepEqual(await fake.query({ from: "Story", select: ["Name"], page: { size: 5, start: 0 } }), [{ _oid: "Story:1", Name: "n" }]);

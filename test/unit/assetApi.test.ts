@@ -112,7 +112,7 @@ describe("assetApi: command failures", () => {
     const e = err as CommandFailureError;
     expect(e.message).toBe("Violation'Required'Scope");
     expect(e.status).toBe(200);
-    expect(e.code).toBe("CommandFailure");
+    expect(e.code).toBe("COMMAND_FAILURE");
     expect(e.failures).toEqual([{ index: 1, message: "Violation'Required'Scope", violation: { rule: "Required", attribute: null, tag: null } }]);
     expect(e.failures[0]!.echoed).toEqual({ "@0f3c": { AssetType: "Story" } });
     expect(e.failures[0]).not.toHaveProperty("stackTrace");

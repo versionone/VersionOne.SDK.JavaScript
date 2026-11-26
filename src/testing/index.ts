@@ -17,7 +17,6 @@ import { AgilityApiClient } from "../client";
 import type { ClientConfig } from "../core/clientConfig";
 import { ApiError, UsageError, apiErrorFromResponse } from "../core/errors";
 import type { RequestOptions, Transport } from "../core/transport";
-import { Schema } from "../services/schema";
 import type { Asset, Oid } from "../types/asset";
 import { isOidToken, momentless, typeOfOid } from "../types/oid";
 import type { Command, CommandBody, QueryBody } from "../wire/assetApi";
@@ -109,14 +108,15 @@ function answerSend(script: Script, commands: Command[], writes: { body: Command
 }
 
 function respond(script: Script, request: RequestOptions): unknown {
-  script.seen.requests.push(request);
   const raw = [...script.requests].reverse().find(({ match }) => (typeof match === "string" ? request.path.startsWith(match) : match instanceof RegExp ? match.test(request.path) : match(request)));
+  // A type nothing scripted is a type the fake's instance does not have, so rows are read as scripted. These
+  // reads are the client's own schema loading, not something the code under test asked for: they are not recorded.
+  if (!raw && request.method === "GET" && request.path.startsWith("/meta.v1/")) throw apiErrorFromResponse(404, { error: "Not Found", exceptions: [{ message: `FakeAgilityClient knows no asset type at ${request.path}` }] });
+  script.seen.requests.push(request);
   if (raw) {
     if (raw.answer instanceof Error) throw raw.answer;
     return typeof raw.answer === "function" ? (raw.answer as (r: RequestOptions) => unknown)(request) : raw.answer;
   }
-  // A type nothing scripted is a type the fake's instance does not have: a client built on `fake.transport` then reads rows as scripted, like the fake itself.
-  if (request.method === "GET" && request.path.startsWith("/meta.v1/")) throw apiErrorFromResponse(404, { error: "Not Found", exceptions: [{ message: `FakeAgilityClient knows no asset type at ${request.path}` }] });
   if (request.path.startsWith("/loc-2.v1")) {
     // loc-2 answers a tag it does not know with the tag itself; so does the fake, for every tag onLocalize did not script.
     const encoded = request.method === "GET" ? request.path.slice(request.path.indexOf("?") + 1) : String(request.body);
@@ -179,7 +179,7 @@ function respond(script: Script, request: RequestOptions): unknown {
  *   page itself. No filter, `where` or sort is evaluated. A query nothing
  *   was scripted for throws a UsageError: an unscripted read never looks
  *   like an empty result.
- * - `assets.send` needs no script: each create answers a new OID
+ * - `send` needs no script: each create answers a new OID
  *   (`Story:1000`, `Story:1001`, …), each update or operation addressed by
  *   OID answers that OID. `onSend` scripts anything else (failures by
  *   index, a create's OID).
@@ -203,7 +203,7 @@ function respond(script: Script, request: RequestOptions): unknown {
  *   transport words it.
  */
 export class FakeAgilityClient extends AgilityApiClient {
-  /** Every request the client made, in order, as a Transport sees it. */
+  /** Every request the client made, in order, as a Transport sees it (the client's own unscripted meta.v1 type loads left out). */
   readonly requests: RequestOptions[];
   /** Every query asked, in order, whichever read asked it. */
   readonly asked: QueryBody[];
@@ -220,8 +220,8 @@ export class FakeAgilityClient extends AgilityApiClient {
         return respond(script, request) as T;
       }
     };
-    // A schema with nothing to load: rows are scripted in the model's shape and pass through as written.
-    super({ baseUrl: "https://agility.example.com/Fake", ...config }, { transport, schema: new Schema() });
+    // The fake's instance has no asset type (every meta.v1 read answers 404), so rows scripted in the model's shape pass through as written.
+    super({ baseUrl: "https://agility.example.com/Fake", ...config }, { transport });
     this.script = script;
     this.requests = script.seen.requests;
     this.asked = script.seen.asked;

@@ -49,7 +49,7 @@ describe("rest1: translation", () => {
   });
 
   it("spells the query string the way rest-1 wants: sel and findin comma-joined, where ';'-joined, with in $name=a,b|… form, page size-first", () => {
-    expect(toQuery({ sel: ["Name", "Story.Number"], where: ["AssetType='Story'", "AssetState!='Closed'"], with: { $oids: ["Story:1", "Story:2"], $url: "u" }, find: "order", findin: ["Name", "Description"], sort: ["-ChangeDateUTC"], page: { size: 20, start: 40 }, deleted: false, needTotal: true }))
+    expect(toQuery({ select: ["Name", "Story.Number"], filter: ["AssetType='Story'", "AssetState!='Closed'"], with: { $oids: ["Story:1", "Story:2"], $url: "u" }, find: "order", findin: ["Name", "Description"], sort: ["-ChangeDateUTC"], page: { size: 20, start: 40 }, deleted: false, needTotal: true }))
       .toEqual({ sel: "Name,Story.Number", where: "AssetType='Story';AssetState!='Closed'", with: "$oids=Story:1,Story:2|$url=u", find: "order", findin: "Name,Description", sort: "-ChangeDateUTC", page: "20,40", deleted: "false", needTotal: "true", asof: undefined });
   });
 });
@@ -58,7 +58,7 @@ describe("rest1: calls", () => {
   it("list reads Data/<Type> with the query, translates every row, and surfaces total only when the server sent one; a read without a page is refused", async () => {
     const envelope: AssetsDocument = { _type: "Assets", total: 54, pageSize: 1, pageStart: 0, Assets: [storyDoc] };
     const t = fakeTransport(envelope);
-    const { rows, total, pageSize } = await list<Story>(t, "Story", { sel: ["Name"], page: { size: 1, start: 0 }, needTotal: true });
+    const { rows, total, pageSize } = await list<Story>(t, "Story", { select: ["Name"], page: { size: 1, start: 0 }, needTotal: true });
     expect(t.calls[0]).toMatchObject({ method: "GET", path: "/rest-1.v1/Data/Story", responseType: "json" });
     expect(t.calls[0]!.query).toMatchObject({ sel: "Name", page: "1,0", needTotal: "true" });
     expect(rows[0]!.Owners).toHaveLength(2);
@@ -67,7 +67,7 @@ describe("rest1: calls", () => {
     const noTotal = fakeTransport({ _type: "Assets", pageSize: 1, pageStart: 0, Assets: [] });
     expect((await list(noTotal, "Story", { page: { size: 1, start: 0 } })).total).toBeNull();
     const unpaged = fakeTransport();
-    await expect(list(unpaged, "Story", { sel: ["Name"] } as never)).rejects.toThrow(/without a page/);
+    await expect(list(unpaged, "Story", { select: ["Name"] } as never)).rejects.toThrow(/without a page/);
     expect(unpaged.calls).toHaveLength(0);
   });
 
@@ -76,7 +76,7 @@ describe("rest1: calls", () => {
     const one = await get<Story>(t, "Story:2104:99", ["Name", "Owners"]);
     expect(t.calls[0]).toMatchObject({ path: "/rest-1.v1/Data/Story/2104", query: { sel: "Name,Owners" } });
     expect(one._oid).toBe("Story:2104");
-    const moments = await history(t, "Story:2104", { sel: ["Name"], page: { size: 2, start: 0 } });
+    const moments = await history(t, "Story:2104", { select: ["Name"], page: { size: 2, start: 0 } });
     expect(t.calls[1]!.path).toBe("/rest-1.v1/Hist/Story/2104");
     expect(moments.rows.map((r) => r._oid)).toEqual(["Story:2104:2797", "Story:2104:2650"]);
   });
