@@ -91,12 +91,30 @@
   your change or you do not, and the guard makes sending it again safe.
   The same holds for the unauthorized hook: `retryable` is now false
   for a guarded write, so "retry" does not resend it after a 401 and
-  "retry-write" does, as for a plain write.
-  `SendOptions.idempotent` is removed from `/wire`'s `assetApi.send`;
-  drop it from a call that set it.
+  "retry-write" does, as for a plain write. `retryable: false` does not
+  mean a guarded write cannot be resumed after signing in again; it
+  means "retry-write" is the answer that resumes it.
+- **`SendOptions.idempotent` is removed from `/wire`'s `assetApi.send`.**
+  It let a caller mark a batch safe to resend; no write is resent now,
+  so nothing can be marked. Migration: delete the option from the call.
+  A caller that guarded a batch itself and relied on the resend catches
+  the error instead, reads the assets again and decides; sending the
+  same guarded batch a second time is still harmless to the data, and
+  an asset it does not list as modified was either changed by someone
+  else or by the first send.
 
 ### Changed
 
+- **What is known about `"retry-write"`** (the unauthorized hook's
+  answer that resends a write, added in alpha.8 as the consumer's own
+  assertion that a refusal means nothing ran). The premise has now been
+  checked once, by a browser-app consumer, on one product release: an
+  api/asset create sent with no session, and one with an invalid
+  session, were each answered 401 with an empty body before any command
+  ran, and nothing was created. Not checked: a session that was valid
+  and has expired, a 403, rest-1. The doc comment, spec 000 and example
+  09 say this in place of "cannot be verified"; beyond that case it is
+  still the consumer's assertion. No behaviour changes.
 - **`client.explain` no longer tells a person to try again after a write
   that got no answer.** For any `transient` error it said "Agility could
   not be reached, or is busy. The same request may work in a moment.",

@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe as group, expect, it, vi } from "vitest";
 import type { RequestOptions, Transport } from "../../src/core/transport";
-import { UsageError } from "../../src/core/errors";
+import { AgilityApiClient } from "../../src/client";
+import { ApiError, UsageError } from "../../src/core/errors";
 import { BatchRecordError, BatchSendError, ReceiptVersionError, describe, isReceipt, reverseOf, reversible, runBatch, type Receipt } from "../../src/services/batch";
 import { UnguardableError } from "../../src/services/guard";
 import { Schema } from "../../src/services/schema";
@@ -102,6 +103,19 @@ group("batch", () => {
     const r = reverseOf(d, { "Story:2": { Estimate: null, Owners: ["Member:20"] }, "Epic:9": { AssetState: "Active" } }, { created: [], modified: ["Story:2"], operated: ["Epic:9"] });
     expect(r.commands).toEqual([{ from: "Story:2", update: { Estimate: null } }]);
     expect(r.notes.slice(1)).toEqual(["Epic:9: Split has no known inverse (was Active)"]);
+  });
+
+  it("a guarded batch whose send got no answer is sent once and its outcome is unknown: a second send of one that landed would read as a conflict", async () => {
+    for (const failure of [new ApiError("fetch failed", 0, "NETWORK_ERROR"), new ApiError("Bad Gateway", 502)]) {
+      let sends = 0;
+      const t = server({ preview: [PREVIEW[1]!], lookup, send: () => { sends += 1; throw failure; } });
+      const client = new AgilityApiClient({ baseUrl: "https://x", retries: 3 }, { transport: t, types: schema.cache });
+      const error = await client.batch.run([{ from: "Story:1", update: { Estimate: 5 } }], { guard: true }).catch((e: unknown) => e);
+      expect(sends).toBe(1);
+      expect(t.calls.at(-1)).toMatchObject({ path: "/api/asset", idempotent: false });
+      const [said] = await client.explain((error as { details?: { cause?: unknown } }).details?.cause ?? error);
+      expect(said).toMatchObject({ outcome: "unknown", retrySafe: false, sentence: "Agility did not confirm the change. It may or may not have been made: check before trying again." });
+    }
   });
 
   it("an asset whose command failed is failed, not also a conflict (a CLI consumer finding)", async () => {

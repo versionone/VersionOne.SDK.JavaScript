@@ -42,11 +42,14 @@ const client = new AgilityApiClient({
     // "retry" resends what is safe to send twice: a GET, a read. Never a
     // write, guarded or not. `retryable` says whether this request is one.
     if (retryable) return "retry";
-    // A plain write is never resent by "retry": if it ran before the
-    // refusal, sending it again would apply it twice. "retry-write" resends
-    // it anyway, and is YOUR assertion that on your server a refusal for an
-    // expired session means nothing in the request was executed. Answer it
-    // only if you know that; otherwise answer "fail" and let the user retry.
+    // A write is never resent by "retry": if it ran before the refusal,
+    // sending it again would apply it twice. "retry-write" resends it
+    // anyway, and is YOUR assertion that on your server a refusal for an
+    // expired session means nothing in the request was executed. It has
+    // been seen to hold for a missing and for an invalid session on one
+    // release (a 401 before any command ran); not for a session that
+    // expired, a 403, or rest-1. Answer it only if you know it holds for
+    // you; otherwise answer "fail" and let the user retry.
     return "retry-write";
   }
 });

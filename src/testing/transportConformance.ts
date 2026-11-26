@@ -158,6 +158,8 @@ export function transportConformance(make: (server: ConformanceServer) => Transp
         // A server-side SQL execution timeout, as an instance answers it: told by its body, coded SERVER_TIMEOUT.
         [500, { error: "Server Error", exceptions: [{ type: "SqlException", message: "Execution Timeout Expired.  The timeout period elapsed prior to completion of the operation or the server is not responding." }, { type: "Win32Exception", message: "The wait operation timed out" }] }],
         [401, "Unauthorized"],
+        // As api/asset refuses a request with no session: a 401 with nothing in the body. The status alone makes it kind "auth".
+        [401, ""],
         [503, ""]
       ];
       for (const [status, data] of bodies) {
