@@ -30,7 +30,13 @@ import { parseViolation } from "../types/command";
 import * as loc2 from "../wire/loc2";
 
 export interface Explanation {
-  /** One short sentence. English, with the instance's own labels for attributes and asset types. */
+  /**
+   * One short sentence. English, with the instance's own labels for
+   * attributes and asset types. For a failed command it states the reason
+   * and nothing else ("Project is required.", "Refused (asset cannot
+   * inactivate closed)."), so a caller can put its own words around it
+   * ("Agility didn't accept that: …") without saying anything twice.
+   */
   sentence: string;
   /**
    * Who the sentence is for. "user": it was made for a person using the
@@ -95,7 +101,7 @@ function sentenceOf(problem: Problem, label: string | null, related: string | nu
   if (localized) return forUser(localized);
   // A rule the instance has no words for (seen live: Violation'AssetCannotInactivateClosed): never the bare token.
   // What it means is in the rule's name, which a person can read; the token stays in `message` and `rule`.
-  if (problem.rule) return forUser(`Agility did not accept this change${label ? ` to ${label}` : ""} (${words(problem.rule)}).`);
+  if (problem.rule) return forUser(`${label ? `${label}: refused` : "Refused"} (${words(problem.rule)}).`);
   // Anything else is the server's own text, as it came.
   return { sentence: message, audience: "developer", echoed: true };
 }

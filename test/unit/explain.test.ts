@@ -53,7 +53,7 @@ describe("explain", () => {
     // Who each sentence is for: the ones made for a person, and the server's raw text, which is echoed for a developer.
     expect(explained.map((e) => [e.audience, e.echoed])).toEqual([["user", false], ["user", false], ["developer", true], ["user", false], ["user", false]]);
     // A rule the instance has no words for (seen live: closing a closed story) is never answered as its bare token.
-    expect((await explain(loc2(), [failure(0, "Violation'AssetCannotInactivateClosed")]))[0]).toMatchObject({ sentence: "Agility did not accept this change (asset cannot inactivate closed).", audience: "user", echoed: false, rule: "AssetCannotInactivateClosed", localized: null, message: "Violation'AssetCannotInactivateClosed" });
+    expect((await explain(loc2(), [failure(0, "Violation'AssetCannotInactivateClosed")]))[0]).toMatchObject({ sentence: "Refused (asset cannot inactivate closed).", audience: "user", echoed: false, rule: "AssetCannotInactivateClosed", localized: null, message: "Violation'AssetCannotInactivateClosed" });
     // A Resolution failure names the related type, labelled when the instance has a label for it.
     const labelled = loc2();
     LOC2["AssetType'Member"] = "Member";
