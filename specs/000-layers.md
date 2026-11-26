@@ -231,8 +231,7 @@ made), which api/asset's `execute` performs but does not report. The transport
 retries only idempotent requests (GET by default, and every query.v1
 POST, since that endpoint cannot write), only on a network
 failure, a 5xx or a 429 (Retry-After honoured, up to 30 s), never
-another 4xx, and once by default (`retries: 1`); a batch write is never retried unless the
-caller has made it idempotent with a guard and says so. That rule is
+another 4xx, never after a timeout (below), and once by default (`retries: 1`); a batch write is never retried, guarded or not (below). That rule is
 the client's, not one transport's: the built-in fetch transport applies it
 itself (it can read Retry-After), and the client applies it around a
 custom Transport (`core/retry`), so a consumer's transport does not
@@ -248,7 +247,23 @@ abandoned request answers later is discarded. A transport therefore owes
 nothing about timing beyond honouring `signal`, which the conformance
 suite checks; one with a shorter timeout of its own simply rejects first.
 A timeout says the client stopped waiting, never that the server did not
-act, which is one more reason a write is not resent. The deadline cannot
+act, which is one more reason a write is not resent.
+
+**Nothing is resent after a timeout, a read included.** A timeout or an
+abort ends the client's wait; it does not stop the work on the server. A
+query that timed out may still be running, and a request that ran out of
+time is likely one that costs a lot, so sending it again runs the cost
+twice and makes the caller wait twice. That holds whoever gave up: the
+client (`TIMEOUT`), the server (408) or a gateway in front of it (504).
+The server also has a timeout of its own on the SQL a request runs, and
+answers it as an error document, not a status: `exceptions` holding a
+`SqlException` whose message begins "Execution Timeout Expired" (and a
+`Win32Exception` "The wait operation timed out"). `apiErrorFromResponse`
+codes that `SERVER_TIMEOUT`, whatever the status, and it is not resent
+either: the same request would cost the same. The remedy is a smaller
+request (page, selected paths, filter), which `explain` says.
+`pages` and `all` stop at the first timeout rather than pressing on. A
+caller that wants to try again does so itself, knowing the cost. The deadline cannot
 tell the network from a person: a custom transport that waits for someone
 inside `request` turns the client's timeout off (`timeoutMs: 0`), and the
 built-in transport's re-authentication hook runs outside the deadline.
@@ -261,8 +276,14 @@ and the caller decides. There is one way round that, and it is the
 consumer's assertion, not the SDK's: a hook that answers "retry-write"
 has the refused request sent once more, a plain write included, on its
 own word that on its server such a refusal means nothing in the request
-was executed. The SDK cannot verify that premise (its tests run where
-every request is authenticated) and never assumes it. A request sent with `reauthorize: false` skips
+was executed. The premise has been checked once, by a consumer, on one
+product release: an api/asset create sent with no session, and one sent
+with an invalid session, were each answered 401 with an empty body before
+any command ran, and nothing was created. It has not been checked for a
+session that was valid and has expired, for a 403, or for rest-1, and the
+SDK's own tests (which run where every request is authenticated) check
+none of it. So the SDK never assumes it. A guarded write is a write here
+too: `retryable` is false for it, and "retry-write" is what resumes it. A request sent with `reauthorize: false` skips
 the hook: it is how a hook asks whether the session is alive without
 waiting on itself. A caller's abort (`signal`) ends the request as
 `ABORTED` and is never retried.
@@ -283,8 +304,8 @@ of the queries, so every query slot is null and the failures are the
 answer (thrown for reads and with throwOnFailure); a disagreement with no
 such failure is an error of its own.
 
-The guard (`services/guard`) is what makes a write batch safe to resend:
-each per-asset command of the server's projection is sent scoped to the
+The guard (`services/guard`) is what makes a write safe to repeat by a
+caller who has looked again: each per-asset command of the server's projection is sent scoped to the
 asset at the Moment read just before (`where { ID, Moment }`) and to that
 version still being the current one (`filter RetireDateUTC=''`), so a stale
 or repeated command matches nothing. The two terms always travel together:
@@ -298,8 +319,17 @@ never a success and never confused with a no-op. A caller may supply the
 moment it read earlier, with the row a person is looking at; the guard then
 compares against what they saw. What the guard cannot see is a change that
 makes no new version of the asset (a child added to it): it protects an
-asset's own attributes. A guarded batch with no creates is sent
-idempotent; a plain one never is. Two commands on one asset are sent in
+asset's own attributes.
+
+**A guarded batch is not resent automatically either.** A second send
+harms no data (it matches nothing), but "matched nothing" is how a
+conflict reads: if the first send landed and its answer was lost, the
+resend would tell the caller that someone else changed the asset and
+nothing was applied, about the caller's own change. An honest "unknown"
+is better than that. So no write is ever marked idempotent; a guarded
+write with no confirmation is explained as an unconfirmed change
+(`outcome: "unknown"`), and the caller reads the asset again and
+decides. Two commands on one asset are sent in
 passes: the second goes only if the first applied, guarded on the Moment
 read just after it (the response does not say the new moment, and a shared
 pre-batch stamp would make the second match nothing). `batch.run` takes

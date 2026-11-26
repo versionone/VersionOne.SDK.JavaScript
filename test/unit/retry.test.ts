@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { AgilityApiClient } from "../../src/client";
-import { ApiError } from "../../src/core/errors";
+import { ApiError, apiErrorFromResponse } from "../../src/core/errors";
+import { resendable } from "../../src/core/retry";
 import { createFetchTransport } from "../../src/core/fetchTransport";
 import type { RequestOptions, Transport } from "../../src/core/transport";
 import { FakeAgilityClient } from "../../src/testing";
@@ -20,13 +21,74 @@ const noTypes = (t: Transport): Transport => ({ request: (o) => (o.path.startsWi
 const q = { from: "Story", select: ["Name"], page: { size: 1, start: 0 } };
 
 describe("the resend rule above a custom Transport", () => {
-  it("a read is sent once more after a 5xx, a lost connection or a timeout, by default", async () => {
-    for (const failure of [new ApiError("Bad Gateway", 502), new ApiError("fetch failed", 0, "NETWORK_ERROR"), new ApiError("Timed out", 0, "TIMEOUT"), new ApiError("Too Many Requests", 429)]) {
+  it("a read is sent once more after a 5xx, a lost connection or a 429, by default", async () => {
+    for (const failure of [new ApiError("Bad Gateway", 502), new ApiError("fetch failed", 0, "NETWORK_ERROR"), new ApiError("Too Many Requests", 429)]) {
       const t = custom(failure, [[{ _oid: "Story:1", Name: "n" }]]);
       const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: noTypes(t) });
       expect(await client.query(q)).toEqual([{ _oid: "Story:1", Name: "n" }]);
       expect(t.calls).toHaveLength(2);
     }
+  });
+
+  it("a read that timed out is NOT sent again, whoever gave up: the transport, the server (408) or a gateway (504). The request may still be running", async () => {
+    for (const failure of [new ApiError("timeout of 30000ms exceeded", 0, "TIMEOUT"), new ApiError("Request Timeout", 408), new ApiError("Gateway Timeout", 504)]) {
+      const t = custom(failure, [[{ _oid: "Story:1", Name: "n" }]]);
+      const client = new AgilityApiClient({ baseUrl: "https://x", retries: 3 }, { transport: noTypes(t) });
+      // Still a transient failure (the same request may work later), and it says what was asked.
+      await expect(client.query(q)).rejects.toMatchObject({ kind: "transient", status: failure.status, request: { method: "POST", path: "/query.v1", idempotent: true } });
+      expect(t.calls).toHaveLength(1);
+    }
+    // The built-in transport alike: a 504 once, a 502 twice.
+    for (const [status, sends] of [[504, 1], [408, 1], [502, 2]] as const) {
+      const fetchImpl = vi.fn(async () => new Response("down", { status }));
+      await expect(createFetchTransport({ baseUrl: "https://x", fetchImpl: fetchImpl as unknown as typeof fetch }).request({ method: "GET", path: "/meta.v1/Story" })).rejects.toMatchObject({ status });
+      expect(fetchImpl).toHaveBeenCalledTimes(sends);
+    }
+  });
+
+  it("a server-side SQL execution timeout, as an instance answers it, is told by its body, coded SERVER_TIMEOUT and never sent again, whatever its status or the method", async () => {
+    const gaveUp = () => ({ error: "Server Error", exceptions: [{ type: "SqlException", message: "Execution Timeout Expired.  The timeout period elapsed prior to completion of the operation or the server is not responding." }, { type: "Win32Exception", message: "The wait operation timed out" }] });
+    const words = "Execution Timeout Expired.  The timeout period elapsed prior to completion of the operation or the server is not responding.";
+    // The status it arrives with is not known (most likely 500), so the body decides.
+    for (const status of [500, 400, 503]) {
+      const error = apiErrorFromResponse(status, gaveUp());
+      expect(error).toMatchObject({ code: "SERVER_TIMEOUT", kind: "transient", status, message: words, details: gaveUp() });
+      expect(resendable(error)).toBe(false);
+    }
+    // Either exception alone is enough; the type and the start of the message are what is matched.
+    expect(apiErrorFromResponse(500, { error: "Server Error", exceptions: [{ type: "Win32Exception", message: "The wait operation timed out" }] }).code).toBe("SERVER_TIMEOUT");
+    expect(apiErrorFromResponse(500, { error: "Server Error", exceptions: [{ type: "SqlException", message: "Execution Timeout Expired." }] }).code).toBe("SERVER_TIMEOUT");
+    // api/asset lists its exceptions as plain strings; that it reports this one so is not confirmed, and it is recognised if it does.
+    expect(apiErrorFromResponse(500, { Exceptions: [words] }).code).toBe("SERVER_TIMEOUT");
+    // Controls: another SQL failure, another server error, the words elsewhere in a message.
+    for (const body of [{ error: "Server Error", exceptions: [{ type: "SqlException", message: "Invalid column name 'x'." }] }, { error: "Server Error", exceptions: [{ type: "NullReferenceException", message: "Object reference not set" }] }, { error: "Bad Request", exceptions: [{ type: "FormatException", message: "no token 'Execution Timeout Expired'" }] }, "Execution Timeout Expired", null]) {
+      expect(apiErrorFromResponse(500, body).code).toBeUndefined();
+    }
+
+    // Through the client, by each read endpoint and a write, with the built-in transport: sent once.
+    for (const status of [500, 400]) {
+      const sends: string[] = [];
+      const fetchImpl = (async (url: string | URL, init?: RequestInit) => {
+        const path = new URL(String(url)).pathname;
+        if (path.startsWith("/meta.v1/")) return new Response("{}", { status: 404 });
+        sends.push(`${init?.method ?? "GET"} ${path}`);
+        return new Response(JSON.stringify(gaveUp()), { status, headers: { "content-type": "application/json" } });
+      }) as typeof fetch;
+      const client = new AgilityApiClient({ baseUrl: "https://x", retries: 3 }, { transport: createFetchTransport({ baseUrl: "https://x", fetchImpl }) });
+      const asked = { code: "SERVER_TIMEOUT", kind: "transient", status, message: words };
+      await expect(client.query(q)).rejects.toMatchObject({ ...asked, request: { method: "POST", path: "/query.v1", idempotent: true } });
+      await expect(client.queryPage(q)).rejects.toMatchObject(asked);
+      await expect(client.deleted("Story", { select: ["Name"], page: { size: 1, start: 0 } })).rejects.toMatchObject(asked);
+      await expect(client.send([{ op: "update", oid: "Story:1", attributes: { Name: "n" } }])).rejects.toMatchObject({ status });
+      expect(sends).toHaveLength(4);
+    }
+  });
+
+  it("pages and all stop at the first timeout rather than pressing on", async () => {
+    const t = custom([[{ _oid: "Story:1", Name: "a" }, { _oid: "Story:2", Name: "b" }]], new ApiError("Timed out after 60000 ms", 0, "TIMEOUT"), [[{ _oid: "Story:9", Name: "never read" }]]);
+    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: noTypes(t) });
+    await expect(client.all({ from: "Story", select: ["Name"], page: { size: 2, start: 0 } })).rejects.toMatchObject({ code: "TIMEOUT" });
+    expect(t.calls).toHaveLength(2);
   });
 
   it("once, not forever; `retries` says how many times, and 0 turns it off", async () => {
@@ -41,16 +103,21 @@ describe("the resend rule above a custom Transport", () => {
     expect(off.calls).toHaveLength(1);
   });
 
-  it("a plain write is never resent, whatever happened to it; a guarded one with no creates may be", async () => {
+  it("a write is never resent, whatever happened to it, and a guarded one is a write: its lost answer is an unknown outcome, not a second send that would read as a conflict", async () => {
     const write = custom(new ApiError("Bad Gateway", 502), envelope);
     const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: write });
     await expect(client.send([{ from: "Story:1", update: { Name: "x" } }])).rejects.toMatchObject({ status: 502 });
     expect(write.calls).toHaveLength(1);
-    // preview, the Moment read, then the guarded send: it fails once and is sent again, because a resend of it matches nothing if the first one landed.
-    const guarded = custom([{ "@p": { oid: "Story:1", update: { Name: "x" } } }], { ...envelope, assetsModified: { oidTokens: [], count: 0 }, queryResult: { results: [[{ _oid: "Story:1", Moment: "7" }]], resultMetaData: [], count: 1 } }, new ApiError("Bad Gateway", 502), envelope);
-    const result = await new AgilityApiClient({ baseUrl: "https://x" }, { transport: guarded }).sendGuarded([{ from: "Story:1", update: { Name: "x" } }]);
-    expect(result).toMatchObject({ modified: ["Story:1"], conflicts: [] });
-    expect(guarded.calls).toHaveLength(4);
+    // preview, the Moment read, then the guarded send, which fails and is NOT sent again: had the first send landed, the second
+    // would match nothing and tell the caller that someone else changed the asset and nothing was applied.
+    for (const failure of [new ApiError("Bad Gateway", 502), new ApiError("fetch failed", 0, "NETWORK_ERROR")]) {
+      const guarded = custom([{ "@p": { oid: "Story:1", update: { Name: "x" } } }], { ...envelope, assetsModified: { oidTokens: [], count: 0 }, queryResult: { results: [[{ _oid: "Story:1", Moment: "7" }]], resultMetaData: [], count: 1 } }, failure, envelope);
+      const client = new AgilityApiClient({ baseUrl: "https://x", retries: 3 }, { transport: guarded });
+      const error = await client.sendGuarded([{ from: "Story:1", update: { Name: "x" } }]).catch((e: unknown) => e);
+      expect(error).toMatchObject({ status: failure.status, request: { method: "POST", path: "/api/asset", idempotent: false } });
+      expect(guarded.calls).toHaveLength(3);
+      expect((await client.explain(error))[0]).toMatchObject({ outcome: "unknown", retrySafe: false, sentence: "Agility did not confirm the change. It may or may not have been made: check before trying again." });
+    }
   });
 
   it("a 401 or 403 is never resent (re-authentication is the unauthorized hook's business), nor any other 4xx, nor an aborted request", async () => {

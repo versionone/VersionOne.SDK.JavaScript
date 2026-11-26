@@ -73,7 +73,7 @@ describe("createFetchTransport", () => {
     const writer = createFetchTransport({ baseUrl: "https://x", fetchImpl: post, retries: 2 });
     await expect(writer.request({ method: "POST", path: "/api/asset", body: [] })).rejects.toMatchObject({ code: "NETWORK_ERROR" });
     expect(post).toHaveBeenCalledTimes(1);
-    // A caller that has made its write idempotent (a guard filter) may opt in.
+    // A POST the caller marks idempotent (a read sent by POST, as query.v1 is) is resent. The SDK never marks a write so.
     const guarded = vi.fn().mockRejectedValueOnce(new TypeError("fetch failed")).mockResolvedValueOnce(json({}));
     await createFetchTransport({ baseUrl: "https://x", fetchImpl: guarded, retries: 1 }).request({ method: "POST", path: "/api/asset", body: [], idempotent: true });
     expect(guarded).toHaveBeenCalledTimes(2);

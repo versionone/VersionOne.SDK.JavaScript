@@ -155,7 +155,11 @@ export function transportConformance(make: (server: ConformanceServer) => Transp
       const bodies: [number, unknown][] = [
         [400, { _type: "Error", error: "Invalid WHERE parameter", exceptions: [{ type: "FormatException", message: "Invalid QueryFilter2 token Nope=1" }] }],
         [400, { Exceptions: ["The request body is not valid JSON."] }],
+        // A server-side SQL execution timeout, as an instance answers it: told by its body, coded SERVER_TIMEOUT.
+        [500, { error: "Server Error", exceptions: [{ type: "SqlException", message: "Execution Timeout Expired.  The timeout period elapsed prior to completion of the operation or the server is not responding." }, { type: "Win32Exception", message: "The wait operation timed out" }] }],
         [401, "Unauthorized"],
+        // As api/asset refuses a request with no session: a 401 with nothing in the body. The status alone makes it kind "auth".
+        [401, ""],
         [503, ""]
       ];
       for (const [status, data] of bodies) {
@@ -165,6 +169,7 @@ export function transportConformance(make: (server: ConformanceServer) => Transp
         expect(error instanceof ApiError, `a ${status} must reject with an ApiError`);
         expect(error.status === status && error.kind === expected.kind, `a ${status} must carry its status and the kind it implies (${expected.kind})`);
         expect(error.message === expected.message, `a ${status} must be worded as apiErrorFromResponse words it ("${expected.message}"), got "${error.message}"`);
+        expect(error.code === expected.code, `a ${status} with this body must carry the code apiErrorFromResponse gives it (${expected.code}), got ${error.code}`);
         if (typeof data === "object") expect(same(error.details, data), "the parsed error body must be the error's details");
       }
     } },

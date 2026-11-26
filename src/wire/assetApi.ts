@@ -294,13 +294,6 @@ export interface SendOptions extends ReadOptions {
    * succeeded are committed either way; the error carries the response.
    */
   throwOnFailure?: boolean;
-  /**
-   * The caller has made this batch safe to send twice (a guarded batch with
-   * no creates: services/guard) and says so; the transport may then retry it
-   * after a network failure or a 5xx. Never set it for a plain batch: a
-   * retried write after a timeout is a double write.
-   */
-  idempotent?: boolean;
 }
 
 /** A command's body, aliased or bare. */
@@ -339,7 +332,8 @@ export async function send<Row extends Asset = Asset>(transport: Transport, comm
     query: options.previewOnly ? { previewOnly: "true" } : undefined,
     body: toWire(commands),
     responseType: "json",
-    idempotent: options.idempotent === true
+    // A batch is never resent, guarded or not: a second send of a guarded batch that landed reads as a conflict (services/guard).
+    idempotent: false
   });
   // A preview answers with the projection, not an envelope.
   if (options.previewOnly) return response;

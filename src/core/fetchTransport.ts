@@ -1,5 +1,5 @@
 import { ApiError, apiErrorFromResponse } from "./errors";
-import { DEFAULT_TIMEOUT_MS, deadline } from "./retry";
+import { DEFAULT_TIMEOUT_MS, deadline, resendable } from "./retry";
 import type { RequestBody, RequestOptions, ResponseType, Transport } from "./transport";
 
 /**
@@ -52,12 +52,16 @@ export interface FetchTransportConfig {
    * the place to re-authenticate — open a login popup, re-run setup. Resolve
    * "retry" to send the request once more, "fail" to throw the error.
    *
-   * "retry" is honoured only for an idempotent request (every GET; a write
-   * the caller marked idempotent). A plain api/asset write is never resent
-   * on it, even after a 401: the hook still runs, so the session can be
-   * repaired, and the caller decides whether to send again. "retry-write"
-   * resends a plain write too, once, on the hook's own assertion that the
-   * refusal means nothing ran (see UnauthorizedDecision).
+   * "retry" is honoured only for an idempotent request (every GET, and a
+   * read sent by POST). No api/asset write is resent on it, even after a
+   * 401, and that includes a guarded write (`sendGuarded`, `batch.run`
+   * with a guard), which the SDK no longer marks idempotent: the hook
+   * still runs, so the session can be repaired, and the caller decides
+   * whether to send again. "retry-write" resends a write too, guarded or
+   * plain, once, on the hook's own assertion that the refusal means
+   * nothing ran (see UnauthorizedDecision). So `retryable: false` on a
+   * guarded write does not mean it cannot be resumed after signing in
+   * again: it means "retry-write" is the answer that resumes it.
    */
   onUnauthorized?: (context: UnauthorizedContext) => UnauthorizedDecision | Promise<UnauthorizedDecision>;
   /** Which statuses call onUnauthorized. Default [401]; a cookie-session app may add 403. */
@@ -75,9 +79,16 @@ export interface FetchTransportConfig {
  *                  `unauthorizedStatuses` means nothing in the request was
  *                  executed — the sign-in was checked before any command
  *                  ran — so sending it again cannot apply anything twice.
- *                  The SDK cannot know that and does not check it: its own
- *                  tests run where every request is authenticated. Answer
- *                  it only where that holds (a session that expired; not a
+ *                  What is known: on one product release, an api/asset
+ *                  create sent with no session and one sent with an
+ *                  invalid session were each answered 401 with an empty
+ *                  body before any command ran, and nothing was created
+ *                  (a consumer's check, by an exact-name query afterwards).
+ *                  What is not: a session that was valid and has expired,
+ *                  a 403, and rest-1. The SDK's own tests run where every
+ *                  request is authenticated and check none of it, so
+ *                  beyond that case it remains your assertion. Answer it
+ *                  only where it holds (a missing or lapsed sign-in; not a
  *                  permission problem, which api/asset reports per command
  *                  inside a 200). Honoured once per request, like "retry".
  */
@@ -86,7 +97,7 @@ export type UnauthorizedDecision = "retry" | "retry-write" | "fail";
 export interface UnauthorizedContext {
   error: ApiError;
   request: RequestOptions;
-  /** Whether a "retry" will be honoured: false for a non-idempotent write (which only "retry-write" resends). */
+  /** Whether a "retry" will be honoured: false for any write, guarded or plain (which only "retry-write" resends). */
   retryable: boolean;
 }
 
@@ -160,9 +171,6 @@ function retryDelay(response: { status: number; headers: { get(name: string): st
   return 150 * (attempt + 1);
 }
 
-/** A status the same request may succeed after: too many requests, or a server-side failure. */
-const retriable = (status: number): boolean => status === 429 || status >= 500;
-
 export function createFetchTransport(config: FetchTransportConfig): Transport {
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const retries = Math.max(0, config.retries ?? 1);
@@ -201,10 +209,10 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           settle();
           // The caller gave up: final, whatever attempt this was.
           if (callerSignal?.aborted) throw abortedError(callerSignal);
-          // Network failure or timeout: the only case a retry can help.
-          lastError = limit.expired()
-            ? new ApiError(`Timed out after ${timeoutMs} ms`, 0, "TIMEOUT", { cause: error })
-            : new ApiError(error instanceof Error ? error.message : String(error), 0, "NETWORK_ERROR", { cause: error });
+          // A timeout ends the wait, not the work: the request may still be running, so it is never sent again.
+          if (limit.expired()) throw new ApiError(`Timed out after ${timeoutMs} ms`, 0, "TIMEOUT", { cause: error });
+          // No connection: the one failure here that a resend can help.
+          lastError = new ApiError(error instanceof Error ? error.message : String(error), 0, "NETWORK_ERROR", { cause: error });
           if (attempt + 1 < attempts) await delay(150 * (attempt + 1));
           continue;
         }
@@ -245,7 +253,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           }
           break;
         }
-        if (retriable(response.status) && attempt + 1 < attempts) {
+        if (resendable(lastError) && attempt + 1 < attempts) {
           const wait = retryDelay(response, attempt);
           if (wait === null) break;
           await delay(wait);

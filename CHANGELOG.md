@@ -1,5 +1,133 @@
 # Changelog
 
+## 1.0.0-alpha.11
+
+### Breaking
+
+- **A request that timed out is no longer sent again, a read included.**
+  Since alpha.5 an idempotent request (a GET, a query.v1 read, a guarded
+  batch) that timed out was sent once more. A timeout ends the client's
+  wait; it does not stop the work on the server. A slow query was
+  therefore run twice while the first might still be running, and the
+  caller waited two timeouts. Now nothing is resent after a timeout,
+  whoever gave up: the client (`TIMEOUT`), the server (a 408) or a
+  gateway (a 504), or the server's own SQL execution timeout
+  (`SERVER_TIMEOUT`, under Added). A lost connection, a 429 and any other 5xx are resent
+  once as before. `client.pages` and `client.all` stop at the first
+  timeout. `TIMEOUT` is still `kind: "transient"` (the same request may
+  work later): the kind says what the failure is, and the resend rule is
+  narrower than the kind. Migration: nothing, unless you relied on the
+  second attempt; a caller that wants one resends in its own code,
+  knowing a costly request may then run twice. Applies to the built-in
+  transport and to a custom one alike.
+
+- **A guarded write is no longer sent again automatically.** Since
+  alpha.5 a guarded batch with no creates (`client.sendGuarded`,
+  `batch.run` with `guard: true`) was marked idempotent and sent once
+  more after a lost connection or a 5xx. A second send harms no data: it
+  matches nothing, because the first advanced the Moment. But "matched
+  nothing" is how a conflict is reported, so when the first send had
+  landed and only its answer was lost, the caller was told that someone
+  else changed the asset and nothing was applied, about its own change.
+  Now no write is ever resent. A guarded write that gets no answer
+  rejects like any write, `error.request.idempotent` is `false`, and
+  `explain` says "Agility did not confirm the change. It may or may not
+  have been made: check before trying again." with `outcome:
+  "unknown"`. Migration: on that error, read the asset again; you see
+  your change or you do not, and the guard makes sending it again safe.
+  The same holds for the unauthorized hook: `retryable` is now false
+  for a guarded write, so "retry" does not resend it after a 401 and
+  "retry-write" does, as for a plain write. `retryable: false` does not
+  mean a guarded write cannot be resumed after signing in again; it
+  means "retry-write" is the answer that resumes it.
+- **`SendOptions.idempotent` is removed from `/wire`'s `assetApi.send`.**
+  It let a caller mark a batch safe to resend; no write is resent now,
+  so nothing can be marked. Migration: delete the option from the call.
+  A caller that guarded a batch itself and relied on the resend catches
+  the error instead, reads the assets again and decides; sending the
+  same guarded batch a second time is still harmless to the data, and
+  an asset it does not list as modified was either changed by someone
+  else or by the first send.
+
+### Changed
+
+- **What is known about `"retry-write"`** (the unauthorized hook's
+  answer that resends a write, added in alpha.8 as the consumer's own
+  assertion that a refusal means nothing ran). The premise has now been
+  checked once, by a browser-app consumer, on one product release: an
+  api/asset create sent with no session, and one with an invalid
+  session, were each answered 401 with an empty body before any command
+  ran, and nothing was created. Not checked: a session that was valid
+  and has expired, a 403, rest-1. The doc comment, spec 000 and example
+  09 say this in place of "cannot be verified"; beyond that case it is
+  still the consumer's assertion. No behaviour changes.
+- **`client.explain` no longer tells a person to try again after a write
+  that got no answer.** For any `transient` error it said "Agility could
+  not be reached, or is busy. The same request may work in a moment.",
+  which for a write whose fate is unknown is how a duplicate gets made.
+  Now: a write with no answer, a timeout or a 5xx is "Agility did not
+  confirm the change. It may or may not have been made: check before
+  trying again."; a read that timed out is "Agility
+  did not answer in time. The request may still be running: wait before
+  trying again."; a 429 is "Agility is busy. The same request may work in
+  a moment."; an error that does not say what was asked is "Agility could
+  not be reached, or is busy."; a read the server itself gave up on
+  (`SERVER_TIMEOUT`) is "Agility gave up on this request: it takes more
+  work than the server allows. Sending it again will cost the same. Ask
+  for less: a smaller page, fewer selected paths, a tighter filter.".
+  Migration: a test that asserts the old
+  sentence for a write; a consumer that offers a retry button should
+  decide on `retrySafe` (below).
+
+### Added
+
+- **A server-side SQL execution timeout, as an instance answers it, has
+  its own code: `SERVER_TIMEOUT`.** The server gives up on a request
+  that takes longer than it allows and answers an error document whose
+  `exceptions` hold a `SqlException` beginning "Execution Timeout
+  Expired" and a `Win32Exception` "The wait operation timed out". It
+  used to surface as a bare "Server Error" and, being a 5xx, a read was
+  sent again: the same cost, twice. Now it is told by the exception's
+  type and the start of its message, whatever the status: `code:
+  "SERVER_TIMEOUT"`, `kind: "transient"`, the exception's words as the
+  message, the whole document in `details`, never resent, and explained
+  as above. Recognised in `apiErrorFromResponse`, so a custom transport
+  that builds its errors there has it too, and `transportConformance`
+  now checks that a refusal carries the code `apiErrorFromResponse`
+  gives it. Migration: nothing for the built-in transport; a custom
+  transport that builds refusals by hand calls `apiErrorFromResponse(
+  status, body)` instead. Proved by unit tests with the document as an
+  instance sent it, through query.v1, api/asset and rest-1; it has not
+  been provoked live (that would mean running a query that costly), the
+  status it arrives with is not known, and whether api/asset reports it
+  in this shape or in its own `Exceptions` list is not confirmed (both
+  are recognised).
+- `Explanation.retrySafe`: `true` when sending the same request again is
+  safe (a read, anything refused with a 429), `false`
+  for a write that got no answer or a server failure and for a read the
+  server gave up on (the same request would cost and fail the same),
+  `null` when the server answered and said why, or when it cannot be
+  told. It answers "may the same request be sent again as it is?" and
+  nothing more.
+- `Explanation.outcome`: is it known whether the change was made?
+  `"unknown"` for a write that got no confirmation (no answer, a
+  timeout of the client's or the server's, a cancelled wait, a 5xx, an
+  unreadable answer): look before acting. `"notApplied"` where the
+  server answered a refusal before doing the work: a 4xx (a 429
+  included) in answer to a write, a guarded write that met a conflict,
+  and each failed command when a batch's failures are explained (that
+  command alone: the others are in the Outcome). `null` for a read and
+  for an error that does not say what was asked. With
+  `retrySafe` these are the two questions a consumer has after a
+  failure, as two fields: `retrySafe: false` covers both a write whose
+  fate is unknown (`outcome: "unknown"`) and a read that will fail the
+  same way again (`outcome: null`), which call for opposite actions.
+- `ApiError.request`: `{ method, path, idempotent }`, stamped by the
+  client on every error it lets out, with any transport. Never the body
+  or headers. Absent on an error from a `/wire` or `/services` function
+  used on a transport no client wrapped; such an error is explained with
+  the cautious sentence and `retrySafe: null`.
+
 ## 1.0.0-alpha.10
 
 ### Breaking (for a consumer with its own `Transport`)
