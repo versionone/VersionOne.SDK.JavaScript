@@ -19,7 +19,7 @@ export { CONFORMANCE_BASE_URL, fetchFrom, transportConformance } from "./transpo
 export type { ConformanceCheck, ConformanceRequest, ConformanceResponse, ConformanceServer } from "./transportConformance";
 import type { ClientConfig } from "../core/clientConfig";
 import type { SearchOptions, SearchResult, SearchRow } from "../services/search";
-import { ATTRIBUTE_NAMES } from "../types/assets/subtypes";
+import { ATTRIBUTE_NAMES, CONCRETE_SUBTYPES } from "../types/assets/subtypes";
 import { ApiError, UsageError, apiErrorFromResponse } from "../core/errors";
 import type { RequestOptions, Transport } from "../core/transport";
 import type { Asset, Oid } from "../types/asset";
@@ -183,7 +183,8 @@ function anyType(script: Script, token: string): unknown {
   const root = ["Name", "Description", "AssetType", "AssetState", "ChangeDateUTC", "CreateDateUTC"];
   const names = token === "BaseAsset" ? root : [...new Set([...ATTRIBUTE_NAMES, ...scripted.map((key) => key.split(".")[0]!)])].filter((name) => name !== "_oid");
   const Attributes = Object.fromEntries(names.map((Name) => [`${token}.${Name}`, { _type: "AttributeDefinition", Name, Token: `${token}.${Name}`, DisplayName: Name, AttributeType: "Text", IsReadOnly: false, IsRequired: false, IsMultivalue: false, IsCanned: true, IsCustom: false }]));
-  return { _type: "AssetType", Name: token, Token: token, DisplayName: token, Abstract: token === "BaseAsset", ...(token === "BaseAsset" ? {} : { Base: { nameref: "BaseAsset", href: "/meta.v1/BaseAsset" } }), Attributes };
+  // A family the generated table knows (Workitem) is abstract here as on a server, so a search naming it expands to its subtypes.
+  return { _type: "AssetType", Name: token, Token: token, DisplayName: token, Abstract: token === "BaseAsset" || token in CONCRETE_SUBTYPES, ...(token === "BaseAsset" ? {} : { Base: { nameref: "BaseAsset", href: "/meta.v1/BaseAsset" } }), Attributes };
 }
 
 function respond(script: Script, request: RequestOptions): unknown {

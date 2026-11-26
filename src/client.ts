@@ -1,7 +1,7 @@
 import type { ClientConfig } from "./core/clientConfig";
 import { ApiError, UsageError } from "./core/errors";
 import { createFetchTransport } from "./core/fetchTransport";
-import { withErrorHook, withRetry } from "./core/retry";
+import { withErrorHook, DEFAULT_TIMEOUT_MS, withRetry, withTimeout } from "./core/retry";
 import type { Transport } from "./core/transport";
 import * as attachments from "./services/attachments";
 import * as batch from "./services/batch";
@@ -107,8 +107,8 @@ export class AgilityApiClient {
   readonly schema: Schema;
 
   constructor(config: ClientConfig, opts: ClientOptions = {}) {
-    // The built-in transport resends idempotent requests itself (it can read Retry-After); a custom one gets the
-    // same rule from the client. A transport another client of ours already dressed (withSignal) is taken as it is.
+    // The built-in transport times its attempts and resends idempotent requests itself (it can read Retry-After); a
+    // custom one gets the same two rules from the client. A transport another client of ours already dressed (withSignal) is taken as it is.
     let transport = opts.transport ?? createFetchTransport({
       baseUrl: config.baseUrl,
       authorization: config.authorization,
@@ -121,7 +121,8 @@ export class AgilityApiClient {
       unauthorizedStatuses: config.unauthorizedStatuses
     });
     if (!dressed.has(transport)) {
-      if (opts.transport) transport = withRetry(transport, config.retries ?? 1);
+      // A custom transport: each attempt under the client's deadline, and the resend rule around that.
+      if (opts.transport) transport = withRetry(withTimeout(transport, config.timeoutMs ?? DEFAULT_TIMEOUT_MS), config.retries ?? 1);
       if (config.onError) transport = withErrorHook(transport, config.onError);
       dressed.add(transport);
     }

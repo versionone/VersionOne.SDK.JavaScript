@@ -1,4 +1,5 @@
 import { ApiError, apiErrorFromResponse } from "./errors";
+import { DEFAULT_TIMEOUT_MS, deadline } from "./retry";
 import type { RequestBody, RequestOptions, ResponseType, Transport } from "./transport";
 
 /**
@@ -163,7 +164,7 @@ function retryDelay(response: { status: number; headers: { get(name: string): st
 const retriable = (status: number): boolean => status === 429 || status >= 500;
 
 export function createFetchTransport(config: FetchTransportConfig): Transport {
-  const timeoutMs = config.timeoutMs ?? 60_000;
+  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const retries = Math.max(0, config.retries ?? 1);
   const authorization = config.authorization ?? (config.accessToken ? `Bearer ${config.accessToken}` : undefined);
   const unauthorizedStatuses = config.unauthorizedStatuses ?? [401];
@@ -186,17 +187,13 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
       let reauthorized = false;
       for (let attempt = 0; attempt < attempts; attempt += 1) {
         if (callerSignal?.aborted) throw abortedError(callerSignal);
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-        const onAbort = () => controller.abort();
-        callerSignal?.addEventListener("abort", onAbort, { once: true });
-        const settle = () => {
-          clearTimeout(timeoutId);
-          callerSignal?.removeEventListener("abort", onAbort);
-        };
+        // The one timeout rule (core/retry.ts): this attempt's deadline, or the caller's abort, whichever is first.
+        // fetch lets go when its signal fires, so nothing more is needed here than to say which of the two it was.
+        const limit = deadline(timeoutMs, callerSignal);
+        const settle = limit.clear;
         let response: Response;
         try {
-          const init: RequestInit = { method: options.method, headers, body, signal: controller.signal };
+          const init: RequestInit = { method: options.method, headers, body, signal: limit.signal };
           if (config.credentials) init.credentials = config.credentials;
           // Looked up at each request, not when the transport was made: whatever replaces the global fetch later (a test's stub, an instrumented fetch) is what gets called.
           response = await (config.fetchImpl ?? globalThis.fetch)(url, init);
@@ -205,7 +202,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           // The caller gave up: final, whatever attempt this was.
           if (callerSignal?.aborted) throw abortedError(callerSignal);
           // Network failure or timeout: the only case a retry can help.
-          lastError = error instanceof Error && error.name === "AbortError"
+          lastError = limit.expired()
             ? new ApiError(`Timed out after ${timeoutMs} ms`, 0, "TIMEOUT", { cause: error })
             : new ApiError(error instanceof Error ? error.message : String(error), 0, "NETWORK_ERROR", { cause: error });
           if (attempt + 1 < attempts) await delay(150 * (attempt + 1));
@@ -229,6 +226,8 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           lastError = apiErrorFromResponse(response.status, data);
         } catch (error) {
           if (callerSignal?.aborted) throw abortedError(callerSignal);
+          // The deadline passed while the body was still arriving: a timeout like any other.
+          if (limit.expired()) throw new ApiError(`Timed out after ${timeoutMs} ms`, 0, "TIMEOUT", { cause: error });
           throw error;
         } finally {
           settle();

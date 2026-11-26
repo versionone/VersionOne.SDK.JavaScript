@@ -1,5 +1,50 @@
 # Changelog
 
+## 1.0.0-alpha.10
+
+### Breaking (for a consumer with its own `Transport`)
+
+- **`timeoutMs` is the client's rule with any transport.** It was a timer
+  inside the built-in fetch transport only; with a custom transport the
+  client timed nothing, and a transport's own timeout was resent only if
+  it happened to report itself as an `ApiError` coded `TIMEOUT`. Now each
+  attempt has `timeoutMs` (default 60000) whatever the transport: at the
+  deadline the request rejects with `TIMEOUT` (transient, so an
+  idempotent request is sent once more), whether or not the transport
+  lets go. The transport is handed a `signal` that fires at the deadline
+  and when the caller aborts; honouring `signal`, which the conformance
+  suite already checks, is all a transport owes. A request the client has
+  stopped waiting for is abandoned: what its transport answers or throws
+  later is discarded. A timed-out write may still have been applied, and
+  is not resent.
+  What changes for you: requests through your transport now time out at
+  60 seconds by default where they waited for your HTTP client alone. A
+  transport with a shorter timeout of its own is unaffected (it rejects
+  first, with its own error). A transport over an HTTP client with no
+  timeout configured, or with a longer one, such as an axios instance
+  left at its default of none, now gets one. Migration: nothing, if 60
+  seconds per attempt suits you; `timeoutMs: <ms>` on the client to
+  choose; `timeoutMs: 0` for no client timeout, leaving your transport
+  to decide. The signal your transport receives is now the attempt's own
+  and not the object the caller passed, so compare by `aborted`, not by
+  identity. Code in a transport that maps its client's timeout error to
+  `TIMEOUT` is no longer needed for resends. (a browser-app consumer.)
+
+### Changed
+
+- The built-in fetch transport uses the same deadline: `timeoutMs: 0`
+  now means no timeout there too, and a response whose headers arrive in
+  time but whose body does not is a `TIMEOUT` (it surfaced as the
+  runtime's own abort error).
+
+### Fixed
+
+- `FakeAgilityClient`: a search naming a family by its abstract type
+  (`types: ["Workitem"]`) is expanded to the concrete types in the
+  request the fake records, as against a server. Without a metamodel the
+  fake treated the family as one concrete type. Rows and `fake.searched`
+  were already right.
+
 ## 1.0.0-alpha.9
 
 ### Breaking

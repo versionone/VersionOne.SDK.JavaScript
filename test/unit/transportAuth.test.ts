@@ -94,10 +94,15 @@ describe("transport for real callers", () => {
     const scoped = base.withSignal(controller.signal);
     expect(scoped.schema.cache).toBe(base.schema.cache);
     await scoped.localize(["Story"]);
-    expect(transport.request.mock.calls[0]![0].signal).toBe(controller.signal);
-    // The original client is untouched.
+    // The transport is handed the attempt's own signal (it also fires at the client's deadline) while the request is open.
+    expect(transport.request.mock.calls[0]![0].signal).toBeInstanceOf(AbortSignal);
+    // Tied to the caller's: once that is aborted, a request through the scoped client is ABORTED and never reaches the transport.
+    controller.abort();
+    await expect(scoped.localize(["Story"])).rejects.toMatchObject({ code: "ABORTED" });
+    expect(transport.request).toHaveBeenCalledTimes(1);
+    // The original client is untouched: its requests are not tied to that signal.
     await base.localize(["Story"]);
-    expect(transport.request.mock.calls[1]![0].signal).toBeUndefined();
+    expect(transport.request).toHaveBeenCalledTimes(2);
   });
 
   it("the client passes credentials and onUnauthorized through to its fetch transport", async () => {
