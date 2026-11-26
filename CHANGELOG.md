@@ -20,7 +20,11 @@
   - `unauthorizedStatuses` now lists statuses that call the hook in
     addition to those two (a 401; a challenged 403), which always do. A
     consumer that set `[401, 403]` loses nothing: a 403 without a
-    challenge still reaches its hook.
+    challenge still reaches its hook. But the list was the whole rule
+    before, and no longer is: a 401 calls the hook even when the list
+    leaves 401 out (`[403]`, or `[]`). Migration: `unauthorizedStatuses`
+    now adds to a 401 and a challenged 403; to stop the hook for those,
+    do not supply it.
   - `transportConformance` has the case, and a control. Migration for a
     custom transport: where it builds a refusal, pass the response's
     headers as the third argument, e.g. with axios
