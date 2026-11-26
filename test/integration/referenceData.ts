@@ -29,11 +29,11 @@ export const reference = {
  * so these are guarded by OID.
  */
 export const schemeStatuses = [
-  { _oid: "StoryStatus:152567", Name: "Future" },
-  { _oid: "StoryStatus:152568", Name: "In Progress" },
-  { _oid: "StoryStatus:152569", Name: "QA / Test" },
-  { _oid: "StoryStatus:152570", Name: "Done" },
-  { _oid: "StoryStatus:152571", Name: "Accepted" }
+  { _oid: "StoryStatus:152567", Name: "Future", RollupState: "Active" },
+  { _oid: "StoryStatus:152568", Name: "In Progress", RollupState: "Active" },
+  { _oid: "StoryStatus:152569", Name: "QA / Test", RollupState: "Active" },
+  { _oid: "StoryStatus:152570", Name: "Done", RollupState: "Closed" },
+  { _oid: "StoryStatus:152571", Name: "Accepted", RollupState: "Closed" }
 ] as const;
 
 /** Every permanent OID, and the scheme whose selection must not change. */

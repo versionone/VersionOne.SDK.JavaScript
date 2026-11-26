@@ -131,16 +131,15 @@ Order:
 
 Five global story statuses with the product's own names, on no team,
 selected in the Default Scheme (`Scheme:1000`, which nearly every project
-on the instance uses), in this Order. All five read RollupState Active,
-`Done` and `Accepted` included:
+on the instance uses), in this Order:
 
-| OID | Name |
-|---|---|
-| `StoryStatus:152567` | Future |
-| `StoryStatus:152568` | In Progress |
-| `StoryStatus:152569` | QA / Test |
-| `StoryStatus:152570` | Done |
-| `StoryStatus:152571` | Accepted |
+| OID | Name | |
+|---|---|---|
+| `StoryStatus:152567` | Future | RollupState Active |
+| `StoryStatus:152568` | In Progress | RollupState Active |
+| `StoryStatus:152569` | QA / Test | RollupState Active |
+| `StoryStatus:152570` | Done | RollupState Closed |
+| `StoryStatus:152571` | Accepted | RollupState Closed |
 
 A Story created as a fixture in the system project (`Scope:0`) on no team
 is offered exactly those five; one with `Team: "Team:152495"` exactly the

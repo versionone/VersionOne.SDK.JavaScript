@@ -159,7 +159,8 @@ describeInstance("valid values (live)", () => {
   it("the permanent statuses selected in the default scheme (AGENTS.md) are what a story in the system project on no team is offered; read only, and skipped where the instance has none", async (context) => {
     const present = await client.query({ from: "StoryStatus" as never, select: ["Name"], filter: ["ID=$oids"], with: { $oids: schemeStatuses.map((s) => s._oid) }, page: { size: 5, start: 0 } });
     if (present.length !== schemeStatuses.length) return context.skip();
-    const offered = await client.lists.values({ type: "Story", scope: "Scope:0", attributes: ["Status"] });
+    // RollupState is what tells a consumer that "Done" closes work.
+    const offered = await client.lists.values({ type: "Story", scope: "Scope:0", attributes: ["Status"], select: ["RollupState"] });
     expect(offered.Status).toEqual(schemeStatuses.map((s) => ({ ...s })));
     expect(await client.lists.value({ type: "Story", scope: "Scope:0", attribute: "Status", name: "done" })).toEqual({ _oid: "StoryStatus:152570", Name: "Done" });
     // "In Progress" and the reference team's "sdk-reference In Progress" are different lists: each context has its own.
