@@ -43,9 +43,21 @@ export interface FetchTransportConfig {
   /**
    * fetch's credentials mode. A browser app on the instance's own origin
    * that authenticates with the session cookie sets "same-origin" or
-   * "include" (pair it with defaultHeaders { "X-Requested-With":
-   * "XMLHttpRequest" } so the server answers 401 rather than a login page).
-   * Left unset, fetch's default applies.
+   * "include". Left unset, fetch's default applies.
+   *
+   * Whether to also send `X-Requested-With: XMLHttpRequest` (through
+   * `defaultHeaders`; this transport never sends it by itself) decides
+   * which status an ended session answers with. A consumer saw, on one
+   * product release with OIDC sign-in, a session that had expired answer
+   * 401 without that header and 403 with it, both with the same
+   * `WWW-Authenticate: Bearer` challenge and the same body, and neither
+   * with a redirect to a login page. So: without the header, an ended
+   * session is a 401 and `onUnauthorized` runs by default; with it, set
+   * `unauthorizedStatuses: [401, 403]`, or the hook is never called.
+   * (Earlier releases of this comment advised the header "so the server
+   * answers 401 rather than a login page"; that is not what was seen.)
+   * Not checked: other releases, other ways of signing in, and whether a
+   * 403 for a genuine permission denial carries the same challenge.
    */
   credentials?: RequestCredentials;
   /**
@@ -65,7 +77,16 @@ export interface FetchTransportConfig {
    * again: it means "retry-write" is the answer that resumes it.
    */
   onUnauthorized?: (context: UnauthorizedContext) => UnauthorizedDecision | Promise<UnauthorizedDecision>;
-  /** Which statuses call onUnauthorized. Default [401]; a cookie-session app may add 403. */
+  /**
+   * Which statuses call onUnauthorized. Default [401]. An app that sends
+   * `X-Requested-With: XMLHttpRequest` needs [401, 403]: an ended session
+   * was seen to answer 403 to a request with that header (see
+   * `credentials`). A 403 is also what a permission denial may answer,
+   * and it is not known whether the response tells the two apart, so a
+   * hook called for a 403 should ask whether the session is still alive
+   * (a one-row read sent with `reauthorize: false`) before it prompts
+   * anyone, and answer "fail" when it is.
+   */
   unauthorizedStatuses?: readonly number[];
 }
 
@@ -88,8 +109,11 @@ export interface FetchTransportConfig {
  *                  an exact-name query afterwards); with the expired
  *                  credential a rest-1 attribute write was refused the
  *                  same way and not applied, and a query.v1 read got the
- *                  same 401. No 403 and no redirect was seen. What is
- *                  not known: a 403, other releases, and other ways of
+ *                  same 401. With `X-Requested-With: XMLHttpRequest`
+ *                  on the request the same ended session answered 403,
+ *                  and a write refused so was not applied either. No
+ *                  redirect was seen. What is not known: a 403 for a
+ *                  permission denial, other releases, and other ways of
  *                  signing in. The SDK's own tests run where every
  *                  request is authenticated and check none of it, so
  *                  beyond those cases it remains your assertion. Answer it

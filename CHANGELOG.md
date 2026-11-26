@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased (to be 1.0.0-alpha.13)
+
+### Changed
+
+- **The advice on `X-Requested-With` for a cookie-session browser app
+  was wrong and is replaced** (documentation only; no behaviour
+  changes). `createFetchTransport`'s comment on `credentials` said to
+  send `X-Requested-With: XMLHttpRequest` "so the server answers 401
+  rather than a login page". A browser-app consumer ended a real
+  session (one product release, OIDC sign-in) and saw the opposite
+  effect: without the header a 401, with it a 403, both with the same
+  `WWW-Authenticate: Bearer` challenge and body, neither a redirect.
+  Since `onUnauthorized` runs for `unauthorizedStatuses`, default
+  `[401]`, an app that followed the advice never had its hook called
+  when a session ended. Migration: if you send that header, set
+  `unauthorizedStatuses: [401, 403]` and have the hook check that the
+  session is really gone before it prompts (a one-row read with
+  `reauthorize: false`), because a 403 may also be a permission denial;
+  or stop sending the header. The built-in transport never sends it by
+  itself. A write refused with that 403 was not applied and landed once
+  when replayed, so what is known about `"retry-write"` extends to it.
+  Not checked: other releases, other ways of signing in, and whether a
+  403 for a genuine permission denial carries the same challenge (so the
+  SDK still classifies every 403 as `kind: "forbidden"`).
+
 ## 1.0.0-alpha.12
 
 ### Breaking
