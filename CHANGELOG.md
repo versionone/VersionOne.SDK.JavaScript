@@ -45,6 +45,15 @@
   fake treated the family as one concrete type. Rows and `fake.searched`
   were already right.
 
+### Repository
+
+- `examples/11-axios-transport.ts`: a `Transport` over an axios instance
+  and the adapter that runs `transportConformance` against it. axios is a
+  dev dependency of the repository for that example alone; the package
+  still depends on nothing. (a browser-app consumer.)
+  With this release it leaves timing to the client: it no longer maps
+  axios's own timeout to `TIMEOUT`.
+
 ## 1.0.0-alpha.9
 
 ### Breaking
