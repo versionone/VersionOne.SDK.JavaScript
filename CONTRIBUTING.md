@@ -8,6 +8,9 @@ the mechanical parts and `npm run verify` runs it.
 ## What lives here, and what does not
 
 - `src/`, `test/`, `scripts/`: the SDK and what proves it.
+- `AGENTS.md`: the short map of the repository for whoever changes it
+  next, agent or person. Keep it true: a change to how the repository
+  works changes it in the same pull request.
 - `specs/`: the invariants of this code (spec 000 and its successors).
   A spec describes the SDK and the API it talks to, never a consumer,
   a person, a session or an instance.
@@ -69,6 +72,8 @@ and consumers pin commits by SHA), and nothing new is added to it.
   for API testing and named in `SDK_TEST_ALLOWED_INSTANCES` (comma-
   separated base URLs), set beside the credential by whoever runs it.
   Any other hosted URL, and anything named V1Production, is refused.
+  `.github/workflows/integration.yml` runs the tier weekly and on demand
+  against the API-testing instance, from two repository secrets.
 - `metamodel.json` is pulled by `scripts/download-metamodel.mjs`, which
   strips an instance's own definitions and spells every `href` from
   `/meta.v1/`, so the committed file is the product's and names no

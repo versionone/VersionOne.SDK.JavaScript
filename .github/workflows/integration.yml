@@ -1,0 +1,60 @@
+name: Integration
+
+# The integration tier (test/integration, spec 000 section 5) against the
+# hosted instance set aside for API testing: weekly, and on demand from the
+# Actions tab. CI proper runs the unit tier only; this is what notices that
+# the server changed under the SDK.
+#
+# It needs two repository secrets, set by a maintainer:
+#   SDK_TEST_URL           the testing instance's base URL
+#   SDK_TEST_ACCESS_TOKEN  an access token for a member of that instance
+# The URL is a secret because an instance's URL is its name and this
+# repository is public (CONTRIBUTING.md); GitHub masks secret values in
+# logs. The same value is passed as SDK_TEST_ALLOWED_INSTANCES, which is
+# what permits writing fixtures there: any other hosted instance is refused
+# by the tests themselves. Without the secrets the run says so and passes.
+#
+# The tier writes fixtures named "sdk-integration …" and deletes them by
+# exact OID. Suites that recycle the app domain run on local instances only
+# and skip here.
+
+on:
+  schedule:
+    - cron: "17 4 * * 1" # Mondays 04:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration
+  cancel-in-progress: false
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SDK_TEST_URL: ${{ secrets.SDK_TEST_URL }}
+      SDK_TEST_ACCESS_TOKEN: ${{ secrets.SDK_TEST_ACCESS_TOKEN }}
+      SDK_TEST_ALLOWED_INSTANCES: ${{ secrets.SDK_TEST_URL }}
+    steps:
+      - name: Is a testing instance configured?
+        id: configured
+        run: |
+          if [ -n "$SDK_TEST_URL" ] && [ -n "$SDK_TEST_ACCESS_TOKEN" ]; then
+            echo "yes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No testing instance is configured (secrets SDK_TEST_URL and SDK_TEST_ACCESS_TOKEN); the integration tier did not run."
+          fi
+      - uses: actions/checkout@v7
+        if: steps.configured.outputs.yes == 'true'
+      - uses: actions/setup-node@v7
+        if: steps.configured.outputs.yes == 'true'
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        if: steps.configured.outputs.yes == 'true'
+      - run: npm run test:integration
+        if: steps.configured.outputs.yes == 'true'
