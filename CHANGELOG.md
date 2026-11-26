@@ -28,19 +28,26 @@
   code for a name read off a relation. A read with no select at all (a
   template) keeps every column the server sent, each under its own key
   (`template["Scope.Name"]`), and its Refs are bare too. (a CLI consumer.)
-- **A date has one spelling on every read**: `"2026-09-06T13:52:51.9030000"`
-  (seven decimals; a `Z` on a UTC attribute). The endpoints differ, and
-  rows used to carry whichever spelling the endpoint behind the call
-  used: `query` / `get` answered seven decimals (unchanged), `queryPage`
-  answered `"…51.903"` with trailing zeros dropped, and `history`,
-  `template` and the rest-1 reads answered three decimals and a midnight
-  as the date alone (`"2011-09-20"`). Nothing is cut: seven decimals is
-  the server's precision. Migration: code that compares date strings from
-  `queryPage`, `history` or `template` against stored ones, or slices
-  them by position, should parse them (`toDate(value)`), take the day
-  with `value.slice(0, 10)`, or expect the one spelling. `rest1.list` / `get` / `history` / `template` from
-  `/wire` spell dates this way when given `{ lookup: client.schema }`,
-  and as rest-1 sent them without. (a CLI consumer.)
+- **A date has one spelling on every read**: `"2026-09-06T13:52:51.903"`,
+  three decimals, with a `Z` on a UTC attribute: the standard's date-time
+  format, which `new Date(value)` reads in any engine. The endpoints
+  differ, and rows used to carry whichever spelling the endpoint behind
+  the call used: `query` and `get` answered seven decimals
+  (`"…51.9030000"`), `queryPage` dropped trailing zeros (`"…51.903"`,
+  `"…14.6"`), and `history`, `template` and the rest-1 reads answered
+  three decimals and a midnight as the date alone (`"2011-09-20"`). So
+  this changes the default read path too. The SDK cuts to the
+  millisecond, by design: the server's stored resolution is about three
+  milliseconds (in a live sample of 400 timestamps, every digit past the
+  third was zero and the third was only ever 0, 3 or 7), so nothing
+  observed is lost; if an instance ever carries finer digits they are
+  dropped. Migration: code that compares date strings against stored
+  ones, or slices them by position, should parse them (`new Date(value)`,
+  now portable), take the day with `value.slice(0, 10)`, or expect the
+  one spelling; a consumer's own normalising of fractions can go.
+  `rest1.list` / `get` / `history` / `template` from `/wire` spell dates
+  this way when given `{ lookup: client.schema }`, and as rest-1 sent
+  them without. (a CLI consumer and a browser-app consumer.)
 - **A read with an empty `find` throws a `UsageError`** (`kind: "usage"`,
   nothing is sent), on `query`, `queries`, `queryPage`, `pages`, `all` and
   `deleted`. It used to answer no rows, because that is what the server
@@ -70,9 +77,6 @@
 - `FakeAgilityClient.onSearch(rows)` and `fake.searched`, to test code
   that searches, through the fake or through a client built on
   `fake.transport`.
-- `toDate(value)` on the root: a `DateString` as a `Date`. The model's
-  seven decimals are more than the standard promises `new Date` will
-  parse, so parse with this. (a browser-app consumer.)
 - The subpaths' types resolve under TypeScript's `moduleResolution:
   "node"` (node10), which ignores `exports`: `package.json` has a
   `typesVersions` entry for `/wire`, `/services` and `/testing`. A

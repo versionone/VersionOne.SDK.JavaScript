@@ -183,10 +183,10 @@ describeInstance("search (live)", () => {
     const columns = ["Name", "Number", "Status.Name", "Owners.Name", "Owner.Name", "Scope.Name", "ChangeDateUTC"];
     // Only stories: a Story has no Owner.
     const stories = await client.search(word, { types: ["Story"], select: columns, findin: ["Name", "Description"], page });
-    expect(stories.rows).toEqual([{ _oid: story, Name: expect.stringContaining(word), Number: storyNumber, "Status.Name": null, "Owners.Name": [], "Owner.Name": null, "Scope.Name": expect.any(String), ChangeDateUTC: expect.stringMatching(/\.\d{7}Z$/) }]);
+    expect(stories.rows).toEqual([{ _oid: story, Name: expect.stringContaining(word), Number: storyNumber, "Status.Name": null, "Owners.Name": [], "Owner.Name": null, "Scope.Name": expect.any(String), ChangeDateUTC: expect.stringMatching(/T\d\d:\d\d:\d\d\.\d{3}Z$/) }]);
     // Only issues: no Status, no Owners.
     const issues = await client.search(word, { types: ["Issue"], select: columns, page });
-    expect(issues.rows).toEqual([{ _oid: issue, Name: expect.stringContaining(word), Number: issueNumber, "Status.Name": null, "Owners.Name": null, "Owner.Name": null, "Scope.Name": expect.any(String), ChangeDateUTC: expect.stringMatching(/\.\d{7}Z$/) }]);
+    expect(issues.rows).toEqual([{ _oid: issue, Name: expect.stringContaining(word), Number: issueNumber, "Status.Name": null, "Owners.Name": null, "Owner.Name": null, "Scope.Name": expect.any(String), ChangeDateUTC: expect.stringMatching(/T\d\d:\d\d:\d\d\.\d{3}Z$/) }]);
     // Goals and topics have neither a Status nor an owner: the search is made (and finds none of the fixtures), where it used to be refused.
     expect(await client.search(word, { types: ["Goal", "Topic"], select: columns, findin: ["Name", "Estimate"], page })).toEqual({ rows: [], total: 0, more: false });
   });

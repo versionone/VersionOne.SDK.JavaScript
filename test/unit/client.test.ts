@@ -148,7 +148,7 @@ describe("client: reads", () => {
     const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, types: schema().cache });
     expect(await client.deleted("Story", { select: ["Name", "ChangeDate", "CreateDate"], filter: ["Scope='Scope:0'"], page: { size: 2, start: 0 } })).toEqual({
       // The Name is text that happens to look like a date: it is left alone, because the schema says what is a date.
-      rows: [{ _oid: "Story:7", Name: "2011-09-20", ChangeDate: "2026-07-13T18:06:14.6000000", CreateDate: "2011-09-20T00:00:00.0000000" }], total: null, more: false
+      rows: [{ _oid: "Story:7", Name: "2011-09-20", ChangeDate: "2026-07-13T18:06:14.600", CreateDate: "2011-09-20T00:00:00.000" }], total: null, more: false
     });
     expect(t.calls).toHaveLength(1);
     expect(t.calls[0]).toMatchObject({ method: "GET", path: "/rest-1.v1/Data/Story", query: expect.objectContaining({ sel: "Name,ChangeDate,CreateDate", where: "Scope='Scope:0';IsDeleted='true'", page: "2,0", deleted: "true", needTotal: "true" }) });

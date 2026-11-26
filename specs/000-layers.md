@@ -49,9 +49,12 @@ that endpoint's wire module, once, on the way in and on the way out.
 
 A date is one of those spellings. query.v1 writes seven decimals,
 api/asset drops trailing zeros, rest-1 writes three and a midnight as the
-date alone; the model's `DateString` is `2026-09-06T13:52:51.9030000`
-(with `Z` on a UTC attribute), and every read answers it. The schema says
-which attribute is a date: text that looks like one is never touched.
+date alone; the model's `DateString` is `2026-09-06T13:52:51.903` (with
+`Z` on a UTC attribute), the standard's date-time format, and every read
+answers it. That cuts to the millisecond, by design: finer than the
+server stores (about three milliseconds), so nothing observed is lost.
+The schema says which attribute is a date: text that looks like one is
+never touched.
 
 A row's identity is `_oid`: the key the server sends for it, underscored
 so that it can never collide with an attribute (an asset's own identity

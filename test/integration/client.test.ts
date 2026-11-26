@@ -56,7 +56,7 @@ describeInstance("client reads (live)", () => {
       if (byQuery) {
         const byPage = (await client.queryPage<{ _oid: string; BeginDate: string }>(sprint)).rows[0]!;
         const byRest = (await rest1.list<{ _oid: string; BeginDate: string }>(client.transport, "Timebox", { select: ["BeginDate"], sort: ["ID"], page: { size: 1, start: 0 } }, { lookup: client.schema })).rows[0]!;
-        expect(byQuery.BeginDate).toMatch(/^\d{4}-\d\d-\d\dT00:00:00\.0000000$/);
+        expect(byQuery.BeginDate).toMatch(/^\d{4}-\d\d-\d\dT00:00:00\.000$/);
         expect([byPage, byRest]).toEqual([byQuery, byQuery]);
       }
       for (const row of [viaQuery, viaPage, viaRest]) {
@@ -64,9 +64,10 @@ describeInstance("client reads (live)", () => {
         expect(row["Owners.Name"]).toEqual([me.Name]); // a parallel array beside the Refs
         expect(typeof row["Scope.Name"]).toBe("string"); // its relation was not selected: the path is still there
         expect((row.Owners as { _oid: string }[]).map((o) => o._oid)).toEqual([me._oid]);
-        // The three endpoints write a date three ways (seven decimals, trailing zeros dropped, three decimals): the model has one.
-        expect(row.ChangeDateUTC).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{7}Z$/);
-        expect(row.CreateDate).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{7}$/);
+        // The three endpoints write a date three ways (seven decimals, trailing zeros dropped, three decimals): the model has one, the standard's, which any engine's Date reads.
+        expect(row.ChangeDateUTC).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
+        expect(new Date(row.ChangeDateUTC as string).toISOString()).toBe(row.ChangeDateUTC);
+        expect(row.CreateDate).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}$/);
       }
       // A Ref is bare on all three: the three rows are the same row.
       expect(viaPage).toEqual(viaQuery);

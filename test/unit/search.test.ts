@@ -128,7 +128,7 @@ describe("search", () => {
 
   it("a date is in the model's one spelling, by the row's own type; text that looks like a date is left alone", async () => {
     const dated = recording({ ...live, Assets: [{ _type: "Asset", href: "", id: "Story:1", Attributes: { Name: attribute("Name", "2011-09-20"), ChangeDateUTC: attribute("ChangeDateUTC", "2026-07-13T22:06:14.600Z"), CreateDate: attribute("CreateDate", "2011-09-20") } }] });
-    expect((await search(dated, schema(), "printer", { types: ["Story", "Issue"], select: ["Name", "ChangeDateUTC", "CreateDate"], page })).rows).toEqual([{ _oid: "Story:1", Name: "2011-09-20", ChangeDateUTC: "2026-07-13T22:06:14.6000000Z", CreateDate: "2011-09-20T00:00:00.0000000" }]);
+    expect((await search(dated, schema(), "printer", { types: ["Story", "Issue"], select: ["Name", "ChangeDateUTC", "CreateDate"], page })).rows).toEqual([{ _oid: "Story:1", Name: "2011-09-20", ChangeDateUTC: "2026-07-13T22:06:14.600Z", CreateDate: "2011-09-20T00:00:00.000" }]);
   });
 });
 
