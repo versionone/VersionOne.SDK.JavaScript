@@ -22,6 +22,21 @@ export type DateString = string;
 
 const DATE = /^(\d{4}-\d\d-\d\d)(?:T(\d\d:\d\d:\d\d)(?:\.(\d{1,7}))?)?(Z)?$/;
 
+/**
+ * A DateString as a `Date`, or null when the value is null or no date.
+ * Use this rather than `new Date(value)`: the standard promises a parser
+ * only three decimals of a second, and what an engine does with seven is
+ * its own business. A UTC attribute's value (it ends in `Z`) is that
+ * instant; any other is the server's wall-clock time with no zone, read
+ * here, as the standard reads a date-time without one, as local time.
+ */
+export function toDate(value: DateString | null | undefined): Date | null {
+  const m = typeof value === "string" ? DATE.exec(value) : null;
+  if (!m) return null;
+  const date = new Date(`${m[1]}T${m[2] ?? "00:00:00"}.${(m[3] ?? "").padEnd(3, "0").slice(0, 3)}${m[4] ?? ""}`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 /** A date as any endpoint spells it, in the model's one spelling (see DateString). Anything else is answered as given. */
 export function dateString<T>(value: T): T | DateString {
   const m = typeof value === "string" ? DATE.exec(value) : null;

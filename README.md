@@ -120,7 +120,7 @@ const { rows, total, more } = await client.search("warehouse ship*", {
 - The first search loads the schema of each type searched (one request per type, then cached for the client, or shared through a `TypeCache`). A short-lived process that searches once pays that every time: seed the cache (`TypeCache.fromMetamodel`) or keep the client.
 - To find one asset by its exact number, do not search: `client.resolve.numbers(["S-01042"])` is exact and does not wait for the text index.
 
-A date is spelled one way on every read: `"2026-09-06T13:52:51.9030000"`, seven decimals, with a `Z` on a UTC attribute (`ChangeDateUTC`). The endpoints each write dates differently, and the SDK answers this one spelling whichever of them was asked; `new Date(value)` reads it.
+A date is spelled one way on every read: `"2026-09-06T13:52:51.9030000"`, seven decimals, with a `Z` on a UTC attribute (`ChangeDateUTC`). The endpoints each write dates differently, and the SDK answers this one spelling whichever of them was asked. To get a `Date`, use `toDate(value)` from the root rather than `new Date(value)`: the standard promises a parser three decimals, not seven. A value without a `Z` is the server's wall-clock time with no zone; for a day (a sprint's `BeginDate`) take `value.slice(0, 10)`.
 
 Rows are typed from what you select, against the product's metamodel: a selected key is its value or `null`, never `undefined`. For an attribute your instance has and the generated model does not (a custom field's relation, a product module's attribute), name your own row type at the call: `client.query<MyRow>(q)` needs only `_oid` on `MyRow`.
 

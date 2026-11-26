@@ -37,8 +37,8 @@
   as the date alone (`"2011-09-20"`). Nothing is cut: seven decimals is
   the server's precision. Migration: code that compares date strings from
   `queryPage`, `history` or `template` against stored ones, or slices
-  them by position, should parse them (`new Date(value)`) or expect the
-  one spelling. `rest1.list` / `get` / `history` / `template` from
+  them by position, should parse them (`toDate(value)`), take the day
+  with `value.slice(0, 10)`, or expect the one spelling. `rest1.list` / `get` / `history` / `template` from
   `/wire` spell dates this way when given `{ lookup: client.schema }`,
   and as rest-1 sent them without. (a CLI consumer.)
 - **A read with an empty `find` throws a `UsageError`** (`kind: "usage"`,
@@ -70,6 +70,9 @@
 - `FakeAgilityClient.onSearch(rows)` and `fake.searched`, to test code
   that searches, through the fake or through a client built on
   `fake.transport`.
+- `toDate(value)` on the root: a `DateString` as a `Date`. The model's
+  seven decimals are more than the standard promises `new Date` will
+  parse, so parse with this. (a browser-app consumer.)
 - The subpaths' types resolve under TypeScript's `moduleResolution:
   "node"` (node10), which ignores `exports`: `package.json` has a
   `typesVersions` entry for `/wire`, `/services` and `/testing`. A

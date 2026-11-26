@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { AgilityApiClient } from "../../src/client";
 import type { RequestOptions, Transport } from "../../src/core/transport";
 import { Schema, TypeCache } from "../../src/services/schema";
+import { dateString, toDate } from "../../src/types/asset";
 import type { Story } from "../../src/types/assets/Story";
 import { fromWireRow, send, type AssetApiResponse } from "../../src/wire/assetApi";
 import { toMetamodel, type MetamodelDocument } from "../../src/wire/meta";
@@ -139,5 +140,20 @@ describe("translate: through send and the client", () => {
     const seeded = new AgilityApiClient({ baseUrl: "http://x" }, { transport: fakeTransport(envelope([[liveRow]])), types: TypeCache.fromMetamodel(metamodel) });
     const { rows: [again] } = await seeded.queryPage<Story>({ from: "Story", select: ["Estimate"], page: { size: 1, start: 0 } });
     expect(again!.IsClosed).toBe(true);
+  });
+
+  it("dateString is the model's one spelling of what each endpoint writes; toDate reads it without relying on a parser's tolerance for seven decimals", () => {
+    // query.v1, api/asset, rest-1, and rest-1's midnight: one value each way.
+    for (const sent of ["2026-07-13T22:06:14.6000000Z", "2026-07-13T22:06:14.6Z", "2026-07-13T22:06:14.600Z"]) expect(dateString(sent)).toBe("2026-07-13T22:06:14.6000000Z");
+    expect(dateString("2011-09-20T00:00:00")).toBe("2011-09-20T00:00:00.0000000");
+    expect(dateString("2011-09-20")).toBe("2011-09-20T00:00:00.0000000");
+    // Not a date: answered as given.
+    expect([dateString("soon"), dateString(null), dateString(7), dateString("2011-09-20 or so")]).toEqual(["soon", null, 7, "2011-09-20 or so"]);
+    // A UTC value is that instant; nothing beyond the millisecond is given to the parser.
+    expect(toDate("2026-07-13T22:06:14.6001234Z")?.toISOString()).toBe("2026-07-13T22:06:14.600Z");
+    // No zone: local wall-clock time, as the standard reads it.
+    const local = toDate("2011-09-20T08:30:00.0000000")!;
+    expect([local.getFullYear(), local.getMonth(), local.getDate(), local.getHours(), local.getMinutes()]).toEqual([2011, 8, 20, 8, 30]);
+    expect([toDate(null), toDate(undefined), toDate("soon"), toDate("2011-13-45T00:00:00.0000000")]).toEqual([null, null, null, null]);
   });
 });
