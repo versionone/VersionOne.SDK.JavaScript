@@ -161,24 +161,31 @@ export interface AddOptions {
   inlineLimit?: number;
 }
 
+/**
+ * What `add` answers: the attachment as it was written. The server's own
+ * stamps (when it was created, and by whom) are not read back, so they are
+ * not in the type at all — a null there would read as "it has none". Read
+ * the attachment with `info` for those.
+ */
+export type AddedAttachment = Omit<AttachmentInfo, "CreateDate" | "CreatedBy.Name">;
+
 /** An Attachment was created but its bytes could not be uploaded: it exists, empty. Remove it or upload again with `put`. */
 export class AttachmentUploadError extends WrappedError {
-  constructor(readonly attachment: AttachmentInfo, cause: unknown) {
+  constructor(readonly attachment: AddedAttachment, cause: unknown) {
     super(`${attachment._oid} was created on its asset with no content, and uploading the file failed: ${cause instanceof Error ? cause.message : String(cause)}`, "ATTACHMENT_UPLOAD", cause);
     this.name = "AttachmentUploadError";
   }
 }
 
-/** Attach a file to an asset. Inline up to `inlineLimit` bytes, two-step above it. Answers the attachment as written (its `CreateDate` and creator are null: read it with `info` for those). */
-export async function add(transport: Transport, asset: Oid, data: Bytes, options: AddOptions): Promise<AttachmentInfo> {
+/** Attach a file to an asset. Inline up to `inlineLimit` bytes, two-step above it. Answers the attachment as written, without the server's own stamps (read it with `info` for its `CreateDate` and creator). */
+export async function add(transport: Transport, asset: Oid, data: Bytes, options: AddOptions): Promise<AddedAttachment> {
   const bytes = await toUint8Array(data);
   const contentType = options.contentType ?? (typeof Blob !== "undefined" && data instanceof Blob && data.type ? data.type : "application/octet-stream");
   const inline = bytes.length <= (options.inlineLimit ?? INLINE_LIMIT);
   const create: assetApi.CreateBody = { AssetType: "Attachment", Asset: momentless(asset), Name: options.name ?? options.filename, Filename: options.filename, ContentType: contentType, Content: inline ? toBase64(bytes) : "" };
   if (options.description) create.Description = options.description;
   const oid = assetApi.outcomeOf(await assetApi.send(transport, [create], { throwOnFailure: true })).created[0]!;
-  // What was written; the server's own stamps (CreateDate, the creator) are not read back.
-  const created: AttachmentInfo = { _oid: oid, id: numericId(oid), Name: String(create.Name), Filename: options.filename, ContentType: contentType, Description: options.description ?? null, CreateDate: null, "CreatedBy.Name": null };
+  const created: AddedAttachment = { _oid: oid, id: numericId(oid), Name: String(create.Name), Filename: options.filename, ContentType: contentType, Description: options.description ?? null };
   if (!inline) {
     try {
       await putBytes(transport, created.id, bytes, contentType);

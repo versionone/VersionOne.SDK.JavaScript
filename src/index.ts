@@ -38,7 +38,7 @@ export { importantName } from "./services/fields";
 export { TypeCache } from "./services/schema";
 export type { Schema } from "./services/schema";
 export { AttachmentUploadError, INLINE_LIMIT } from "./services/attachments";
-export type { AddOptions as AttachmentAddOptions, AttachmentFile, AttachmentInfo, GetOptions as AttachmentGetOptions, ListOptions as AttachmentListOptions, ListedAttachment } from "./services/attachments";
+export type { AddOptions as AttachmentAddOptions, AddedAttachment, AttachmentFile, AttachmentInfo, GetOptions as AttachmentGetOptions, ListOptions as AttachmentListOptions, ListedAttachment } from "./services/attachments";
 export { fromBase64, toBase64 } from "./wire/attachment";
 export type { Explanation } from "./services/explain";
 export { isAssetNumber } from "./services/resolve";

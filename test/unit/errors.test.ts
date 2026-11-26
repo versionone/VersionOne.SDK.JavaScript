@@ -53,7 +53,7 @@ describe("error kinds", () => {
     expect(new WrappedError("x", "X", new Error("plain")).kind).toBe("unknown");
     const receipt = { receipt: 1 } as never;
     expect(new BatchSendError(cause, receipt).kind).toBe("transient");
-    expect(new AttachmentUploadError({ _oid: "Attachment:1", id: "1", Name: null, Filename: null, ContentType: null, Description: null, CreateDate: null, "CreatedBy.Name": null }, new ApiError("too big", 413, "TOO_LARGE")).kind).toBe("invalid");
+    expect(new AttachmentUploadError({ _oid: "Attachment:1", id: "1", Name: null, Filename: null, ContentType: null, Description: null }, new ApiError("too big", 413, "TOO_LARGE")).kind).toBe("invalid");
   });
 
   it("a command failure is kind commandFailure, and its violations are parsed", () => {

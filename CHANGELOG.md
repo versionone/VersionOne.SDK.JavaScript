@@ -156,6 +156,13 @@ Each entry has the line a consumer follows to migrate.
   a required single relation without a null check gets a compile error
   and needs the check.
 
+- **`client.attachments.add` no longer answers `CreateDate` and
+  `"CreatedBy.Name"`.** They were always null there (the server's stamps
+  are not read back after a create), which in a row read as "this
+  attachment has no creator or date". The answer's type is
+  `AddedAttachment`, and so is `AttachmentUploadError.attachment`.
+  Migration: read them with `client.attachments.info(id)` or from a
+  `list`. (a browser app consumer.)
 - **A resolved asset is a row**: `client.resolve.numbers` and `ref`
   answer `{ _oid, AssetType, Number, Name, AssetState }`, the names every
   row uses. Migration: `oid` → `_oid`; `type` → `AssetType`; `number` →
