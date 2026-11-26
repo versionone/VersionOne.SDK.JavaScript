@@ -189,10 +189,12 @@ committed files.
   is its name, and this repository is public); any other hosted URL and
   anything named V1Production is **refused**. A suite that
   recycles the app domain (custom fields) runs on local instances only.
-  Suites bring their own data — a hosted testing instance may be nearly
-  empty (it had no StoryStatus at all on 2026-11-04) — and fixtures are
-  named `sdk-integration …` and deleted by exact OID by the suite that made
-  them.
+  Suites bring their own data and assume nothing about what else the
+  instance holds, and fixtures are named `sdk-integration …` and deleted
+  by exact OID by the suite that made them. The API-testing instance also
+  holds a little permanent reference data, named `sdk-reference …`
+  (AGENTS.md lists it): nothing creates, edits or deletes it, and
+  `deleteFixtures` refuses a list that contains any of it.
 
 The API's real behaviours — silent empties, projection order, full-text
 index lag, what a preview echoes — are what fakes cannot reproduce; the

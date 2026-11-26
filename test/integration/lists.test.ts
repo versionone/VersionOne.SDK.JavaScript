@@ -3,12 +3,13 @@ import { AgilityApiClient } from "../../src/client";
 import type { ApiError } from "../../src/core/errors";
 import { validValues } from "../../src/wire";
 import { deleteFixtures, describeInstance, fixtureName, instance, sendFixtures } from "./instance";
+import { reference } from "./referenceData";
 
 /**
  * Valid values against a real instance: what api/ValidValues answers for a
- * list-typed attribute, and client.lists over it. The instance may hold no
- * status at all, so the suite brings a whole small world of its own and
- * touches nothing that exists:
+ * list-typed attribute, and client.lists over it. The suite brings a whole
+ * small world of its own, so every expectation is exact, and touches
+ * nothing that exists:
  *   - a Scope under the system project with its own Scheme;
  *   - two global statuses, one selected in that Scheme and one in none;
  *     two priorities likewise;
@@ -138,6 +139,21 @@ describeInstance("valid values (live)", () => {
     await expect(client.lists.values({ type: "Story", scope: o["scope"]!, attributes: ["Nmae"] })).rejects.toMatchObject({ kind: "usage" });
     // The context takes a scope and a team joined by a comma, and nothing else.
     await expect(t.request({ method: "GET", path: `/api/ValidValues/Story.Status/?context=Scope=${o["scope"]!};Team=${o["team"]!}&sel=Name`, headers: { accept: "application/json" }, responseType: "json" })).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("the permanent reference team (AGENTS.md) offers its three statuses, in Order, to a story on it; read only, and skipped where the instance has no such team", async (context) => {
+    const [team] = await client.query<{ _oid: string; Name: string }>({ from: "Team" as never, select: ["Name"], filter: ["ID=$oid"], with: { $oid: reference.team }, page: { size: 1, start: 0 } });
+    if (team?.Name !== "sdk-reference team") return context.skip();
+    const offered = await client.lists.values({ type: "Story", scope: o["scope"]!, team: reference.team, attributes: ["Status"], select: ["RollupState"] });
+    expect(offered.Status).toEqual([
+      { _oid: reference.ready, Name: "sdk-reference Ready", RollupState: "Future" },
+      { _oid: reference.inProgress, Name: "sdk-reference In Progress", RollupState: "Active" },
+      { _oid: reference.done, Name: "sdk-reference Done", RollupState: "Closed" }
+    ]);
+    expect(await client.lists.value({ type: "Story", scope: o["scope"]!, team: reference.team, attribute: "Status", name: "sdk-reference done" })).toMatchObject({ _oid: reference.done });
+    // The suite's own team is not offered them, and they are not this suite's to delete.
+    expect((await client.lists.values({ asset: o["onTeam"]!, attributes: ["Status"] })).Status!.map((r) => r._oid)).not.toContain(reference.done);
+    expect(created).not.toContain(reference.team);
   });
 
   it("fields.describe says which of a form's attributes are list-typed", async () => {
