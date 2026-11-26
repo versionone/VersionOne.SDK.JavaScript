@@ -67,6 +67,11 @@ export function createAxiosTransport(http: AxiosInstance): Transport {
           // A refusal: the same error, word for word, as the SDK's own transport throws.
           throw apiErrorFromResponse(error.response.status, readable(error.response.data, String(error.response.headers["content-type"] ?? "")));
         }
+        // Timing is this transport's own business today: the client's `timeoutMs` binds only the SDK's built-in
+        // transport, so the axios instance needs its own `timeout`, and its timeout must be reported as TIMEOUT
+        // here for the client's resend rule to recognise it. Were the client to enforce `timeoutMs` above every
+        // transport (it would hand over a signal that fires when time is up), neither would be needed: honouring
+        // `signal`, as above, would be all a transport owes, and these two lines could go.
         const timedOut = error instanceof AxiosError && (error.code === AxiosError.ECONNABORTED || error.code === AxiosError.ETIMEDOUT);
         throw new ApiError(error instanceof Error ? error.message : String(error), 0, timedOut ? "TIMEOUT" : "NETWORK_ERROR", { cause: error });
       }
