@@ -354,7 +354,7 @@ export class AgilityApiClient {
    * and a large one in two steps; `get` reads a small one inline on request.
    */
   readonly attachments = {
-    /** One page of an asset's attachments, newest first, metadata only; `select` reads more with each (under `selected`). */
+    /** One page of an asset's attachments, newest first, metadata only; `select` adds keys to each row. */
     list: <const S extends readonly (SelectPath<Attachment> | assetApi.QueryBody)[] | undefined = undefined>(asset: string, options?: Omit<attachments.ListOptions<S>, "schema">) => attachments.list<S>(this.transport, asset, { ...options, schema: this.schema }),
     /** The same page with the total and whether more follow. */
     page: <const S extends readonly (SelectPath<Attachment> | assetApi.QueryBody)[] | undefined = undefined>(asset: string, options?: Omit<attachments.ListOptions<S>, "schema">) => attachments.page<S>(this.transport, asset, { ...options, schema: this.schema }),

@@ -2,25 +2,43 @@
 
 ## 1.0.0-alpha.7 — what a browser app consumer asked for
 
-Nothing breaks in this alpha. Each entry says what a consumer changes, if
-anything.
+One breaking change, to attachments; everything else is additive. Each
+entry says what a consumer changes, if anything.
+
+### Breaking
+
+- **An attachment is answered as a row of the Attachment type**, under
+  meta.v1's attribute names like every other row, plus `id`. It was the
+  one place the SDK had a vocabulary of its own. This holds for
+  `client.attachments.list`, `page`, `info`, `get` and `add`, and for
+  `AttachmentUploadError.attachment`. Migration, field by field:
+  - `oid` → `_oid`
+  - `id` → `id` (unchanged: the number attachment.img addresses)
+  - `name` → `Name`; `filename` → `Filename`; `description` →
+    `Description`; `createDate` → `CreateDate`
+  - `contentType` → `ContentType` (the recorded one)
+  - `createdBy` → `["CreatedBy.Name"]` (the select path, as selected)
+  - on `get`: `contentType` (the served type, falling back to the
+    recorded one) → `servedContentType ?? ContentType`;
+    `recordedContentType` → `ContentType`
+  `add`'s options (`filename`, `contentType`, `name`, `description`,
+  `inlineLimit`) are unchanged.
 
 ### Added
 
 - **`client.attachments.list` / `page` take a `select`**: more to read
   with each attachment, as a query's `select` on Attachment
-  (`Category.Name`, `Asset.Number`, a sub-select). Each answer then
-  carries those values under `selected`, keyed as selected, translated
-  like any row and typed by what was selected. Without a `select` the
-  answer is the metadata alone, as before. Migration: a second query for
-  an attachment's other attributes becomes `list(asset, { select })`.
+  (`Category.Name`, `Asset.Number`, a sub-select). Each row then carries
+  those keys too, as selected, translated like any row and typed by what
+  was selected. Migration: a second query for an attachment's other
+  attributes becomes `list(asset, { select })`.
 - **A one-request read for a small attachment**:
   `client.attachments.get(id, { inline: true })` reads the metadata and
   the bytes in one query.v1 request (the Attachment's `Content` comes
   back as Base64 beside its row) where the default is two (the row, then
   attachment.img). For small files: the response is a third larger than
-  the file and is held in memory whole. `contentType` is then the
-  recorded one. Migration: none; add `{ inline: true }` where a thumbnail
+  the file and is held in memory whole. `servedContentType` is then
+  null. Migration: none; add `{ inline: true }` where a thumbnail
   or a small text file is read.
 - **`normalizeQuery(query)`**: a query written with rest-1's spellings
   becomes the `QueryBody` every read takes — `sel` → `select`, a textual

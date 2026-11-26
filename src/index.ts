@@ -37,7 +37,7 @@ export type { QueryRejection } from "./wire/queryV1";
 // Services: what to do.
 export { Schema, TypeCache } from "./services/schema";
 export { AttachmentUploadError, INLINE_LIMIT } from "./services/attachments";
-export type { AddOptions as AttachmentAddOptions, AttachmentInfo, AttachmentSelected, GetOptions as AttachmentGetOptions, ListOptions as AttachmentListOptions, ListedAttachment } from "./services/attachments";
+export type { AddOptions as AttachmentAddOptions, AttachmentFile, AttachmentInfo, GetOptions as AttachmentGetOptions, ListOptions as AttachmentListOptions, ListedAttachment } from "./services/attachments";
 export { CHUNK as RESOLVE_CHUNK, NUMBER_ROOTS, isAssetNumber, resolveNumbers, resolveRef } from "./services/resolve";
 export type { Resolution, ResolvedAsset } from "./services/resolve";
 export { UNGUARDABLE_TYPES, UnguardableError, guard, sendGuarded, stampsOf, touchedBy, unguardable } from "./services/guard";

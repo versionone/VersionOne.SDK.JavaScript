@@ -71,7 +71,7 @@ describe("attachments service", () => {
     const created = await add(t, "Story:1", new TextEncoder().encode("hello attachment\n"), { filename: "a.txt", contentType: "text/plain" });
     expect(t.calls).toHaveLength(1);
     expect(t.calls[0]!.body).toEqual([{ AssetType: "Attachment", Asset: "Story:1", Name: "a.txt", Filename: "a.txt", ContentType: "text/plain", Content: "aGVsbG8gYXR0YWNobWVudAo=" }]);
-    expect(created).toMatchObject({ oid: "Attachment:77", id: "77", filename: "a.txt" });
+    expect(created).toEqual({ _oid: "Attachment:77", id: "77", Name: "a.txt", Filename: "a.txt", ContentType: "text/plain", Description: null, CreateDate: null, "CreatedBy.Name": null });
   });
 
   it("a large file goes in two steps: create with empty Content, then POST the bytes", async () => {
@@ -87,7 +87,7 @@ describe("attachments service", () => {
     const t = fake(envelope({ assetsCreated: { oidTokens: ["Attachment:79"], count: 1 } }), new ApiError("too big", 413));
     const err = (await add(t, "Story:1", new Uint8Array(20), { filename: "c.bin", inlineLimit: 10 }).catch((e: unknown) => e)) as AttachmentUploadError;
     expect(err).toBeInstanceOf(AttachmentUploadError);
-    expect(err.attachment.oid).toBe("Attachment:79");
+    expect(err.attachment._oid).toBe("Attachment:79");
     expect(err.message).toMatch(/Attachment:79 was created .* no content.*maximum request length/);
   });
 
@@ -97,10 +97,10 @@ describe("attachments service", () => {
     const q = (t.calls[0]!.body as Record<string, unknown>[])[0]!;
     expect(q).toMatchObject({ from: "Attachment", filter: ["Asset=$asset"], with: { $asset: "Story:1" }, sort: ["-CreateDate"], page: { size: 50, start: 0 } });
     expect(q.select).not.toContain("Content");
-    expect(rows).toEqual([{ oid: "Attachment:5", id: "5", name: "n", filename: "f.png", contentType: "image/png", description: null, createDate: "2026-11-07T10:00:00", createdBy: "Dana" }]);
+    expect(rows).toEqual([{ _oid: "Attachment:5", id: "5", Name: "n", Filename: "f.png", ContentType: "image/png", Description: null, CreateDate: "2026-11-07T10:00:00", "CreatedBy.Name": "Dana" }]);
   });
 
-  it("list and page take more to select: the extra values come back under `selected`, translated when a schema is given, and the metadata is read as before", async () => {
+  it("list and page take more to select: the extra keys come back on the row as selected, translated when a schema is given, beside the metadata", async () => {
     // Attachment and AttachmentCategory as far as this select goes; the row as query.v1 and api/asset spell it (the API-testing instance, 2026-11-26).
     const text = (type: string, name: string) => ({ _type: "AttributeDefinition", Name: name, Token: `${type}.${name}`, DisplayName: "", AttributeType: "Text", IsReadOnly: false, IsRequired: false, IsMultivalue: false, IsCanned: false, IsCustom: false });
     const schema = Schema.fromMetamodel({ Version: "x", AssetTypes: {
@@ -114,11 +114,11 @@ describe("attachments service", () => {
     const t = fake(envelope({ queryResult: { results: [[row]], resultMetaData: [], count: 1 } }), envelope({ queryResult: { results: [[row]], resultMetaData: [{ total: 1 }], count: 1 } }), envelope({ queryResult: { results: [[row]], resultMetaData: [], count: 1 } }));
     const [listed] = await list(t, "Story:1", { select: ["Category", "Category.Name", "Days", "Name"], schema });
     expect((t.calls[0]!.body as { select: string[] }[])[0]!.select).toEqual(["Name", "Filename", "ContentType", "Description", "CreateDate", "CreatedBy.Name", "Category", "Category.Name", "Days"]);
-    expect(listed).toEqual({ oid: "Attachment:5", id: "5", name: "n", filename: "f.png", contentType: "image/png", description: null, createDate: "2026-11-07T10:00:00", createdBy: "Dana", selected: { Category: null, "Category.Name": null, Days: 19, Name: "n" } });
+    expect(listed).toEqual({ _oid: "Attachment:5", id: "5", Name: "n", Filename: "f.png", ContentType: "image/png", Description: null, CreateDate: "2026-11-07T10:00:00", "CreatedBy.Name": "Dana", Category: null, "Category.Name": null, Days: 19 });
     const paged = await page(t, "Story:1", { select: ["Days"], schema });
-    expect(paged).toMatchObject({ total: 1, more: false, attachments: [{ oid: "Attachment:5", selected: { Days: 19 } }] });
-    // Without a schema the extra values keep the endpoint's spelling; without a select there is no `selected` at all.
-    expect((await list(t, "Story:1", { select: ["Days"] }))[0]!.selected).toEqual({ Days: "19" });
+    expect(paged).toMatchObject({ total: 1, more: false, attachments: [{ _oid: "Attachment:5", id: "5", Days: 19 }] });
+    // Without a schema the extra values keep the endpoint's spelling.
+    expect((await list(t, "Story:1", { select: ["Days"] }))[0]!.Days).toBe("19");
   });
 
   it("get with inline reads the row and its Content in one query.v1 request and decodes the bytes; a missing attachment is NOT_FOUND", async () => {
@@ -129,7 +129,8 @@ describe("attachments service", () => {
     expect(t.calls[0]).toMatchObject({ method: "POST", path: "/query.v1", idempotent: true });
     expect((t.calls[0]!.body as Record<string, unknown>[])[0]).toMatchObject({ from: "Attachment", filter: ["ID=$id"], with: { $id: "Attachment:145797" }, page: { size: 1, start: 0 } });
     expect(new TextDecoder().decode(got.bytes)).toBe("hello attachment\n");
-    expect(got).toMatchObject({ oid: "Attachment:145797", id: "145797", filename: "check.txt", contentType: "text/plain", recordedContentType: "text/plain" });
+    expect(got).toMatchObject({ _oid: "Attachment:145797", id: "145797", Filename: "check.txt", ContentType: "text/plain", servedContentType: null, "CreatedBy.Name": "Dana" });
+    expect(got).not.toHaveProperty("Content");
     await expect(get(fake([[]]), 9, { inline: true })).rejects.toMatchObject({ code: "NOT_FOUND", kind: "notFound" });
     // An attachment created empty reads as zero bytes, not as a failure.
     expect((await get(fake([[{ _oid: "Attachment:6", Content: "" }]]), 6, { inline: true })).bytes).toEqual(new Uint8Array(0));
@@ -169,6 +170,6 @@ describe("attachment gaps the CLI consumer found", () => {
     const last = await queryPage(fake(withTotal([{ _oid: "Story:3" }], 3)), { from: "Story", select: ["Name"], page: { size: 2, start: 2 } });
     expect(last).toMatchObject({ total: 3, more: false });
     const a = await page(fake(withTotal([{ _oid: "Attachment:5", Name: "n" }], 1)), "Story:1");
-    expect(a).toMatchObject({ total: 1, more: false, attachments: [{ oid: "Attachment:5", id: "5" }] });
+    expect(a).toMatchObject({ total: 1, more: false, attachments: [{ _oid: "Attachment:5", id: "5", Name: "n", Filename: null }] });
   });
 });

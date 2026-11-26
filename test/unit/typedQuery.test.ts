@@ -86,16 +86,17 @@ describe("typed queries", () => {
 });
 
 describe("typed attachment listing", () => {
-  it("without a select an attachment is its metadata; with one it also carries `selected`, typed by what was selected", async () => {
+  it("an attachment is a row under meta.v1's names; a select adds its keys to the row, typed by what was selected", async () => {
     const plain = await client.attachments.list("Story:1");
     expectTypeOf(plain[0]!).toEqualTypeOf<import("../../src/services/attachments").AttachmentInfo>();
+    expectTypeOf(plain[0]!.Filename).toEqualTypeOf<string | null>();
     const more = await client.attachments.list("Story:1", { select: ["Category", "Days", "Asset.Number"] });
-    expectTypeOf(more[0]!.name).toEqualTypeOf<string | null>();
-    expectTypeOf(more[0]!.selected.Days).toEqualTypeOf<Story["Days"]>();
-    expectTypeOf(more[0]!.selected["Asset.Number"]).toBeUnknown();
-    // @ts-expect-error Filename was not selected as an extra
-    void more[0]!.selected.Filename;
+    expectTypeOf(more[0]!.Name).toEqualTypeOf<string | null>();
+    expectTypeOf(more[0]!.Days).toEqualTypeOf<number | null | undefined>();
+    expectTypeOf(more[0]!["Asset.Number"]).toBeUnknown();
+    // @ts-expect-error IsDeleted was not selected
+    void more[0]!.IsDeleted;
     const paged = await client.attachments.page("Story:1", { select: ["Days"], page: { size: 1, start: 0 } });
-    expectTypeOf(paged.attachments[0]!.selected.Days).toEqualTypeOf<Story["Days"]>();
+    expectTypeOf(paged.attachments[0]!.Days).toEqualTypeOf<number | null | undefined>();
   });
 });
