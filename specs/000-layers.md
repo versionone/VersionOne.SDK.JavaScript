@@ -237,7 +237,17 @@ another 4xx, never after a timeout (below), and once by default (`retries: 1`); 
 the client's, not one transport's: the built-in fetch transport applies it
 itself (it can read Retry-After), and the client applies it around a
 custom Transport (`core/retry`), so a consumer's transport does not
-re-implement it and cannot forget it. `retries: 0` turns it off for a
+re-implement it and cannot forget it. Each rule is applied once, in one
+place: the transport `createFetchTransport` returns declares that it
+times its attempts and resends by the rule itself (`governsItself`), and
+the client then adds neither, whether it made that transport or was
+handed it; every other transport gets both from the client. (The rule
+stays inside the built-in transport because only there is the response
+at hand, with its Retry-After. Before this was declared, a built-in
+transport handed to a client got the rule twice and sent a failed read
+four times.) A caller's wrapper around the built-in transport is a
+custom transport, and its author gives the inner one `retries: 0,
+timeoutMs: 0`. `retries: 0` turns it off for a
 client. A 401 or 403 is never resent by it.
 
 So is the timeout. Each attempt has `timeoutMs` (60 s unless told; 0 for

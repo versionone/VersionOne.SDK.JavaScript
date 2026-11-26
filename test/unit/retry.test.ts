@@ -113,6 +113,48 @@ describe("the resend rule above a custom Transport", () => {
     expect(wrapped.sent).toHaveLength(2);
   });
 
+  it("one rule, once, however the client is built: from its config, on a built-in transport handed in, on a custom transport. Attempts counted for a 502, a lost connection, a 429 with Retry-After and a timeout", async () => {
+    type Failure = "502" | "lost" | "429" | "timeout";
+    /** A fetch that fails every request the given way and counts the requests for the query (not the schema load). */
+    const failing = (how: Failure) => {
+      const state = { sends: 0 };
+      const fetchImpl = ((url: string | URL, init?: RequestInit) => {
+        if (new URL(String(url)).pathname.startsWith("/meta.v1/")) return Promise.resolve(new Response("{}", { status: 404 }));
+        state.sends += 1;
+        if (how === "lost") return Promise.reject(new TypeError("fetch failed"));
+        if (how === "timeout") return new Promise<Response>((_, reject) => init!.signal!.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+        return Promise.resolve(new Response("no", { status: Number(how), headers: how === "429" ? { "retry-after": "0" } : {} }));
+      }) as typeof fetch;
+      return { state, fetchImpl };
+    };
+    const base = { baseUrl: "https://x", timeoutMs: 60 };
+    const builds: Record<string, (fetchImpl: typeof fetch) => AgilityApiClient> = {
+      "from its config": (fetchImpl) => new AgilityApiClient({ ...base, fetchImpl }),
+      "a built-in transport handed in": (fetchImpl) => new AgilityApiClient({ baseUrl: "https://x" }, { transport: createFetchTransport({ ...base, fetchImpl }) }),
+      // A custom transport: plain fetch, errors as the built-in one words them, no rule of its own.
+      "a custom transport": (fetchImpl) => new AgilityApiClient(base, { transport: { request: async (o) => {
+        let response: Response;
+        try { response = await fetchImpl(`https://x${o.path}`, { method: o.method, body: o.body === undefined ? undefined : JSON.stringify(o.body), signal: o.signal }); }
+        catch (error) { throw new ApiError((error as Error).message, 0, "NETWORK_ERROR"); }
+        if (!response.ok) throw new ApiError("refused", response.status);
+        return response.json();
+      } } })
+    };
+    const expected: Record<Failure, { sends: number; code?: string; status: number }> = { "502": { sends: 2, status: 502 }, lost: { sends: 2, code: "NETWORK_ERROR", status: 0 }, "429": { sends: 2, status: 429 }, timeout: { sends: 1, code: "TIMEOUT", status: 0 } };
+    for (const [built, make] of Object.entries(builds)) {
+      for (const how of Object.keys(expected) as Failure[]) {
+        const { state, fetchImpl } = failing(how);
+        const started = Date.now();
+        const error = await make(fetchImpl).query(q).catch((e: unknown) => e);
+        const want = expected[how];
+        expect(error, `${built}, ${how}`).toMatchObject({ status: want.status, kind: "transient", ...(want.code ? { code: want.code } : {}) });
+        expect(state.sends, `${built}, ${how}: attempts`).toBe(want.sends);
+        // One deadline, not two stacked: a timeout ends at about timeoutMs.
+        if (how === "timeout") expect(Date.now() - started, `${built}: one deadline`).toBeLessThan(1000);
+      }
+    }
+  }, 30_000);
+
   it("once, not forever; `retries` says how many times, and 0 turns it off", async () => {
     const down = () => new ApiError("Service Unavailable", 503);
     const once = custom(down(), down(), [[]]);
