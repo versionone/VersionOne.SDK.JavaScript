@@ -60,7 +60,9 @@ export interface Explanation {
    * read, a guarded batch, anything the server turned away with a 429).
    * False: a write that got no answer, or a server failure in answer to
    * one; the change may or may not have been made, so look before trying
-   * again. Null when the question does not arise (the server answered and
+   * again; or a read the server itself gave up on (SERVER_TIMEOUT), which
+   * would cost and fail the same, so the request is to be made smaller,
+   * not repeated. Null when the question does not arise (the server answered and
    * said why) or cannot be told (the error does not say what was asked,
    * as one from a `/wire` function on a bare transport does not). Decide
    * on this field, not on the wording of `sentence`.
@@ -147,13 +149,20 @@ function failuresOf(input: unknown): CommandFailureDetail[] | null {
  *     that timed out: safe to repeat, but it may still be running, so not
  *     at once;
  *   - a read that never got through: safe, and may work in a moment;
+ *   - a read the server itself gave up on (its SQL execution timeout,
+ *     code SERVER_TIMEOUT): harmless to the data and still not to be
+ *     repeated (retrySafe false), since it will cost the server the same
+ *     and fail the same; the thing to do is ask for less;
  *   - no stamp: say only what is known.
  */
 function unanswered(error: ApiError): Said {
   if (error.status === 429) return forUser("Agility is busy. The same request may work in a moment.", true);
   const asked = error.request;
+  if (error.code === "SERVER_TIMEOUT" && !asked) return forUser("Agility gave up on this request: it takes more work than the server allows.");
   if (!asked) return forUser("Agility could not be reached, or is busy.");
   if (!asked.idempotent) return forUser("Agility did not confirm the change. It may or may not have been made: check before trying again.", false);
+  // The server itself gave up: the request costs more than it allows, and will cost the same again.
+  if (error.code === "SERVER_TIMEOUT") return forUser("Agility gave up on this request: it takes more work than the server allows. Sending it again will cost the same. Ask for less: a smaller page, fewer selected paths, a tighter filter.", false);
   const timedOut = error.code === "TIMEOUT" || error.status === 408 || error.status === 504;
   if (timedOut) return forUser("Agility did not answer in time. The request may still be running: wait before trying again.", true);
   return forUser("Agility could not be reached, or is busy. The same request may work in a moment.", true);

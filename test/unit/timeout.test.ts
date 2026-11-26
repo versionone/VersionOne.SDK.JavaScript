@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AgilityApiClient } from "../../src/client";
-import { ApiError } from "../../src/core/errors";
+import { ApiError, apiErrorFromResponse } from "../../src/core/errors";
 import { createFetchTransport } from "../../src/core/fetchTransport";
 import type { RequestOptions, Transport } from "../../src/core/transport";
 
@@ -132,6 +132,17 @@ describe("the built-in transport under the same rule", () => {
 });
 
 describe("what to tell a person when a request got no answer", () => {
+  it("a read the server itself gave up on (its SQL execution timeout) is not 'wait and try again': the same request costs the same, so ask for less; a write keeps the sentence about the change", async () => {
+    const gaveUp = () => apiErrorFromResponse(500, { error: "Server Error", exceptions: [{ type: "SqlException", message: "Execution Timeout Expired.  The timeout period elapsed prior to completion of the operation or the server is not responding." }, { type: "Win32Exception", message: "The wait operation timed out" }] });
+    for (const request of [read, guarded]) {
+      expect(await say(gaveUp, request)).toMatchObject({ audience: "user", retrySafe: false, sentence: "Agility gave up on this request: it takes more work than the server allows. Sending it again will cost the same. Ask for less: a smaller page, fewer selected paths, a tighter filter." });
+    }
+    expect(await say(gaveUp, write)).toMatchObject({ retrySafe: false, sentence: "Agility did not confirm the change. It may or may not have been made: check before trying again." });
+    // With no stamp (a /wire function on a bare transport): what is known, and no advice about a query it may not have been.
+    const [bare] = await new AgilityApiClient({ baseUrl: "https://agility.example.com/I" }, { transport: failing(gaveUp()) }).explain(gaveUp());
+    expect(bare).toMatchObject({ audience: "user", retrySafe: null, sentence: "Agility gave up on this request: it takes more work than the server allows." });
+  });
+
   const failing = (failure: ApiError): Transport => ({ request: (() => Promise.reject(failure)) as Transport["request"] });
   const say = async (failure: () => ApiError, request: RequestOptions) => {
     const client = new AgilityApiClient({ baseUrl: "https://agility.example.com/I", retries: 0 }, { transport: failing(failure()) });

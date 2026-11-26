@@ -11,7 +11,8 @@
   therefore run twice while the first might still be running, and the
   caller waited two timeouts. Now nothing is resent after a timeout,
   whoever gave up: the client (`TIMEOUT`), the server (a 408) or a
-  gateway (a 504). A lost connection, a 429 and any other 5xx are resent
+  gateway (a 504), or the server's own SQL execution timeout
+  (`SERVER_TIMEOUT`, under Added). A lost connection, a 429 and any other 5xx are resent
   once as before. `client.pages` and `client.all` stop at the first
   timeout. `TIMEOUT` is still `kind: "transient"` (the same request may
   work later): the kind says what the failure is, and the resend rule is
@@ -32,15 +33,42 @@
   did not answer in time. The request may still be running: wait before
   trying again."; a 429 is "Agility is busy. The same request may work in
   a moment."; an error that does not say what was asked is "Agility could
-  not be reached, or is busy.". Migration: a test that asserts the old
+  not be reached, or is busy."; a read the server itself gave up on
+  (`SERVER_TIMEOUT`) is "Agility gave up on this request: it takes more
+  work than the server allows. Sending it again will cost the same. Ask
+  for less: a smaller page, fewer selected paths, a tighter filter.".
+  Migration: a test that asserts the old
   sentence for a write; a consumer that offers a retry button should
   decide on `retrySafe` (below).
 
 ### Added
 
+- **A server-side SQL execution timeout, as an instance answers it, has
+  its own code: `SERVER_TIMEOUT`.** The server gives up on a request
+  that takes longer than it allows and answers an error document whose
+  `exceptions` hold a `SqlException` beginning "Execution Timeout
+  Expired" and a `Win32Exception` "The wait operation timed out". It
+  used to surface as a bare "Server Error" and, being a 5xx, a read was
+  sent again: the same cost, twice. Now it is told by the exception's
+  type and the start of its message, whatever the status: `code:
+  "SERVER_TIMEOUT"`, `kind: "transient"`, the exception's words as the
+  message, the whole document in `details`, never resent, and explained
+  as above. Recognised in `apiErrorFromResponse`, so a custom transport
+  that builds its errors there has it too, and `transportConformance`
+  now checks that a refusal carries the code `apiErrorFromResponse`
+  gives it. Migration: nothing for the built-in transport; a custom
+  transport that builds refusals by hand calls `apiErrorFromResponse(
+  status, body)` instead. Proved by unit tests with the document as an
+  instance sent it, through query.v1, api/asset and rest-1; it has not
+  been provoked live (that would mean running a query that costly), the
+  status it arrives with is not known, and whether api/asset reports it
+  in this shape or in its own `Exceptions` list is not confirmed (both
+  are recognised).
 - `Explanation.retrySafe`: `true` when sending the same request again is
   safe (a read, a guarded batch, anything refused with a 429), `false`
-  for a write that got no answer or a server failure, `null` when the
+  for a write that got no answer or a server failure and for a read the
+  server gave up on (the same request would cost and fail the same),
+  `null` when the
   server answered and said why, or when it cannot be told.
 - `ApiError.request`: `{ method, path, idempotent }`, stamped by the
   client on every error it lets out, with any transport. Never the body

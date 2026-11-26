@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { AgilityApiClient } from "../../src/client";
-import { ApiError } from "../../src/core/errors";
+import { ApiError, apiErrorFromResponse } from "../../src/core/errors";
+import { resendable } from "../../src/core/retry";
 import { createFetchTransport } from "../../src/core/fetchTransport";
 import type { RequestOptions, Transport } from "../../src/core/transport";
 import { FakeAgilityClient } from "../../src/testing";
@@ -42,6 +43,44 @@ describe("the resend rule above a custom Transport", () => {
       const fetchImpl = vi.fn(async () => new Response("down", { status }));
       await expect(createFetchTransport({ baseUrl: "https://x", fetchImpl: fetchImpl as unknown as typeof fetch }).request({ method: "GET", path: "/meta.v1/Story" })).rejects.toMatchObject({ status });
       expect(fetchImpl).toHaveBeenCalledTimes(sends);
+    }
+  });
+
+  it("a server-side SQL execution timeout, as an instance answers it, is told by its body, coded SERVER_TIMEOUT and never sent again, whatever its status or the method", async () => {
+    const gaveUp = () => ({ error: "Server Error", exceptions: [{ type: "SqlException", message: "Execution Timeout Expired.  The timeout period elapsed prior to completion of the operation or the server is not responding." }, { type: "Win32Exception", message: "The wait operation timed out" }] });
+    const words = "Execution Timeout Expired.  The timeout period elapsed prior to completion of the operation or the server is not responding.";
+    // The status it arrives with is not known (most likely 500), so the body decides.
+    for (const status of [500, 400, 503]) {
+      const error = apiErrorFromResponse(status, gaveUp());
+      expect(error).toMatchObject({ code: "SERVER_TIMEOUT", kind: "transient", status, message: words, details: gaveUp() });
+      expect(resendable(error)).toBe(false);
+    }
+    // Either exception alone is enough; the type and the start of the message are what is matched.
+    expect(apiErrorFromResponse(500, { error: "Server Error", exceptions: [{ type: "Win32Exception", message: "The wait operation timed out" }] }).code).toBe("SERVER_TIMEOUT");
+    expect(apiErrorFromResponse(500, { error: "Server Error", exceptions: [{ type: "SqlException", message: "Execution Timeout Expired." }] }).code).toBe("SERVER_TIMEOUT");
+    // api/asset lists its exceptions as plain strings; that it reports this one so is not confirmed, and it is recognised if it does.
+    expect(apiErrorFromResponse(500, { Exceptions: [words] }).code).toBe("SERVER_TIMEOUT");
+    // Controls: another SQL failure, another server error, the words elsewhere in a message.
+    for (const body of [{ error: "Server Error", exceptions: [{ type: "SqlException", message: "Invalid column name 'x'." }] }, { error: "Server Error", exceptions: [{ type: "NullReferenceException", message: "Object reference not set" }] }, { error: "Bad Request", exceptions: [{ type: "FormatException", message: "no token 'Execution Timeout Expired'" }] }, "Execution Timeout Expired", null]) {
+      expect(apiErrorFromResponse(500, body).code).toBeUndefined();
+    }
+
+    // Through the client, by each read endpoint and a write, with the built-in transport: sent once.
+    for (const status of [500, 400]) {
+      const sends: string[] = [];
+      const fetchImpl = (async (url: string | URL, init?: RequestInit) => {
+        const path = new URL(String(url)).pathname;
+        if (path.startsWith("/meta.v1/")) return new Response("{}", { status: 404 });
+        sends.push(`${init?.method ?? "GET"} ${path}`);
+        return new Response(JSON.stringify(gaveUp()), { status, headers: { "content-type": "application/json" } });
+      }) as typeof fetch;
+      const client = new AgilityApiClient({ baseUrl: "https://x", retries: 3 }, { transport: createFetchTransport({ baseUrl: "https://x", fetchImpl }) });
+      const asked = { code: "SERVER_TIMEOUT", kind: "transient", status, message: words };
+      await expect(client.query(q)).rejects.toMatchObject({ ...asked, request: { method: "POST", path: "/query.v1", idempotent: true } });
+      await expect(client.queryPage(q)).rejects.toMatchObject(asked);
+      await expect(client.deleted("Story", { select: ["Name"], page: { size: 1, start: 0 } })).rejects.toMatchObject(asked);
+      await expect(client.send([{ op: "update", oid: "Story:1", attributes: { Name: "n" } }])).rejects.toMatchObject({ status });
+      expect(sends).toHaveLength(4);
     }
   });
 

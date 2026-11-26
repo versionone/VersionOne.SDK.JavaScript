@@ -24,6 +24,7 @@ export function kindOf(status: number, code?: string): ErrorKind {
   switch (code) {
     case "ABORTED": return "aborted";
     case "TIMEOUT":
+    case "SERVER_TIMEOUT":
     case "NETWORK_ERROR": return "transient";
     case "BAD_JSON":
     case "BAD_RESPONSE": return "protocol";
@@ -105,10 +106,37 @@ function messageOf(data: unknown, status: number): string {
  * parsed JSON when the server sent JSON, else the text. The message comes
  * from the shapes the endpoints send (rest-1's `exceptions`, api/asset's
  * `Exceptions`, a bare `message`, or the text itself), `HTTP <status>`
- * when the body says nothing; `details` is `data` unchanged.
+ * when the body says nothing; `details` is `data` unchanged. One body
+ * gets a code: a server-side SQL execution timeout, as an instance answers
+ * it, is `SERVER_TIMEOUT` (kind transient, never resent), worded by the
+ * exception that says so.
  */
 export function apiErrorFromResponse(status: number, data?: unknown): ApiError {
-  return new ApiError(messageOf(data, status), status, undefined, data);
+  const gaveUp = serverTimeoutIn(data);
+  // "Server Error" says nothing; the exception's own words say what happened.
+  return gaveUp === null ? new ApiError(messageOf(data, status), status, undefined, data) : new ApiError(gaveUp, status, "SERVER_TIMEOUT", data);
+}
+
+/**
+ * The message of the exception that says so, or null: is this error body a server-side SQL execution timeout, as an instance
+ * answers it? The server gave up on a request that took longer than it
+ * allows: `{ error: "Server Error", exceptions: [{ type: "SqlException",
+ * message: "Execution Timeout Expired. …" }, { type: "Win32Exception",
+ * message: "The wait operation timed out" }] }`. Told by the exception's
+ * type and the start of its message, whatever the status. The same test
+ * is made of the entries of api/asset's `Exceptions` (plain strings), in
+ * case that endpoint reports one so; that it does is not confirmed.
+ */
+function serverTimeoutIn(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const body = data as { exceptions?: unknown; Exceptions?: unknown };
+  const entries = [...(Array.isArray(body.exceptions) ? body.exceptions : []), ...(Array.isArray(body.Exceptions) ? body.Exceptions : [])];
+  for (const entry of entries) {
+    const type = entry && typeof entry === "object" ? String((entry as { type?: unknown }).type ?? "") : "";
+    const message = (typeof entry === "string" ? entry : entry && typeof entry === "object" ? String((entry as { message?: unknown }).message ?? "") : "").trim();
+    if ((message.startsWith("Execution Timeout Expired") && (type === "" || type === "SqlException")) || (type === "Win32Exception" && message.startsWith("The wait operation timed out"))) return message;
+  }
+  return null;
 }
 
 /**

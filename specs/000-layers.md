@@ -256,6 +256,13 @@ query that timed out may still be running, and a request that ran out of
 time is likely one that costs a lot, so sending it again runs the cost
 twice and makes the caller wait twice. That holds whoever gave up: the
 client (`TIMEOUT`), the server (408) or a gateway in front of it (504).
+The server also has a timeout of its own on the SQL a request runs, and
+answers it as an error document, not a status: `exceptions` holding a
+`SqlException` whose message begins "Execution Timeout Expired" (and a
+`Win32Exception` "The wait operation timed out"). `apiErrorFromResponse`
+codes that `SERVER_TIMEOUT`, whatever the status, and it is not resent
+either: the same request would cost the same. The remedy is a smaller
+request (page, selected paths, filter), which `explain` says.
 `pages` and `all` stop at the first timeout rather than pressing on. A
 caller that wants to try again does so itself, knowing the cost. The deadline cannot
 tell the network from a person: a custom transport that waits for someone

@@ -81,13 +81,14 @@ export function withTimeout(transport: Transport, timeoutMs: number): Transport 
  * fell over: no connection (NETWORK_ERROR), a 429, a 5xx.
  *
  * Not after a timeout, of the client's (TIMEOUT) or of the server's or a
- * gateway's (408, 504). A timeout ends the wait; it does not stop the
+ * gateway's (408, 504, or the server's own SQL execution timeout, which
+ * arrives as an error document and is coded SERVER_TIMEOUT). A timeout ends the wait; it does not stop the
  * work. The request may still be running on the server, and a request that
  * ran out of time is likely one that costs a lot: sending it again runs
  * the cost twice and keeps the caller waiting twice as long.
  */
 export function resendable(error: unknown): boolean {
-  return error instanceof ApiError && error.kind === "transient" && error.code !== "TIMEOUT" && error.status !== 408 && error.status !== 504;
+  return error instanceof ApiError && error.kind === "transient" && error.code !== "TIMEOUT" && error.code !== "SERVER_TIMEOUT" && error.status !== 408 && error.status !== 504;
 }
 
 /**
