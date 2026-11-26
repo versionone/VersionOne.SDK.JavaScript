@@ -13,3 +13,4 @@ export * as fields from "./fields";
 export * as guard from "./guard";
 export * as resolve from "./resolve";
 export * as schema from "./schema";
+export * as search from "./search";

@@ -1,6 +1,6 @@
 # Examples
 
-Nine short programs, one per task, each runnable as it stands. Read them
+Ten short programs, one per task, each runnable as it stands. Read them
 in order; each says at the top what it does.
 
 | File | Shows | Writes? |
@@ -14,6 +14,7 @@ in order; each says at the top what it does.
 | `07-testing.ts` | `FakeAgilityClient`: test your own code with no instance | no instance at all |
 | `08-custom-transport.ts` | A `Transport` of your own (a timed wrapper), checked with `transportConformance` | no; a live read only if an instance is set |
 | `09-browser-session.ts` | Cookie auth for a browser app: `credentials`, `onUnauthorized`, and when `"retry-write"` is yours to answer | no instance at all (a stand-in server) |
+| `10-search.ts` | `client.search` across asset types; `find` on an ordinary read within one family | no |
 
 ## Running one
 

@@ -49,8 +49,9 @@ npm test
 | One asset | `client.get(oid, select)` | Null when nothing has that OID. |
 | Rows and how many there are | `client.queryPage(q)` | `{ rows, total, more }`. |
 | Everything, page by page | `client.pages(q, { limit })` / `client.all(q, { limit })` | Bounded: default limit 1000. |
-| Text search, one type or many | `client.query({ from, find, findin, … })` | An ordinary read with two more keys; see "Searching" below. `queryPage` adds the total. |
-| Deleted assets; one page across unrelated types with each type's Number | `client.data.list(type, params)` | rest-1: `deleted: true`; `Story.Number` selected from `BaseAsset`. |
+| Text search across asset types | `client.search(text, { types, page })` | One page of mixed rows, one order, `{ rows, total, more }`; `Number` on every row whose type has one. See "Searching". |
+| Text search within one type or family | `client.query({ from, find, findin, … })` | An ordinary read with two more keys. `queryPage` adds the total. |
+| Deleted assets | `client.deleted(type, params)` | No other read returns one. |
 | An asset's past versions | `client.history(oid, params)` | One row per version; `_oid` carries the moment. |
 | Who am I | `client.me()` | The member the credentials belong to. |
 | Numbers and OIDs a person typed | `client.resolve.numbers([...])` / `client.resolve.refs([...])` | Answered as rows. One request for numbers of any mix of types. |
@@ -94,7 +95,29 @@ What the server does with the text (each of these is a live test in `test/integr
 - An attribute `findin` does not know is a refused query (`QUERY_REJECTED`), not an empty result.
 - **An empty `find` is a usage error.** The server answers a search for nothing with no rows, which would read as "nothing matches"; leave `find` out to read without searching.
 
-`from` decides how wide the search is. `Workitem` covers the backlog types and has `Number`. `BaseAsset` is every asset (members, issues, requests, and anything else that carries the words, a notification included), so narrow it with a filter on `AssetType`; it has no `Number` of its own, and query.v1 refuses a type-qualified select such as `Story.Number` there. For one page across unrelated types with their Numbers, either send one typed query per type in a single request with `client.queries([...])`, or use `client.data.list("BaseAsset", { select: ["Name", "Story.Number", "Issue.Number"], … })`, which rest-1 answers with the value under `Number`.
+`from` decides how wide that read is: one type, or a family (`Workitem` is the backlog types, and has `Number`). It cannot give one page of unrelated types with their own attributes: `BaseAsset` is every asset but has no `Number`, and the query endpoints refuse a subtype's attribute there. That is what `client.search` is for.
+
+#### Across types: `client.search`
+
+```ts
+const { rows, total, more } = await client.search("warehouse ship*", {
+  types: ["Story", "Defect", "Epic", "Request", "Issue", "Goal"],   // required: there is no default
+  select: ["Name", "Number", "AssetState", "Scope.Name", "Owners", "Owner"],
+  filter: ["AssetState!='Closed'"],
+  sort: ["-ChangeDateUTC"],
+  page: { size: 25, start: 0 }
+});
+// rows[0].Number is "S-01042" for a Story and "R-01011" for a Request
+```
+
+- **One request, one order across every type, and the total.** The matching rules above apply.
+- **`types` is required**: concrete types, at least one. A default would silently leave types out.
+- **You name an attribute once, plainly, and each row has that key**: its value if the row's type defines it, `null` if not (`Owners` is null on a Request, `Owner` null on a Story; the SDK does not merge differently named attributes). A name none of the types defines is a usage error that lists the types.
+- `select` defaults to `Name`, `Number`, `AssetType`, `AssetState`; `findin` defaults to `Name` and `Number`.
+- A relation is a bare `{ _oid }`; ask for a display value as a path (`"Scope.Name"`, `"Owners.Name"`).
+- `filter` and `sort` are sent as written. A filter term on an attribute only some types have is type-qualified by you: `"(Workitem.Owners.IsSelf='true'|Request.Owner.IsSelf='true')"`.
+- Deleted assets are never found; `client.deleted(type, params)` reads those.
+- To find one asset by its exact number, do not search: `client.resolve.numbers(["S-01042"])` is exact and does not wait for the text index.
 
 Rows are typed from what you select, against the product's metamodel: a selected key is its value or `null`, never `undefined`. For an attribute your instance has and the generated model does not (a custom field's relation, a product module's attribute), name your own row type at the call: `client.query<MyRow>(q)` needs only `_oid` on `MyRow`.
 
@@ -141,6 +164,7 @@ expect(fake.sent[0]).toEqual([{ from: "Story:1", execute: "QuickClose" }]);     
 
 - `onQuery(match, rows)` answers every read (`query`, `get`, `queryPage`, `pages`, …). A list is the whole result: the fake pages it and answers a read by OID with that row. A function gets the query and answers one page. A read nothing was scripted for throws; it never looks like an empty result.
 - Writes need no script: a create answers a new OID, an update or operation by OID answers that OID. `onSend` scripts anything else, failures included.
+- `onSearch(rows)` answers `client.search`: the fake pages the rows, reports the total, and cuts each row to the selected keys; `fake.searched` is what was asked. It sends no request.
 - `sendGuarded` and `batch.run` work on assets addressed by OID that you scripted a row for: `fake.touch(oid)` is someone else changing the asset (the next write stamped earlier is a conflict), `fake.remove(oid)` is it being deleted.
 - `resolve.numbers` finds a number among the scripted rows; `localize` answers `onLocalize` labels and echoes any other tag; `fake.transport` can be the transport of a client your code builds itself.
 - `onList(type, rows)` answers `client.data.list` the same way. `onRequest(path, answer)` answers any other endpoint in its own shape; with `new FakeAgilityClient({ metamodel })` (a meta.v1 document) a response captured from a server reads translated, as it would live. An `Error` as an answer is thrown.

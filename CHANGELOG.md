@@ -1,6 +1,25 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-alpha.9
+
+### Added
+
+- **`client.search(text, { types, select?, findin?, filter?, where?,
+  with?, sort?, page })`**: text search across asset types, answered as
+  `{ rows, total, more }`: one page of mixed rows in one server-side
+  order. `types` is required. `select` and `findin` take plain attribute
+  names, and each row has every selected key under that name: its value
+  if the row's type defines the attribute, `null` if not, so a Story and a
+  Request both have `Number`. Nothing type-qualified is written or read.
+  A consumer that built this from `client.data.list("BaseAsset", …)` with
+  one `<Type>.Number` select per type replaces it with one call.
+  (a CLI consumer and a chat-bot consumer.)
+- **`client.deleted(type, params)`**: deleted assets of a type, as
+  `{ rows, total, more }`.
+- `FakeAgilityClient.onSearch(rows)` and `fake.searched`, to test code
+  that searches.
+- `@versionone/agility-sdk/services` has `search`. The root exports the
+  types `SearchOptions`, `SearchResult`, `SearchRow`.
 
 ### Changed
 
@@ -13,9 +32,12 @@
 
 ### Documented
 
-- Text search is `client.query` with `find` and `findin`: README,
-  "Searching", with the server's matching rules, each proved by a live
-  test. The README's table no longer sends a search to `client.data.list`.
+- README, "Searching": a search within one type or family is
+  `client.query` with `find` and `findin`; across types it is
+  `client.search`. The server's matching rules are stated (every word,
+  whole words, stemming, `*`, the few seconds the text index trails a
+  write), each proved by a live test. The README's table no longer sends
+  a search to `client.data.list`.
 
 ### Repository
 

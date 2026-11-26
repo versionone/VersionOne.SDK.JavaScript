@@ -65,6 +65,19 @@ selected, and keeps a dotted key that has no Ref to fold onto. An
 integration test reads one asset through all three paths and compares
 the keys.
 
+One addition, for the one read whose page mixes unrelated types
+(`client.search`): **you name an attribute once, plainly, and each row has
+that key — its value if the row's type defines the attribute, null if it
+does not.** This is the only place a row carries a key its own type lacks.
+The caller never writes or reads a type-qualified name (`Story.Number`):
+the schema says which of the searched types define `Number`, the service
+asks each, and the key is `Number`. A relation on such a row is a bare
+`{ _oid }`; a display value is asked for as a path (`"Scope.Name"`). None
+of this depends on which endpoint answers the search: rest-1 does today,
+because it alone takes a subtype's attribute from a base type on
+instances before the release that lets api/asset do it, and the route may
+move without the call or its rows changing.
+
 Corollaries:
 
 - Envelope types live **inside the wire module that owns them**

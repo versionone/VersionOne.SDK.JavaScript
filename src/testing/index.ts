@@ -18,6 +18,7 @@ import { AgilityApiClient } from "../client";
 export { CONFORMANCE_BASE_URL, fetchFrom, transportConformance } from "./transportConformance";
 export type { ConformanceCheck, ConformanceRequest, ConformanceResponse, ConformanceServer } from "./transportConformance";
 import type { ClientConfig } from "../core/clientConfig";
+import { DEFAULT_SELECT, type SearchOptions, type SearchResult, type SearchRow } from "../services/search";
 import { ApiError, UsageError, apiErrorFromResponse } from "../core/errors";
 import type { RequestOptions, Transport } from "../core/transport";
 import type { Asset, Oid } from "../types/asset";
@@ -343,6 +344,8 @@ function toAssetDocument(row: FakeRow): Record<string, unknown> {
  *   simulation with its own answer. A write scoped by a query cannot be
  *   previewed by the fake (it evaluates no filter): script that preview
  *   with `onRequest`.
+ * - `onSearch(rows)` answers `client.search`: rows in the model's shape,
+ *   paged by the fake, with the total; what was searched is in `searched`.
  * - `onList(type, rows)` answers `client.data.list` the same way: rows in
  *   the model's shape, a list paged by the fake.
  * - `onRequest(match, answer)` answers any other request by path, in the
@@ -360,6 +363,9 @@ export class FakeAgilityClient extends AgilityApiClient {
   readonly asked: QueryBody[];
   /** Every batch that carried a write, in order, as sent: a Ref is written as its OID token. */
   readonly sent: Command[][];
+  /** Every search made, in order: its text and options. */
+  readonly searched: { text: string; options: SearchOptions }[] = [];
+  private readonly searches: (FakeRows | Error | ((text: string, options: SearchOptions) => FakeRows))[] = [];
   private readonly script: Script;
 
   constructor(config: Partial<ClientConfig> & FakeOptions = {}) {
@@ -408,6 +414,43 @@ export class FakeAgilityClient extends AgilityApiClient {
   onList(match: ListMatch, answer: FakeRows | Error | ((type: string, params: Record<string, string | undefined>) => FakeRows)): this {
     this.script.lists.push({ match, answer });
     return this;
+  }
+
+  /**
+   * Script what `client.search` answers: rows in the model's shape (a
+   * list is the whole result: the fake pages it and reports its length
+   * as the total), a function of the text and options answering one page,
+   * or an Error to throw. The answer scripted last wins. No text is
+   * matched and no filter evaluated; each row is cut to the keys the
+   * search selected, null where the row has none, as live.
+   */
+  onSearch(answer: FakeRows | Error | ((text: string, options: SearchOptions) => FakeRows)): this {
+    this.searches.push(answer);
+    return this;
+  }
+
+  /**
+   * `client.search` on the fake: the same refusals before anything is
+   * asked (no text, no types, no page), then the scripted answer. It sends
+   * no request, so a test does not depend on which endpoint a search uses.
+   */
+  override async search<Row extends { _oid: Oid } = SearchRow>(text: string, options: SearchOptions): Promise<SearchResult<Row>> {
+    if (typeof text !== "string" || !text.trim()) throw new UsageError("search needs text: the server answers a search for nothing with no rows, which would read as \"nothing matches\"");
+    if (!options?.page) throw new UsageError("search without a page: every read must be bounded");
+    if (!Array.isArray(options.types) || !options.types.length) throw new UsageError("search needs `types`: the asset types to search, such as [\"Story\", \"Defect\", \"Request\"]; there is no default");
+    this.searched.push({ text, options });
+    const answer = this.searches.at(-1);
+    if (answer === undefined) throw new UsageError(`FakeAgilityClient: no answer scripted for search(${JSON.stringify(text)}); script one with onSearch`);
+    if (answer instanceof Error) throw answer;
+    const answered = typeof answer === "function" ? answer(text, options) : answer;
+    const whole = Array.isArray(answered) && typeof answer !== "function";
+    const all = (Array.isArray(answered) ? answered : (answered as { rows: readonly FakeRow[] }).rows) as readonly FakeRow[];
+    const { size, start } = options.page;
+    const page = whole ? all.slice(start, start + size) : all;
+    const total = Array.isArray(answered) ? (whole ? all.length : null) : (answered as { total?: number | null }).total ?? null;
+    const select = [...new Set(options.select ?? DEFAULT_SELECT)];
+    const rows = page.map((row) => Object.fromEntries([["_oid", row._oid], ...select.map((name) => [name, (row as Record<string, unknown>)[name] ?? null])]) as unknown as Row);
+    return { rows, total, more: total === null ? rows.length === size : start + rows.length < total };
   }
 
   /** Script labels for `client.localize`: tag → label. A tag nothing scripted answers itself, as loc-2 answers a tag it does not know. */

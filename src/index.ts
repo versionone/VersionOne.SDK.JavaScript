@@ -41,6 +41,7 @@ export { AttachmentUploadError, INLINE_LIMIT } from "./services/attachments";
 export type { AddOptions as AttachmentAddOptions, AddedAttachment, AttachmentFile, AttachmentInfo, GetOptions as AttachmentGetOptions, ListOptions as AttachmentListOptions, ListedAttachment } from "./services/attachments";
 export { fromBase64, toBase64 } from "./wire/attachment";
 export type { Explanation } from "./services/explain";
+export type { SearchOptions, SearchResult, SearchRow } from "./services/search";
 export { isAssetNumber } from "./services/resolve";
 export type { Resolution, ResolvedAsset } from "./services/resolve";
 export { ConflictError, GuardedPassError, UnguardableError, unguardable } from "./services/guard";

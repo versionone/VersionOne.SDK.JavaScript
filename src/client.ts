@@ -10,6 +10,7 @@ import * as fieldsService from "./services/fields";
 import * as guard from "./services/guard";
 import * as resolve from "./services/resolve";
 import { Schema, type TypeCache } from "./services/schema";
+import * as searchService from "./services/search";
 import type { Asset, Oid } from "./types/asset";
 import type { Attachment } from "./types/assets/Attachment";
 import type { Member } from "./types/assets/Member";
@@ -303,6 +304,33 @@ export class AgilityApiClient {
       return rest1.list<Row>(this.transport, type, params);
     }
   };
+
+  /**
+   * Text search across asset types: one page of mixed rows in one order,
+   * with the total. `types` is required (there is no default set of
+   * types). `select` and `findin` take plain attribute names: a row has
+   * each selected key under that name, null where its type has no such
+   * attribute, so `Number` is simply `row.Number` for a Story and a
+   * Request alike. To search within one type or one family of types, an
+   * ordinary read with `find` does it: `client.query({ from, find, … })`.
+   *
+   * The text index trails a write by a few seconds: an asset created a
+   * moment ago is found by its Number at once and by its words shortly
+   * after.
+   */
+  async search<Row extends { _oid: Oid } = searchService.SearchRow>(text: string, options: searchService.SearchOptions): Promise<searchService.SearchResult<Row>> {
+    return searchService.search<Row>(this.transport, this.schema, text, options);
+  }
+
+  /**
+   * Deleted assets of a type: one page, each row's `AssetState` saying
+   * `"Deleted"`. No other read returns a deleted asset.
+   */
+  async deleted<Row extends { _oid: Oid } = searchService.SearchRow>(type: string, params: Omit<rest1.ReadParams, "deleted">): Promise<searchService.SearchResult<Row>> {
+    searchable(type, params.find);
+    const { rows, total, more } = await rest1.list<Row & Asset>(this.transport, type, { ...params, filter: [...(params.filter ?? []), "IsDeleted='true'"], deleted: true, needTotal: params.needTotal ?? true });
+    return { rows, total, more };
+  }
 
   /**
    * An asset's history: one row per version, newest paging as asked, each
