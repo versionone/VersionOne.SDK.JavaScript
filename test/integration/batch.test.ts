@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { AgilityApiClient } from "../../src/client";
 import { assetApi } from "../../src/wire";
-import { describeInstance, fixtureName, instance } from "./instance";
+import { deleteFixtures, describeInstance, fixtureName, instance } from "./instance";
 
 /**
  * batch against a real instance, round trip: a batch that updates two
@@ -27,7 +27,7 @@ describeInstance("batch (live)", () => {
     created.push(a, b);
   });
   afterAll(async () => {
-    for (const oid of created) await assetApi.send(t, [{ from: oid, execute: "Delete" }]);
+    await deleteFixtures(t, created);
   });
 
   it("a guarded batch's receipt names what it created and touched, and its reverse puts everything back", async () => {

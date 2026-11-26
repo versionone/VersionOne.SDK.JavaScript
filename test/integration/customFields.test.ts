@@ -4,7 +4,7 @@ import { Schema } from "../../src/services/schema";
 import type { Story } from "../../src/types/assets/Story";
 import { assetApi } from "../../src/wire";
 import { createCustomFields, customTokenOf, deleteCustomFields, findCustomField } from "./customFields";
-import { describeLocalInstance, fixtureName, instance } from "./instance";
+import { deleteFixtures, describeLocalInstance, fixtureName, instance } from "./instance";
 
 /**
  * Custom attributes end to end: definitions created through the classic
@@ -26,7 +26,7 @@ describeLocalInstance("custom fields (live, via the classic UI gadget)", () => {
   }, SLOW);
 
   afterAll(async () => {
-    if (created.length) await assetApi.send(t, created.map((oid) => ({ from: oid, execute: "Delete" })));
+    await deleteFixtures(t, created);
     await deleteCustomFields(t, [numeric, flag]);
     expect(await findCustomField(t, numeric)).toBeNull();
   }, SLOW);

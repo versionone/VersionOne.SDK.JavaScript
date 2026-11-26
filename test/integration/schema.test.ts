@@ -3,7 +3,7 @@ import { AgilityApiClient } from "../../src/client";
 import { Schema } from "../../src/services/schema";
 import type { Story } from "../../src/types/assets/Story";
 import { assetApi } from "../../src/wire";
-import { describeInstance, fixtureName, instance } from "./instance";
+import { deleteFixtures, describeInstance, fixtureName, instance } from "./instance";
 
 /**
  * The schema service and schema-driven translation against a real
@@ -32,7 +32,7 @@ describeInstance("schema (live)", () => {
   afterAll(async () => {
     // Children before parents; the status last, once nothing points at it.
     const order = (oid: string) => (oid.startsWith("Task:") ? 0 : oid.startsWith("Story:") ? 1 : 2);
-    for (const oid of [...created].sort((a, b) => order(a) - order(b))) await assetApi.send(t, [{ from: oid, execute: "Delete" }]);
+    await deleteFixtures(t, [...created].sort((a, b) => order(a) - order(b)));
   });
 
   it("loads a type from meta.v1 once, and a type the instance does not have is null — the expect-zero control", async () => {

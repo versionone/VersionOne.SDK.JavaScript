@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { ConflictError, sendGuarded } from "../../src/services/guard";
 import { assetApi } from "../../src/wire";
-import { describeInstance, fixtureName, instance } from "./instance";
+import { deleteFixtures, describeInstance, fixtureName, instance } from "./instance";
 
 /**
  * The guard against a real instance. Brings its own Stories (deleted
@@ -25,7 +25,7 @@ describeInstance("guard (live)", () => {
     [a, b] = res.assetsCreated.oidTokens.map(assetApi.momentless) as [string, string];
     created.push(a, b);
   });
-  afterAll(async () => { for (const oid of created) await assetApi.send(t, [{ from: oid, execute: "Delete" }]); });
+  afterAll(() => deleteFixtures(t, created));
 
   it("an unchanged asset is updated; one changed after it was read is a conflict and keeps the other writer's change", async () => {
     // Simulate the race: wrap the transport so "someone else" edits b right after the Moments are read.

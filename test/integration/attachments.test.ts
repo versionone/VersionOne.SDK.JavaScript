@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { AgilityApiClient } from "../../src/client";
 import { assetApi } from "../../src/wire";
-import { describeInstance, fixtureName, instance } from "./instance";
+import { deleteFixtures, describeInstance, fixtureName, instance } from "./instance";
 
 /**
  * Attachments against a real instance: add inline and in two steps, list,
@@ -26,7 +26,7 @@ describeInstance("attachments (live)", () => {
     made.push(story);
   });
   afterAll(async () => {
-    for (const oid of [...made].reverse()) await assetApi.send(t, [{ from: oid, execute: "Delete" }]);
+    await deleteFixtures(t, [...made].reverse());
   });
 
   it("a small file inline and a large one in two steps both store their bytes; list sees both, metadata only", async () => {
