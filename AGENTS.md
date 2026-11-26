@@ -115,10 +115,12 @@ change, by design: `layers.test.ts` (imports point down the layer table),
 
 ## Reference data on the testing instance
 
-The API-testing instance holds four assets that are there to stay, so
+The API-testing instance holds nine assets that are there to stay, so
 that a consumer can prove valid values (`client.lists`, api/ValidValues)
-and status-by-name against real values: a team with its own process and
-the three statuses it owns, in this Order.
+and status-by-name against real values.
+
+A team with its own process and the three statuses it owns, in this
+Order:
 
 | OID | Name | |
 |---|---|---|
@@ -127,16 +129,30 @@ the three statuses it owns, in this Order.
 | `StoryStatus:152497` | sdk-reference In Progress | RollupState Active |
 | `StoryStatus:152498` | sdk-reference Done | RollupState Closed |
 
-A Story created as a fixture with `Team: "Team:152495"` is offered exactly
-those three statuses. No story status on the instance is selected in a
-scheme, so a Story on no team is still offered none.
+Five global story statuses with the product's own names, on no team,
+selected in the Default Scheme (`Scheme:1000`, which nearly every project
+on the instance uses), in this Order. All five read RollupState Active,
+`Done` and `Accepted` included:
 
-**Nothing creates, edits, closes, reorders or deletes anything named
-`sdk-reference`.** `sdk-reference` marks permanent data; `sdk-integration`
-marks what a test creates and deletes in its own run. `deleteFixtures`
-reads the names first and refuses a list that contains reference data
-(test/integration/referenceData.ts), and no test may assume the instance
-has no status, team or other asset of a kind.
+| OID | Name |
+|---|---|
+| `StoryStatus:152567` | Future |
+| `StoryStatus:152568` | In Progress |
+| `StoryStatus:152569` | QA / Test |
+| `StoryStatus:152570` | Done |
+| `StoryStatus:152571` | Accepted |
+
+A Story created as a fixture in the system project (`Scope:0`) on no team
+is offered exactly those five; one with `Team: "Team:152495"` exactly the
+three `sdk-reference` ones.
+
+**Nothing creates, edits, closes, reorders or deletes any of the nine, or
+anything named `sdk-reference`, and nothing changes what `Scheme:1000`
+selects.** `sdk-reference` marks permanent data; `sdk-integration` marks
+what a test creates and deletes in its own run. `deleteFixtures` refuses a
+list that contains any of the nine OIDs or any asset whose name starts
+with `sdk-reference` (test/integration/referenceData.ts), and no test may
+assume the instance has no status, team or other asset of a kind.
 
 ## Pull requests and releases
 

@@ -192,9 +192,9 @@ committed files.
   Suites bring their own data and assume nothing about what else the
   instance holds, and fixtures are named `sdk-integration …` and deleted
   by exact OID by the suite that made them. The API-testing instance also
-  holds a little permanent reference data, named `sdk-reference …`
-  (AGENTS.md lists it): nothing creates, edits or deletes it, and
-  `deleteFixtures` refuses a list that contains any of it.
+  holds a little permanent reference data (AGENTS.md lists it by OID):
+  nothing creates, edits or deletes it, and `deleteFixtures` refuses a
+  list that contains any of it.
 
 The API's real behaviours — silent empties, projection order, full-text
 index lag, what a preview echoes — are what fakes cannot reproduce; the

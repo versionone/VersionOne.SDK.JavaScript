@@ -3,7 +3,7 @@ import { AgilityApiClient } from "../../src/client";
 import type { ApiError } from "../../src/core/errors";
 import { validValues } from "../../src/wire";
 import { deleteFixtures, describeInstance, fixtureName, instance, sendFixtures } from "./instance";
-import { reference } from "./referenceData";
+import { reference, schemeStatuses } from "./referenceData";
 
 /**
  * Valid values against a real instance: what api/ValidValues answers for a
@@ -154,6 +154,19 @@ describeInstance("valid values (live)", () => {
     // The suite's own team is not offered them, and they are not this suite's to delete.
     expect((await client.lists.values({ asset: o["onTeam"]!, attributes: ["Status"] })).Status!.map((r) => r._oid)).not.toContain(reference.done);
     expect(created).not.toContain(reference.team);
+  });
+
+  it("the permanent statuses selected in the default scheme (AGENTS.md) are what a story in the system project on no team is offered; read only, and skipped where the instance has none", async (context) => {
+    const present = await client.query({ from: "StoryStatus" as never, select: ["Name"], filter: ["ID=$oids"], with: { $oids: schemeStatuses.map((s) => s._oid) }, page: { size: 5, start: 0 } });
+    if (present.length !== schemeStatuses.length) return context.skip();
+    const offered = await client.lists.values({ type: "Story", scope: "Scope:0", attributes: ["Status"] });
+    expect(offered.Status).toEqual(schemeStatuses.map((s) => ({ ...s })));
+    expect(await client.lists.value({ type: "Story", scope: "Scope:0", attribute: "Status", name: "done" })).toEqual({ _oid: "StoryStatus:152570", Name: "Done" });
+    // "In Progress" and the reference team's "sdk-reference In Progress" are different lists: each context has its own.
+    expect(await client.lists.value({ type: "Story", scope: "Scope:0", attribute: "Status", name: "in progress" })).toMatchObject({ _oid: "StoryStatus:152568" });
+    await expect(client.lists.value({ type: "Story", scope: "Scope:0", team: reference.team, attribute: "Status", name: "in progress" })).rejects.toMatchObject({ code: "NO_SUCH_VALUE" });
+    // The suite's own scope has its own scheme, so it is offered none of them.
+    expect((await client.lists.values({ asset: o["noTeam"]!, attributes: ["Status"] })).Status!.map((r) => r._oid)).not.toContain("StoryStatus:152570");
   });
 
   it("fields.describe says which of a form's attributes are list-typed", async () => {
