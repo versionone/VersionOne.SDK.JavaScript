@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import { AgilityApiClient } from "../../src/client";
 import { CONCRETE_SUBTYPES } from "../../src/types/assets/subtypes";
 import { queryV1, rest1 } from "../../src/wire";
-import { deleteFixtures, describeInstance, instance } from "./instance";
+import { deleteFixtures, describeInstance, instance, sendFixtures } from "./instance";
 
 /**
  * Text search against a real instance: `find` and `findin` on an ordinary
@@ -26,13 +26,13 @@ describeInstance("search (live)", () => {
     (await client.query<{ _oid: string }>({ from: "Workitem", select: ["Name"], findin: ["Name"], sort: ["ID"], page, ...q })).map((r) => r._oid);
 
   beforeAll(async () => {
-    const made = await client.send([
+    const made = await sendFixtures(t, [
       { AssetType: "Story", Name: `sdk-integration ${word} warehouse shipping`, Description: `described as ${word}desc`, Scope: "Scope:0" },
       { AssetType: "Defect", Name: `sdk-integration ${word} accounting`, Scope: "Scope:0" },
       { AssetType: "Issue", Name: `sdk-integration ${word} blocker`, Scope: "Scope:0" },
       { AssetType: "Story", Name: `sdk-integration ${word} deleted`, Scope: "Scope:0" }
-    ], { throwOnFailure: true });
-    [story, defect, issue, gone] = made.created as [string, string, string, string];
+    ]);
+    [story, defect, issue, gone] = made.assetsCreated.oidTokens.map((oid) => oid.split(":").slice(0, 2).join(":")) as [string, string, string, string];
     created.push(story, defect, issue, gone);
     await client.send([{ from: gone, execute: "Delete" }, { from: defect, execute: "QuickClose" }], { throwOnFailure: true });
     storyNumber = String((await client.get(story, ["Number"]))!.Number);
