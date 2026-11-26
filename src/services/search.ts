@@ -57,6 +57,9 @@ export interface SearchOptions {
    * expression, and a condition across types has no plain spelling: a term
    * on an attribute only some types have is type-qualified by the caller
    * (`"(Workitem.Owners.IsSelf='true'|Request.Owner.IsSelf='true')"`).
+   * Qualify such a term whatever `types` is: an unqualified
+   * `"Owners.Name='x'"` happens to be accepted when one type is searched
+   * and is refused when several are.
    */
   filter?: readonly string[];
   /** Equality terms: attribute → value, the value carried as a variable. */

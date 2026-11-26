@@ -120,6 +120,9 @@ describe("FakeAgilityClient", () => {
       missing: ["S-99999"]
     });
     expect(await fake.resolve.ref("S-01001")).toMatchObject({ _oid: "Story:1" });
+    // A number of a type that is itself a number root (a Request), scripted like any other: found, and no other root needs a script (a CLI consumer's test).
+    fake.onQuery("Request", [{ _oid: "Request:3", Number: "R-3", Name: "Faster export", AssetState: "Active" }]);
+    expect(await fake.resolve.numbers(["R-3", "S-01001"])).toMatchObject({ found: [{ _oid: "Request:3", AssetType: "Request", Number: "R-3" }, { _oid: "Story:1" }], missing: [] });
     expect(await new FakeAgilityClient().resolve.ref("S-1")).toBeNull();
   });
 

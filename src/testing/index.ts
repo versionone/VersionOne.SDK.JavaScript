@@ -273,13 +273,19 @@ function respond(script: Script, request: RequestOptions): unknown {
     };
     const asked = bodies.filter(({ body }) => isQuery(body)).map(({ body }) => body as QueryBody);
     let answers: { rows: Asset[]; total: number | null }[];
-    if (asked.length && asked.every(isNumberLookup) && !asked.some((q) => hitFor(script, q, q.from))) {
+    if (asked.length && asked.every(isNumberLookup)) {
       // resolve.numbers asks every number root at once; which roots is the SDK's business, so the fake answers
-      // from every row a test scripted, by Number, whatever its type. A number no row has is simply not found.
+      // from every row a test scripted as a list, by Number, whatever its type and whichever types have rows.
+      // A number no row has is simply not found. A root a test scripted a function or an Error for answers that.
+      const own = (q: QueryBody) => { const hit = hitFor(script, q, q.from); return typeof hit?.answer === "function" || hit?.answer instanceof Error; };
       const wanted = new Set((asked[0]!.with!.$numbers as string[]).map((n) => n.toUpperCase()));
       const found = scriptedRows(script).filter((row) => typeof row.Number === "string" && wanted.has(row.Number.toUpperCase()));
-      script.seen.asked.push(...asked);
-      answers = asked.map((_, i) => ({ rows: i === 0 ? found : [], total: i === 0 ? found.length : 0 }));
+      const first = asked.findIndex((q) => !own(q));
+      answers = asked.map((q, i) => {
+        if (own(q)) return answerQuery(script, q);
+        script.seen.asked.push(q);
+        return { rows: i === first ? found : [], total: i === first ? found.length : 0 };
+      });
     } else answers = asked.map((q) => answerQuery(script, q, q.from.startsWith("@") ? createdBy(q.from) : undefined));
     const tokens = (oidTokens: Oid[]) => ({ oidTokens, count: oidTokens.length });
     return {
@@ -470,6 +476,9 @@ export class FakeAgilityClient extends AgilityApiClient {
    * none, and it works the same for a client your code builds on
    * `fake.transport`. Without a `metamodel` the fake's instance has any
    * type a search names; script the search before the first one is made.
+   * With a `metamodel` it has that metamodel's types only, as a server
+   * has its own: a search naming a type the document leaves out is
+   * refused, so give a search test the whole document or none.
    */
   onSearch(answer: SearchAnswer): this {
     this.script.searches.push(answer);
