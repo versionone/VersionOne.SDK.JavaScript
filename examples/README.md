@@ -1,6 +1,6 @@
 # Examples
 
-Ten short programs, one per task, each runnable as it stands. Read them
+Eleven short programs, one per task, each runnable as it stands. Read them
 in order; each says at the top what it does.
 
 | File | Shows | Writes? |
@@ -15,6 +15,7 @@ in order; each says at the top what it does.
 | `08-custom-transport.ts` | A `Transport` of your own (a timed wrapper), checked with `transportConformance` | no; a live read only if an instance is set |
 | `09-browser-session.ts` | Cookie auth for a browser app: `credentials`, `onUnauthorized`, and when `"retry-write"` is yours to answer | no instance at all (a stand-in server) |
 | `10-search.ts` | `client.search` across asset types; `find` on an ordinary read within one family | no |
+| `11-axios-transport.ts` | A `Transport` over an axios instance, and an axios adapter that lets `transportConformance` stand in for the network | no instance at all |
 
 ## Running one
 

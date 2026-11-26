@@ -61,9 +61,15 @@
   },
   "typesVersions": {
     "*": {
-      "wire": ["dist/wire.d.ts"],
-      "services": ["dist/services.d.ts"],
-      "testing": ["dist/testing.d.ts"]
+      "wire": [
+        "dist/wire.d.ts"
+      ],
+      "services": [
+        "dist/services.d.ts"
+      ],
+      "testing": [
+        "dist/testing.d.ts"
+      ]
     }
   },
   "files": [
@@ -88,6 +94,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
+    "axios": "^1.21.1",
     "rimraf": "^6.0.1",
     "tsup": "^9.0.0",
     "typescript": "^5.8.2",
