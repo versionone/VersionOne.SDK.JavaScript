@@ -60,7 +60,9 @@ npm test
 | Write with a record and an undo | `client.batch.run(commands, { guard })` then `client.batch.reversible(receipt)` | `guard` has no default. |
 | Copy an asset, or run an operation for its result | `client.copy(oid)` / `client.operate(oid, op)` | |
 | Defaults for a new asset | `client.template(type, { ctx })` | Nothing is created. |
-| What a form needs | `client.fields.describe(type, scope)` | Required, visible and important attributes. |
+| What a form needs | `client.fields.describe(type, scope)` | Required, visible and important attributes, and which of them are list-typed. |
+| The values a Status, Priority or other list may take | `client.lists.values({ asset, attributes })` or `{ type, scope, team?, attributes }` | As the project's scheme and the team's process allow. See "List values". |
+| The value a name means | `client.lists.value({ asset, attribute, name })` | `{ _oid, Name }` to write; `NO_SUCH_VALUE` with the valid values otherwise. |
 | Files | `client.attachments.*`, `client.embeddedImages.*` | |
 | A link for a person | `client.urls.asset(oidOrNumber)` | |
 | An error, said to a person | `client.explain(error)` | "Project is required.", with the instance's labels. |
@@ -124,6 +126,30 @@ A date is spelled one way on every read: `"2026-09-06T13:52:51.903"`, three deci
 
 Rows are typed from what you select, against the product's metamodel: a selected key is its value or `null`, never `undefined`. For an attribute your instance has and the generated model does not (a custom field's relation, a product module's attribute), name your own row type at the call: `client.query<MyRow>(q)` needs only `_oid` on `MyRow`.
 
+### List values
+
+Which values a list-typed attribute may take depends on where the asset is. `client.lists` asks the server, as the product's own pickers do:
+
+```ts
+// For an existing asset: its own project and team apply.
+const { Status, Priority } = await client.lists.values({ asset: "Story:1077", attributes: ["Status", "Priority"], select: ["Order"] });
+// → Status: [{ _oid: "StoryStatus:133", Name: "Future", Order: "115" }, …], in the list's own order
+
+// For one not created yet: say where it will be.
+await client.lists.values({ type: "Defect", scope: "Scope:1005", team: "Team:1030", attributes: ["Priority"] });
+
+// From a name a person typed (or an OID) to the value to write.
+const done = await client.lists.value({ asset: "Story:1077", attribute: "Status", name: "done" });
+await client.send([{ from: "Story:1077", update: { Status: done._oid } }]);
+```
+
+- **What decides.** The project's scheme: only the values selected in it. A team that has its own process (it owns statuses; `Team.HasProcess`) replaces the scheme's statuses with its own, and `{ asset }` alone applies that, so there is nothing to switch on. A team without a process changes nothing. An inactive value is left out, and "no value" is never an entry. The order is the values' `Order`.
+- **Resolve before you write.** The server refuses a status outside a team's process, but it accepts one that the project's scheme does not select. Nothing but this lookup stops a write from setting a value the project does not use.
+- **`lists.value` matches the whole name**, ignoring case and surrounding space. `match: "prefix"` also accepts the start of the name or of a word in it ("prog" finds "In Progress") when no name matches whole. It never picks among several: no match is an `ApiError` coded `NO_SUCH_VALUE`, more than one is `AMBIGUOUS_VALUE`, and both carry the candidates as rows in `error.details.values` (every valid value, or the ones that matched), ready to offer.
+- **Only lists.** The server's endpoint takes no page and no filter and would answer every member, team or iteration in the project, so for `Owners`, `Team`, `Timebox` and any relation that is not to a list type, `client.lists` throws a `UsageError` before sending anything. There is no "valid values" call for those: read them with `client.query({ from: "Member", filter, page })`, bounded like every other read.
+- **Costs and limits.** One request per attribute, sent one after another; nothing is cached, because an administrator can change a scheme at any time. `select` takes attributes of the value itself (`Order`, `RollupState`), not paths and not dates, and every value arrives as a string. On an instance without the endpoint the call fails as the server's 404; it does not fall back to every value of the list type, which would be a different answer.
+- `client.fields.describe(type, scope).lists` says which of a form's attributes are list-typed and to which list type each points.
+
 ### Reference
 
 Changes between alphas are in `CHANGELOG.md`, each with its migration line.
@@ -174,6 +200,7 @@ expect(fake.sent[0]).toEqual([{ from: "Story:1", execute: "QuickClose" }]);     
 - `onSearch(rows)` answers a search, whether your code calls `fake.search` or builds its own client on `fake.transport`: the fake pages the rows and reports the total, each row comes back with exactly the selected keys, and `fake.searched` is what was asked. Script it before the first search.
 - `sendGuarded` and `batch.run` work on assets addressed by OID that you scripted a row for: `fake.touch(oid)` is someone else changing the asset (the next write stamped earlier is a conflict), `fake.remove(oid)` is it being deleted.
 - `resolve.numbers` finds a number among the scripted rows; `localize` answers `onLocalize` labels and echoes any other tag; `fake.transport` can be the transport of a client your code builds itself.
+- `onValues({ Status: [{ _oid: "StoryStatus:135", Name: "Done" }] })` scripts the valid values by attribute (rows, a function of what was asked, or an Error). `lists.value`'s matching and its errors are the client's own, and `fake.valuesAsked` records each request: the type, the attribute and the asset or the scope and team.
 - `onList(type, rows)` answers rest-1's list read the same way (`client.deleted`, and `rest1.list` from `/wire`). `onRequest(path, answer)` answers any other endpoint in its own shape; with `new FakeAgilityClient({ metamodel })` (a meta.v1 document) a response captured from a server reads translated, as it would live. An `Error` as an answer is thrown.
 - A custom `Transport` has its own suite: `transportConformance(make)` answers the SDK's expectations of a transport as named checks (`for (const c of transportConformance(make)) it(c.name, c.run)`), and the SDK's fetch transport runs the same ones.
 - The fake evaluates no filter or sort and applies no write. It proves what your code asks and what it does with the answer; what the server answers is for a test against an instance.

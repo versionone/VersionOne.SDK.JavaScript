@@ -1,5 +1,59 @@
 # Changelog
 
+## 1.0.0-alpha.12
+
+### Added
+
+- **`client.lists`: the values a list-typed attribute may take, and the
+  one a name means.** For Status, Priority, Source, Category and any
+  other relation to a list type, over the server's api/ValidValues, as
+  the product's own pickers ask it.
+  - `client.lists.values({ asset, attributes, select? })` for an existing
+    asset, or `{ type, scope, team?, attributes }` for one not created
+    yet: a map from attribute to rows `{ _oid, Name, …selected }` in the
+    list's own order. One request per attribute, one after another;
+    nothing is cached.
+  - `client.lists.value({ asset | type+scope, attribute, name, match? })`:
+    the one value a name means there, matched whole, ignoring case and
+    surrounding space; `name` may be an OID, which is checked to be among
+    the valid values; `match: "prefix"` also accepts the start of the
+    name or of a word in it when no name matches whole. No match is an
+    `ApiError` coded `NO_SUCH_VALUE`, several is `AMBIGUOUS_VALUE` (both
+    `kind: "invalid"`), each with the candidates as rows in
+    `details.values`.
+  - What decides, proved live on fixtures: the scope's scheme (only the
+    values selected in it); a team that owns statuses replaces the
+    scheme's statuses with its own, and `{ asset }` alone applies that;
+    a team that owns none changes nothing; an inactive value is left
+    out; there is no "none" entry; a base type (`PrimaryWorkitem`) is
+    accepted.
+  - The server enforces less on a write than this list says: it refuses
+    a status outside a team's process, and accepts one the scope's
+    scheme does not select. Resolve a name with `lists.value` before
+    writing it.
+  - Only relations to a list type. The endpoint takes no page and no
+    filter and answers any attribute whole, so `Owners`, `Team`,
+    `Timebox` and the like are a `UsageError` before anything is sent,
+    naming the bounded read to use (`client.query` on the related type
+    with a filter and a page). An attribute the type does not have, a
+    date in `select` (the endpoint writes dates in the server's culture
+    format) and a path in `select` are refused the same way.
+  - No fallback: on an instance without the endpoint the call fails as
+    the server's 404, never as an empty list. From which product release
+    the endpoint exists is not established here.
+- `client.fields.describe(type, scope)` answers `lists` as well: which
+  of the required, visible and important attributes are list-typed, and
+  the list type of each (`{ Status: "StoryStatus" }`). A consumer that
+  compares the whole answer with `toEqual` adds the key.
+- `/wire`: `validValues.forAsset` and `validValues.forNew`, the endpoint
+  as it is, unbounded; its header says what care that needs. `/services`:
+  `lists`.
+- `/testing`: `fake.onValues({ Status: rows })` scripts the valid values
+  by attribute (rows, a function of what was asked, or an Error), and
+  `fake.valuesAsked` records each request. Name matching and the two
+  errors are the client's own on the fake.
+- `examples/12-list-values.ts`.
+
 ## 1.0.0-alpha.11
 
 ### Breaking

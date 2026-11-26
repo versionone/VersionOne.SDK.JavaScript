@@ -56,8 +56,9 @@ Four paths, and `package.json`'s `exports` lists no others (spec 000 §5a):
 
 A new export goes on the lowest of these that serves it; the root grows
 only for something a client user writes or reads. On the client, reads are
-`client.query` / `queryPage` / `get`, `client.search` across asset types
-and `client.deleted`, and writes are `client.send`,
+`client.query` / `queryPage` / `get`, `client.search` across asset types,
+`client.deleted` and `client.lists` (the values a list-typed attribute may
+take), and writes are `client.send`,
 `client.preview` and `client.sendGuarded` (a guarded write compares each
 asset's `Moment`; what matched nothing is a conflict, never a success:
 spec 000 §6).

@@ -249,6 +249,13 @@ suite checks; one with a shorter timeout of its own simply rejects first.
 A timeout says the client stopped waiting, never that the server did not
 act, which is one more reason a write is not resent.
 
+One endpoint cannot be bounded at all: api/ValidValues takes no page and no
+filter, and answers for any attribute. The lists service therefore asks it
+only for relations to a list type (one that descends from List), which are
+short by nature, and refuses every other attribute before sending, naming
+the bounded read to use instead. The wire module says in its header that a
+caller using it directly takes that care itself.
+
 **Nothing is resent after a timeout, a read included.** A timeout or an
 abort ends the client's wait; it does not stop the work on the server. A
 query that timed out may still be running, and a request that ran out of
