@@ -128,6 +128,8 @@ export interface AttachmentFile extends AttachmentInfo {
   bytes: Uint8Array;
   /** The Content-Type attachment.img served the bytes with; null for an inline read. `ContentType` is the recorded one. */
   servedContentType: string | null;
+  /** The content as Base64, on an inline read only: it is how the content arrived, so a caller that wants Base64 need not encode the bytes again. */
+  base64?: string;
 }
 
 /**
@@ -140,7 +142,7 @@ export async function get(transport: Transport, id: Oid | string | number, optio
     if (!row) throw new ApiError(`attachment ${numericId(id)}: not found`, 404, "NOT_FOUND");
     const { Content: content, ...rest } = row as Asset & { Content?: unknown };
     if (typeof content !== "string") throw new ApiError(`attachment ${numericId(id)}: the row came without its Content`, 200, "BAD_RESPONSE", row);
-    return { ...infoOf(rest), bytes: fromBase64(content), servedContentType: null };
+    return { ...infoOf(rest), bytes: fromBase64(content), servedContentType: null, base64: content };
   }
   const meta = await info(transport, id);
   if (!meta) throw new ApiError(`attachment ${numericId(id)}: not found`, 404, "NOT_FOUND");

@@ -57,6 +57,7 @@ describeInstance("attachments (live)", () => {
     expect(decode(got.bytes)).toBe("inline read\n");
     expect(got).toMatchObject({ _oid: a._oid, id: a.id, Filename: "sdk-integration inline.txt", ContentType: "text/plain", servedContentType: null, Description: "one request" });
     expect(got).not.toHaveProperty("Content");
+    expect(got.base64).toBe(btoa("inline read\n")); // as it arrived: no re-encoding for a caller that wants Base64
     // The same bytes the two-request read serves.
     expect(decode((await client.attachments.get(a._oid)).bytes)).toBe("inline read\n");
     // A two-step attachment whose upload never happened reads as zero bytes; one that does not exist is NOT_FOUND.

@@ -32,13 +32,16 @@ export { importantName } from "./services/fields";
 // The wire modules themselves (assetApi, queryV1, rest1, meta, loc2, attachment, fields, select) and the
 // endpoints' envelope types are at "@versionone/agility-sdk/wire".
 
-// Services: what to do.
-export { Schema, TypeCache } from "./services/schema";
+// Services: their errors, the types of what they answer, and the few pure helpers a client user reaches for.
+// The services themselves, as free functions over a Transport, are at "@versionone/agility-sdk/services".
+export { TypeCache } from "./services/schema";
+export type { Schema } from "./services/schema";
 export { AttachmentUploadError, INLINE_LIMIT } from "./services/attachments";
 export type { AddOptions as AttachmentAddOptions, AttachmentFile, AttachmentInfo, GetOptions as AttachmentGetOptions, ListOptions as AttachmentListOptions, ListedAttachment } from "./services/attachments";
-export { CHUNK as RESOLVE_CHUNK, NUMBER_ROOTS, isAssetNumber, resolveNumbers, resolveRef } from "./services/resolve";
+export { fromBase64, toBase64 } from "./wire/attachment";
+export { isAssetNumber } from "./services/resolve";
 export type { Resolution, ResolvedAsset } from "./services/resolve";
-export { ConflictError, UNGUARDABLE_TYPES, UnguardableError, guard, sendGuarded, stampsOf, touchedBy, unguardable } from "./services/guard";
+export { ConflictError, GuardedPassError, UnguardableError, unguardable } from "./services/guard";
 export type { GuardedOptions, GuardedResult, Unguardable, UnguardableCode } from "./services/guard";
-export { BatchRecordError, BatchSendError, ReceiptVersionError, isReceipt, INVERSE, describe as describeBatch, namesOf, reverseOf, reversible, runBatch, snapshot } from "./services/batch";
+export { BatchRecordError, BatchSendError, ReceiptVersionError, isReceipt } from "./services/batch";
 export type { BatchOptions, Described, Drifted, NameLookupFailure, Named, Receipt, Reverse } from "./services/batch";

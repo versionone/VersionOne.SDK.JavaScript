@@ -45,7 +45,14 @@ export function assetStateOf(value: unknown): AssetStateValue | string | null {
  * not folded onto the Ref: it arrives under its own key, `row["Owners.Name"]`,
  * like everything a query selects.
  */
-export type Ref<T extends Asset = Asset> = { _oid: Oid } & Partial<Omit<T, "_oid">>;
+export type Ref<T extends Asset = Asset> = { _oid: Oid } & Partial<Omit<T, "_oid">> & { readonly [refTarget]?: T };
+
+/**
+ * Types only: the key under which a Ref remembers which asset type it
+ * points at, so a sub-select can be typed by the related type. Nothing has
+ * this property at run time, and a plain `{ _oid }` is still a Ref.
+ */
+export declare const refTarget: unique symbol;
 
 /** The value types an attribute can carry in the model. */
 export type AttributeValue = string | number | boolean | null | Ref | Ref[];

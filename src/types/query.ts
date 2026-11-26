@@ -12,7 +12,7 @@
  * unknown keys, as before. The model is one product version's metamodel;
  * an instance may know more, and the types say "unknown", never "no".
  */
-import type { Asset } from "./asset";
+import type { Asset, refTarget } from "./asset";
 import type { AssetTypeMap, AssetTypeName, ConcreteAssetTypeName } from "./assets/index";
 import type { List } from "./assets/List";
 
@@ -53,11 +53,36 @@ export type SelectPath<T> =
 /** The key a select entry puts on the row: the path itself, or a sub-select's `from`. */
 export type SelectKey<E> = E extends string ? E : E extends { from: infer F extends string } ? F : never;
 
-/** The value a selected key carries on rows of T: the attribute's type when the key is one, a number for an aggregate, unknown for a path the model cannot follow. */
-export type SelectValue<T, K> = K extends keyof T ? T[K] : K extends `${string}.@${string}` ? number : unknown;
+/**
+ * The value a selected key carries on rows of T: the attribute's type when
+ * the key is one, a number for an aggregate, unknown for a path the model
+ * cannot follow. A single relation is always `| null`, even one the
+ * metamodel calls required: the asset it pointed at may have been deleted
+ * (a Conversation's Topic, live 2026-11-26).
+ */
+export type SelectValue<T, K> = K extends keyof T ? (T[K] extends { _oid: string } ? T[K] | null : T[K]) : K extends `${string}.@${string}` ? number : unknown;
 
-/** Rows of T with exactly the entries of S selected (plus `_oid`, always sent). */
-export type Selected<T, S> = S extends readonly (infer E)[] ? Asset & { [K in SelectKey<E>]: SelectValue<T, K> } : Asset;
+/** The asset type behind a relation attribute's value (`Ref<Member>[]`, `Ref<Status> | null`), or Asset when it is not one. */
+type Related<V> = NonNullable<V> extends readonly (infer R)[] ? Target<R> : Target<NonNullable<V>>;
+type Target<R> = R extends { readonly [refTarget]?: infer X } ? (NonNullable<X> extends Asset ? NonNullable<X> : Asset) : Asset;
+
+/**
+ * What a sub-select `{ from: K, select: S }` puts on rows of T: rows of
+ * the related type with exactly S selected — a list for a multi-value
+ * relation, and one row or null for a single one (a single relation can
+ * be unset on a row whatever the metamodel says is required: the asset it
+ * pointed at may be gone). A `from` the model cannot follow (a path, a
+ * downcast, a filter) is rows of unknown shape.
+ */
+type SubSelected<T, K, S> = K extends keyof T
+  ? NonNullable<T[K]> extends readonly unknown[] ? Selected<Related<T[K]>, S>[] : Selected<Related<T[K]>, S> | null
+  : Asset[] | Asset | null;
+
+/** The value one select entry puts on rows of T. */
+type EntryValue<T, E> = E extends string ? SelectValue<T, E> : E extends { from: infer K; select: infer S } ? SubSelected<T, K, S> : E extends { from: infer K } ? SubSelected<T, K, undefined> : unknown;
+
+/** Rows of T with exactly the entries of S selected (plus `_oid`, always sent), sub-selects followed into the related type. */
+export type Selected<T, S> = S extends readonly (infer E)[] ? Asset & { [K in SelectKey<E>]: EntryValue<T, Extract<E, K | { from: K }>> } : Asset;
 
 /** The row type of a query body: what its `from` reads, narrowed to its `select`; just `_oid` when nothing is selected. */
 export type RowOf<Q> = Q extends { from: infer F extends string; select: infer S } ? Selected<TypeOf<F>, S> : Asset;

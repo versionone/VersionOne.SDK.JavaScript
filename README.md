@@ -39,6 +39,32 @@ npm test
 
 ## Public API
 
+### Which call for what
+
+| You want | Call | Notes |
+| --- | --- | --- |
+| Rows | `client.query(q)` / `client.queries([q, …])` | The default read. Read-only endpoint, resent once like a GET. No total. |
+| One asset | `client.get(oid, select)` | Null when nothing has that OID. |
+| Rows and how many there are | `client.queryPage(q)` | `{ rows, total, more }`. |
+| Everything, page by page | `client.pages(q, { limit })` / `client.all(q, { limit })` | Bounded: default limit 1000. |
+| Text search across types, a total, deleted assets | `client.data.list(type, params)` | rest-1: `find` / `findin`, `Story.Number` from `BaseAsset`, `deleted: true`. |
+| An asset's past versions | `client.history(oid, params)` | One row per version; `_oid` carries the moment. |
+| Who am I | `client.me()` | The member the credentials belong to. |
+| Numbers a person typed | `client.resolve.numbers([...])` / `client.resolve.ref(spec)` | One request for any mix of types. |
+| Write | `client.send(commands)` | Unguarded: writes whatever is there. Answers an `Outcome`. |
+| Write only if nobody changed it | `client.sendGuarded(commands, { moments? })` | `conflicts` lists what was left alone. |
+| Write with a record and an undo | `client.batch.run(commands, { guard })` then `client.batch.reversible(receipt)` | `guard` has no default. |
+| Copy an asset, or run an operation for its result | `client.copy(oid)` / `client.operate(oid, op)` | |
+| Defaults for a new asset | `client.template(type, { ctx })` | Nothing is created. |
+| What a form needs | `client.fields.describe(type, scope)` | Required, visible and important attributes. |
+| Files | `client.attachments.*`, `client.embeddedImages.*` | |
+| A link for a person | `client.urls.asset(oidOrNumber)` | |
+| Labels in the instance's words | `client.localize(tags)` | |
+
+Every row follows one rule, whichever call read it: **a relation you select is a Ref (`{ _oid }`); a path you select by name is at `row[path]` (`row["Status.Name"]`); nothing arrives that you did not select.** Select both `Owners` and `Owners.Name` and you get the Refs and, beside them, a parallel array at `"Owners.Name"`. To get attributes on the related rows themselves, use a sub-select: `{ from: "Owners", select: ["Name"] }` gives `row.Owners[i].Name`. (rest-1 also puts the display attributes it sends unasked on the Refs of a relation you selected.)
+
+### Reference
+
 Changes between alphas are in `CHANGELOG.md`, each with its migration line.
 
 - `AgilityApiClient` - the client. One query body everywhere; the client picks the endpoint:
@@ -49,15 +75,16 @@ Changes between alphas are in `CHANGELOG.md`, each with its migration line.
   - `resolve.numbers` / `resolve.ref` - asset numbers and OID tokens to assets, in one request
   - `attachments.list` / `page` / `info` / `get` / `add` / `put` / `remove` - files attached to an asset, each answered as a row of the Attachment type (`_oid`, `Name`, `Filename`, `ContentType`, …) plus `id`, the number its bytes are addressed by; `list` and `page` answer metadata, plus whatever keys a `select` adds; `get` reads metadata and bytes in two requests, or in one with `{ inline: true }` for a small file; `add` sends a small file inline and a large one in two steps, and a failed upload throws `AttachmentUploadError` naming the empty attachment it left
   - `embeddedImages.upload` / `normalize` - images in rich text; they cannot be deleted
-  - `copy(oid)` - the Copy operation, answering the copy's OID (api/asset performs it but never says what it made); `data.operate(oid, op)` is the general form
+  - `copy(oid)` - the Copy operation, answering the copy's OID (api/asset performs it but never says what it made); `operate(oid, op)` is the general form
   - `fields.describe(type, scope)` - what a form needs: required attributes (meta), the ones the product shows there (`api/visibleFields`, custom fields included), the scheme's important fields and whether they are enforced at close
   - `urls.asset(oidOrNumber)` / `attachment` / `embeddedImage` - where a browser opens each
-  - `data.list` / `get` / `history` / `template` - rest-1 reads: deleted assets, history, and a new asset's template for a context (`New/<Type>?ctx=`); `meta.*` - meta.v1 raw, with conditional reads (`read` / `readType` with `ifNoneMatch`, `etag()`: meta.v1 sends one ETag for the whole schema); `schema` - the translated, cached view, `schema.revalidate()` drops it only when that tag moves; `localize` - loc-2 labels for tags (a violation's `tag` is one)
+  - `data.list` / `history` / `template` - rest-1 reads: text search and deleted assets, history, and a new asset's template for a context (`New/<Type>?ctx=`); `meta.*` - meta.v1 raw, with conditional reads (`read` / `readType` with `ifNoneMatch`, `etag()`: meta.v1 sends one ETag for the whole schema); `schema` - the translated, cached view, `schema.revalidate()` drops it only when that tag moves; `localize` - loc-2 labels for tags (a violation's `tag` is one)
 - `normalizeQuery(q)` - a query written with rest-1's spellings (`sel`, a textual `where`, comma-joined lists, a `"size,start"` page) as the `QueryBody` every read takes
 - Errors: everything thrown is an `ApiError` with a `kind` (`auth`, `forbidden`, `notFound`, `invalid`, `transient`, `aborted`, `commandFailure`, `conflict`, `protocol`, `usage`, `unknown`). A mistake caught before any request is a `UsageError`: `kind: "usage"` means nothing was sent (`status` is 0), so the fix is in the call, not on the server
 - `TypeCache` - one instance's loaded type definitions, shared by many clients (`new AgilityApiClient(config, { types })`); `TypeCache.fromMetamodel(metamodel)` seeds one so nothing is loaded
 - `createFetchTransport` - configurable HTTP transport: `credentials` for same-origin cookie auth, `onUnauthorized` to re-authenticate on a 401 (resends idempotent requests once), and a per-request `signal`; `client.withSignal(signal)` ties a whole client to one
 - A custom `Transport` (`new AgilityApiClient(config, { transport })`) decides by itself where requests go; `config.baseUrl` is then used only for the links the client builds (`urls.*`, `embeddedImages.normalize`). `apiErrorFromResponse(status, data)` is the error the fetch transport throws for a refused response, for a custom transport to throw the same
+- `@versionone/agility-sdk/services` - the services as free functions over a `Transport` (`guard`, `batch`, `resolve`, `schema`, `attachments`, `fields`), for a caller that composes one differently; the client's methods are the same things
 - `@versionone/agility-sdk/wire` - the wire modules (`assetApi`, `queryV1`, `rest1`, `meta`, `loc2`, `attachment`, `fields`, `select`), for passthroughs and transport authors; they speak the endpoints' own shapes.
 
 ## Testing code that uses the SDK
@@ -90,7 +117,7 @@ API reference: https://docs.digital.ai/agility-api/
 
 ## Installing an unreleased commit
 
-`npm install github:versionone/VersionOne.SDK.JavaScript#<sha>` builds `dist` on install (the `prepare` script). CI also uploads an `npm pack` tarball on every run.
+`npm install github:versionone/VersionOne.SDK.JavaScript#<sha>` builds `dist` on install (the `prepare` script). CI also uploads an `npm pack` tarball on every run. The package's entries (`index`, `wire`, `services`, `testing`) and the chunks they share are all in one flat `dist/` directory, so a copy of `dist/` is a working copy.
 
 ## Releasing
 

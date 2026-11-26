@@ -39,6 +39,7 @@ import type { Transport } from "../core/transport";
 import { assetStateOf, type Asset, type Oid, type Ref } from "../types/asset";
 import { momentless } from "../types/oid";
 import type { Query, QueryBody } from "./assetApi";
+import { rejected } from "./queryV1";
 
 export { momentless };
 
@@ -75,14 +76,19 @@ export interface ReadParams {
 const toRef = (doc: AssetRefDocument): Ref => ({ _oid: momentless(doc.idref) });
 
 /**
- * One rest-1 asset as the model carries it. Relations become Refs; the
- * display columns rest-1 adds beside a selected relation (Owners.Name) are
- * folded onto those Refs by position, and kept under their dotted key too
- * for a caller that asked for them by name; AssetState becomes its name;
- * everything else is the value as sent. The row's own _oid keeps its
- * moment only on a history read (it is the moment that identifies the row).
+ * One rest-1 asset as the model carries it. Relations become Refs;
+ * AssetState becomes its name; everything else is the value as sent. The
+ * row's own _oid keeps its moment only on a history read (it is the moment
+ * that identifies the row).
+ *
+ * rest-1 adds display columns beside a selected relation without being
+ * asked (Owners.Name, Owners.Nickname). They are folded onto the Refs by
+ * position, and the row follows the rule every read follows — it has the
+ * keys that were selected and no others: a dotted key stays only when it
+ * is in `select` (the caller asked for that path by name), or when it has
+ * no Ref to fold onto (it is then all there is of that value).
  */
-export function fromAssetDocument<Row extends Asset = Asset>(doc: AssetDocument, { history = false } = {}): Row {
+export function fromAssetDocument<Row extends Asset = Asset>(doc: AssetDocument, { history = false, select }: { history?: boolean; select?: readonly string[] } = {}): Row {
   const out: Record<string, unknown> = { _oid: history ? doc.id : momentless(doc.id) };
   const attrs = doc.Attributes ?? {};
   for (const [key, a] of Object.entries(attrs)) {
@@ -102,8 +108,11 @@ export function fromAssetDocument<Row extends Asset = Asset>(doc: AssetDocument,
     if (attr.includes(".")) continue; // deeper paths stay as columns only
     const target = out[rel];
     const values = a.value;
-    if (Array.isArray(target) && Array.isArray(values)) target.forEach((ref, i) => { if (ref && typeof ref === "object") (ref as Record<string, unknown>)[attr] = values[i]; });
-    else if (target && typeof target === "object" && !Array.isArray(target) && !Array.isArray(a.value)) (target as Record<string, unknown>)[attr] = a.value;
+    let folded = false;
+    if (Array.isArray(target) && Array.isArray(values)) { target.forEach((ref, i) => { if (ref && typeof ref === "object") (ref as Record<string, unknown>)[attr] = values[i]; }); folded = true; }
+    else if (target && typeof target === "object" && !Array.isArray(target) && !Array.isArray(a.value)) { (target as Record<string, unknown>)[attr] = a.value; folded = true; }
+    // On the Ref now. The dotted key goes unless the caller selected that path by name.
+    if (folded && !select?.includes(key)) delete out[key];
   }
   return out as Row;
 }
@@ -126,12 +135,21 @@ export function toQuery(params: ReadParams): Record<string, string | undefined> 
 
 // ---- the calls -------------------------------------------------------------
 
-export interface ReadResult<Row extends Asset = Asset> { rows: Row[]; total: number | null; pageSize: number; pageStart: number }
+/** One page of a rest-1 read: the rows, the total when asked for with `needTotal` (null otherwise), and whether more pages follow (as `Page.more`: exact with a total, else whether this page came back full). */
+export interface ReadResult<Row extends Asset = Asset> { rows: Row[]; total: number | null; more: boolean; pageSize: number; pageStart: number }
 
 async function read<Row extends Asset>(transport: Transport, path: string, params: ReadParams, history: boolean): Promise<ReadResult<Row>> {
   if (!params.page) throw new UsageError(`rest-1 read of ${path} without a page: every read must be bounded`);
-  const doc = await transport.request<AssetsDocument>({ method: "GET", path, query: toQuery(params), responseType: "json" });
-  return { rows: (doc.Assets ?? []).map((a) => fromAssetDocument<Row>(a, { history })), total: typeof doc.total === "number" && doc.total >= 0 ? doc.total : null, pageSize: doc.pageSize, pageStart: doc.pageStart };
+  let doc: AssetsDocument;
+  try {
+    doc = await transport.request<AssetsDocument>({ method: "GET", path, query: toQuery(params), responseType: "json" });
+  } catch (error) {
+    // A read rest-1 refused (a bad filter, an unknown attribute) reads like one query.v1 refused.
+    throw error instanceof ApiError && error.status === 400 ? rejected(error) : error;
+  }
+  const rows = (doc.Assets ?? []).map((a) => fromAssetDocument<Row>(a, { history, select: params.select }));
+  const total = typeof doc.total === "number" && doc.total >= 0 ? doc.total : null;
+  return { rows, total, more: total === null ? rows.length === params.page.size : params.page.start + rows.length < total, pageSize: doc.pageSize, pageStart: doc.pageStart };
 }
 
 /** A bounded list read of a type. */
@@ -142,7 +160,7 @@ export const list = <Row extends Asset = Asset>(transport: Transport, type: stri
 export async function get<Row extends Asset = Asset>(transport: Transport, oid: Oid, select?: string[]): Promise<Row> {
   const [type, id] = momentless(oid).split(":");
   const doc = await transport.request<AssetDocument>({ method: "GET", path: `/rest-1.v1/Data/${encodeURIComponent(type!)}/${encodeURIComponent(id!)}`, query: { sel: select?.join(",") }, responseType: "json" });
-  return fromAssetDocument<Row>(doc);
+  return fromAssetDocument<Row>(doc, { select });
 }
 
 /**

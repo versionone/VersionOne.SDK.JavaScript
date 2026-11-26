@@ -94,7 +94,7 @@ describe("FakeAgilityClient", () => {
     expect(await fake.localize(["Plural'Story"])).toEqual({ "Plural'Story": "Backlog Items" });
     fake.onQuery("Attachment", [{ _oid: "Attachment:5", Name: "n", Filename: "f.txt", ContentType: "text/plain" }]);
     expect((await fake.attachments.get(5)).bytes).toEqual(new Uint8Array([1, 2]));
-    await expect(fake.data.get("Story:1")).rejects.toThrow(/no answer scripted for GET \/rest-1\.v1\/Data\/Story\/1/);
+    await expect(fake.data.list("Story", { page: { size: 1, start: 0 } })).rejects.toThrow(/no answer scripted for GET \/rest-1\.v1\/Data\/Story/);
   });
 
   it("a batch that creates and reads back through an alias answers the scripted row of that type under the created OID", async () => {

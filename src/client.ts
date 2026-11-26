@@ -38,7 +38,7 @@ export interface ClientOptions {
 }
 
 /** One page of rows, with the total number of matches when the server reports it, and whether more pages follow. */
-export interface Page<Row extends Asset = Asset> {
+export interface Page<Row extends { _oid: Oid } = Asset> {
   rows: Row[];
   /** The number of matches across all pages; null when the server did not report one. */
   total: number | null;
@@ -84,8 +84,8 @@ const ME_SELECT = ["Name", "Username", "Nickname", "Email"];
  * construction, so a request can be resent like a GET — but its shape has
  * nowhere to put a total; api/asset reports one (`needTotal`) beside the
  * rows, which is why `queryPage` goes there and `query` does not. rest-1
- * sits behind `data` for what neither does: deleted assets, history, a
- * new asset's template, an operation's result. Writes: `send`,
+ * serves what neither does: `data.list` (text search across types,
+ * deleted assets), `history`, `template`, `operate`. Writes: `send`,
  * `sendGuarded`, `batch.run`, `copy`. Services: `resolve`,
  * `fields`, `attachments`, `embeddedImages`, `schema`, `localize`, `urls`.
  */
@@ -135,7 +135,7 @@ export class AgilityApiClient {
    * empty result.
    */
   query<const F extends From, const Q extends assetApi.Query<F>>(q: Q & assetApi.Query<F>): Promise<RowOf<Q>[]>;
-  query<Row extends Asset = Asset>(q: assetApi.Query): Promise<Row[]>;
+  query<Row extends { _oid: Oid } = Asset>(q: assetApi.Query): Promise<Row[]>;
   async query(q: assetApi.Query): Promise<Asset[]> {
     bounded([q]);
     await this.schema.ensureFor([q]);
@@ -144,7 +144,7 @@ export class AgilityApiClient {
 
   /** Several queries in one request; one array of rows per query, in order. */
   queries<const Qs extends readonly assetApi.Query[]>(qs: Qs): Promise<RowsOf<Qs>>;
-  queries<Row extends Asset = Asset>(qs: assetApi.Query[]): Promise<Row[][]>;
+  queries<Row extends { _oid: Oid } = Asset>(qs: assetApi.Query[]): Promise<Row[][]>;
   async queries(qs: readonly assetApi.Query[]): Promise<Asset[][]> {
     bounded(qs);
     await this.schema.ensureFor(qs);
@@ -157,7 +157,7 @@ export class AgilityApiClient {
    * exists.)
    */
   get<const O extends string, const S extends readonly (SelectPath<TypeOf<O>> | assetApi.QueryBody)[]>(oid: O, select: S): Promise<Selected<TypeOf<O>, S> | null>;
-  get<Row extends Asset = Asset>(oid: Oid, select?: assetApi.QueryBody["select"]): Promise<Row | null>;
+  get<Row extends { _oid: Oid } = Asset>(oid: Oid, select?: assetApi.QueryBody["select"]): Promise<Row | null>;
   async get(oid: Oid, select?: assetApi.QueryBody["select"]): Promise<Asset | null> {
     const rows = await this.query({ from: momentless(oid), ...(select ? { select } : {}), page: { size: 1, start: 0 } });
     return rows[0] ?? null;
@@ -169,7 +169,7 @@ export class AgilityApiClient {
    * when the server did not say; `more` is then whether the page was full.
    */
   queryPage<const F extends From, const Q extends assetApi.Query<F>>(q: Q & assetApi.Query<F>): Promise<Page<RowOf<Q>>>;
-  queryPage<Row extends Asset = Asset>(q: assetApi.Query): Promise<Page<Row>>;
+  queryPage<Row extends { _oid: Oid } = Asset>(q: assetApi.Query): Promise<Page<Row>>;
   async queryPage(q: assetApi.Query): Promise<Page> {
     bounded([q]);
     await this.schema.ensureFor([q]);
@@ -184,7 +184,7 @@ export class AgilityApiClient {
    * transient failure like any GET.
    */
   pages<const F extends From, const Q extends assetApi.Query<F>>(q: Q & assetApi.Query<F>, options?: PagesOptions): AsyncGenerator<RowOf<Q>[], void, undefined>;
-  pages<Row extends Asset = Asset>(q: assetApi.Query, options?: PagesOptions): AsyncGenerator<Row[], void, undefined>;
+  pages<Row extends { _oid: Oid } = Asset>(q: assetApi.Query, options?: PagesOptions): AsyncGenerator<Row[], void, undefined>;
   async *pages(q: assetApi.Query, options: PagesOptions = {}): AsyncGenerator<Asset[], void, undefined> {
     bounded([q]);
     const limit = options.limit ?? DEFAULT_LIMIT;
@@ -202,7 +202,7 @@ export class AgilityApiClient {
 
   /** Every row of the query up to `limit` (default 1000), read page by page. */
   all<const F extends From, const Q extends assetApi.Query<F>>(q: Q & assetApi.Query<F>, options?: PagesOptions): Promise<RowOf<Q>[]>;
-  all<Row extends Asset = Asset>(q: assetApi.Query, options?: PagesOptions): Promise<Row[]>;
+  all<Row extends { _oid: Oid } = Asset>(q: assetApi.Query, options?: PagesOptions): Promise<Row[]>;
   async all(q: assetApi.Query, options: PagesOptions = {}): Promise<Asset[]> {
     const out: Asset[] = [];
     for await (const page of this.pages(q, options)) out.push(...page);
@@ -250,24 +250,47 @@ export class AgilityApiClient {
   }
 
   /**
-   * rest-1.v1, for what the other endpoints cannot do: deleted assets
-   * (`deleted: true`), one asset by OID without a page, history (one row
-   * per moment), a new asset's template (`template`: what the type's
-   * initializer fills in for a context — a Timebox's next name and dates,
-   * a Story's carry-over from a Request), and an operation's result
-   * (`operate`: api/asset performs a Copy but never says what it made;
-   * rest-1 answers the new OID). Parameters are spelled as a query's
-   * (`select`, `filter`).
+   * rest-1's list read, for what the other reads cannot do: full-text
+   * `find` / `findin` across types with one order and a total, a
+   * type-qualified select from a base type (`Story.Number` on BaseAsset),
+   * and deleted assets (`deleted: true`). Parameters are spelled as a
+   * query's (`select`, `filter`), and rows follow the rule every read
+   * follows: a relation you select is a Ref, a path you select by name is
+   * at `row[path]`, and nothing arrives that you did not select. For
+   * everything else use `query` / `queryPage`.
    */
   readonly data = {
-    list: <Row extends Asset = Asset>(type: string, params: rest1.ReadParams) => rest1.list<Row>(this.transport, type, params),
-    get: <Row extends Asset = Asset>(oid: string, select?: string[]) => rest1.get<Row>(this.transport, oid, select),
-    history: <Row extends Asset = Asset>(target: string, params: rest1.ReadParams) => rest1.history<Row>(this.transport, target, params),
-    template: <F extends From>(type: F, options?: { ctx?: Oid }) => rest1.template<TypeOf<F>>(this.transport, type, options),
-    operate: (oid: Oid, op: string) => rest1.operate(this.transport, oid, op)
+    list: <Row extends Asset = Asset>(type: string, params: rest1.ReadParams) => rest1.list<Row>(this.transport, type, params)
   };
 
-  /** Copy an asset (the server's Copy operation) and answer the copy's OID: the one thing api/asset's `execute: "Copy"` does not say. */
+  /**
+   * An asset's history: one row per version, newest paging as asked, each
+   * row's `_oid` carrying its moment (`Story:1234:5678`). `target` is an
+   * OID token, or an asset type for the history of every asset of it.
+   */
+  history<Row extends Asset = Asset>(target: string, params: rest1.ReadParams): Promise<rest1.ReadResult<Row>> {
+    return rest1.history<Row>(this.transport, target, params);
+  }
+
+  /**
+   * A new asset's template: what the type's initializer would fill in for
+   * a context (a Timebox's next name and dates in a schedule's scope, a
+   * Story's carry-over from a Request). Nothing is created.
+   */
+  template<F extends From>(type: F, options?: { ctx?: Oid }): Promise<rest1.Template<TypeOf<F>>> {
+    return rest1.template<TypeOf<F>>(this.transport, type, options);
+  }
+
+  /**
+   * Run an operation for its result: the asset the server answered with
+   * and its new moment. `send` with an `execute` performs the same
+   * operations but does not say what a Copy made; this does. Never resent.
+   */
+  operate(oid: Oid, op: string): Promise<rest1.OperationResult> {
+    return rest1.operate(this.transport, oid, op);
+  }
+
+  /** Copy an asset (the server's Copy operation) and answer the copy's OID. */
   async copy(oid: Oid): Promise<Oid> {
     return (await rest1.operate(this.transport, oid, "Copy")).oid;
   }

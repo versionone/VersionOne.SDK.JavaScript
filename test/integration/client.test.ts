@@ -38,6 +38,37 @@ describeInstance("client reads (live)", () => {
     expect(await client.query(normalizeQuery({ from: "Member", sel: "Name", where: `ID='${me._oid}';IsSelf='false'`, page: "5,0" }))).toEqual([]);
   });
 
+  it("the rows rule holds on every read path: a selected relation is a Ref, a path selected by name is at row[path], and no other key arrives", async () => {
+    const me = await client.me();
+    const made = await client.send([{ AssetType: "Story", Name: fixtureName("rows rule"), Scope: { _oid: "Scope:0" }, Owners: [{ _oid: me._oid }] }], { throwOnFailure: true });
+    const story = made.created[0]!;
+    try {
+      const select = ["Name", "Owners", "Owners.Name", "Scope.Name"];
+      const keys = ["Name", "Owners", "Owners.Name", "Scope.Name", "_oid"];
+      const viaQuery = (await client.query({ from: "Story", select, filter: ["ID=$id"], with: { $id: story }, page: { size: 1, start: 0 } }))[0]! as Record<string, unknown>;
+      const viaPage = (await client.queryPage({ from: "Story", select, filter: ["ID=$id"], with: { $id: story }, page: { size: 1, start: 0 } })).rows[0]! as Record<string, unknown>;
+      const viaRest = (await client.data.list("Story", { select, filter: [`ID='${story}'`], page: { size: 1, start: 0 } })).rows[0]! as unknown as Record<string, unknown>;
+      for (const row of [viaQuery, viaPage, viaRest]) {
+        expect(Object.keys(row).sort()).toEqual(keys);
+        expect(row["Owners.Name"]).toEqual([me.Name]); // a parallel array beside the Refs
+        expect(typeof row["Scope.Name"]).toBe("string"); // its relation was not selected: the path is still there
+        expect((row.Owners as { _oid: string }[]).map((o) => o._oid)).toEqual([me._oid]);
+      }
+      // query.v1 and api/asset Refs are bare; rest-1 puts the display attributes it sends on the Ref as well.
+      expect(viaQuery.Owners).toEqual([{ _oid: me._oid }]);
+      expect(viaPage.Owners).toEqual([{ _oid: me._oid }]);
+      expect((viaRest.Owners as { Name: string }[])[0]!.Name).toBe(me.Name);
+      // rest-1 without the dotted path selected: its uninvited columns are on the Ref, not on the row.
+      const bare = (await client.data.list("Story", { select: ["Name", "Owners"], filter: [`ID='${story}'`], page: { size: 1, start: 0 } })).rows[0]! as unknown as Record<string, unknown>;
+      expect(Object.keys(bare).sort()).toEqual(["Name", "Owners", "_oid"]);
+      // And a refused rest-1 read is a QUERY_REJECTED with sentences, like query.v1's.
+      await expect(client.data.list("Story", { filter: ["Nope=1"], page: { size: 1, start: 0 } })).rejects.toMatchObject({ kind: "invalid", code: "QUERY_REJECTED", message: expect.stringMatching(/^Invalid WHERE parameter; /) });
+      await expect(client.query({ from: "Story", filter: ["Nope=1"], page: { size: 1, start: 0 } })).rejects.toMatchObject({ kind: "invalid", code: "QUERY_REJECTED" });
+    } finally {
+      await client.send([{ from: story, execute: "Delete" }]);
+    }
+  });
+
   it("the asset page URL answers for a real asset (assetdetail.v1 redirects to the type's detail page)", async () => {
     const me = await client.me();
     const response = await fetch(client.urls.asset(me._oid), { headers: { authorization: `Bearer ${process.env.V1_ACCESS_TOKEN ?? ""}` }, redirect: "manual" });
@@ -102,13 +133,13 @@ describeInstance("rest-1 operate, template and fields (live)", () => {
   }, 60_000);
 
   it("template for a Timebox in a scope carries the initializer's suggestions; for a Story, the scope", async () => {
-    const timebox = await client.data.template("Timebox", { ctx: "Scope:0" });
+    const timebox = await client.template("Timebox", { ctx: "Scope:0" });
     expect(typeof timebox.Name).toBe("string");
     expect(timebox.Schedule).toMatchObject({ _oid: expect.stringMatching(/^Schedule:\d+$/) });
     expect(timebox.Owner).toMatchObject({ _oid: (await client.me())._oid });
-    const story = await client.data.template("Story", { ctx: "Scope:0" });
+    const story = await client.template("Story", { ctx: "Scope:0" });
     expect(story).toEqual({ Scope: { _oid: "Scope:0" } });
-    await expect(client.data.operate("Story:999999999", "NoSuchOp")).rejects.toMatchObject({ status: 400, kind: "invalid" });
+    await expect(client.operate("Story:999999999", "NoSuchOp")).rejects.toMatchObject({ status: 400, kind: "invalid" });
   }, 60_000);
 
   it("fields.describe answers required, visible and important attributes for a Story in Scope:0", async () => {

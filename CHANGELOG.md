@@ -89,8 +89,54 @@ Each entry has the line a consumer follows to migrate.
   `bareAliasFrom`, `inlineCreate`, `noMoment`). Migration: branch on
   `reason.code`, not on the words of `reason.reason`.
 
+- **One rule for every row, on every read path**: a relation you select
+  is a Ref; a path you select by name is at `row[path]`; nothing arrives
+  that you did not select. query.v1 and api/asset rows already followed
+  it. On rest-1 (`client.data.list`, `client.history`) the display
+  columns the server adds beside a selected relation (`Owners.Name`,
+  `Owners.Nickname`) are now on the Refs only; their dotted keys are gone
+  from the row unless the path is in `select`. Migration: read
+  `row.Owners[i].Name`, or add `"Owners.Name"` to `select` to keep
+  `row["Owners.Name"]`. A dotted or type-qualified key with no Ref to
+  fold onto is kept as sent.
+- **rest-1's other reads are on the client itself**:
+  `client.data.history` → `client.history`; `client.data.template` →
+  `client.template`; `client.data.operate` → `client.operate`.
+  `client.data.get` is gone (`client.get` reads one asset).
+  `client.data.list` stays where it is.
+- **The services as free functions are at
+  `@versionone/agility-sdk/services`**, one namespace per module
+  (`guard`, `batch`, `resolve`, `schema`, `attachments`, `fields`). The
+  root no longer exports `sendGuarded`, `guard`, `stampsOf`, `touchedBy`,
+  `UNGUARDABLE_TYPES`, `runBatch`, `reversible`, `reverseOf`, `snapshot`,
+  `describeBatch`, `namesOf`, `INVERSE`, `resolveNumbers`, `resolveRef`,
+  `NUMBER_ROOTS`, `RESOLVE_CHUNK`, `importantName`, nor `Schema` as a
+  value (its type stays). Migration: `import { guard } from
+  "@versionone/agility-sdk/services"` and call `guard.sendGuarded(…)`;
+  or use the client's method, which is the same thing. The root keeps
+  the client, the model, every error class, `unguardable`, `isReceipt`,
+  `isAssetNumber`, `TypeCache` and the helpers below.
+- **A refused rest-1 read is a `QUERY_REJECTED`** like a refused
+  query.v1 read: `details` is the exceptions (`{ type, message }[]`) and
+  `message` their sentences, led by rest-1's own ("Invalid WHERE
+  parameter; …"). It was a plain `ApiError` with the whole error document
+  as `details`. Migration: a formatter that special-cased rest-1 can
+  print `message` for both.
+- **Row types**: a sub-select is typed as rows of the related type with
+  what it selected (it was typed as bare Refs, which was wrong), and a
+  single relation is always `| null` on a row, also where the metamodel
+  calls it required (the asset it pointed at may be gone). Migration: a
+  cast that worked around the old sub-select type can go; code that read
+  a required single relation without a null check gets a compile error
+  and needs the check.
+
 ### Added
 
+- A read's explicit row type can be the caller's own: `client.query<Card>(…)`
+  needs only `_oid` on `Card`, not the SDK's `Asset`.
+- `ReadResult.more` on rest-1 reads, as on `queryPage`.
+- `toBase64` / `fromBase64` on the root; an inline attachment read also
+  answers `base64`, the content as it arrived.
 - **`sendGuarded(commands, { moments })`**: guard an asset on the moment
   the caller read earlier (select `Moment` with the row a person is
   shown), so a change made since they saw it is a conflict.

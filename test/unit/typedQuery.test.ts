@@ -27,7 +27,12 @@ describe("typed queries", () => {
     expectTypeOf(rows[0]!.Status).toEqualTypeOf<Ref<StoryStatus> | null | undefined>();
     expectTypeOf(rows[0]!["Status.Name"]).toEqualTypeOf<unknown>();
     expectTypeOf(rows[0]!["Owners.@Count"]).toEqualTypeOf<number>();
-    expectTypeOf(rows[0]!.Owners).toEqualTypeOf<Ref<import("../../src/types/assets/Member").Member>[]>();
+    // A sub-select is rows of the related type with what it selected, not bare Refs.
+    type Owner = (typeof rows)[number]["Owners"][number];
+    expectTypeOf<Owner["Name"]>().toEqualTypeOf<string>();
+    expectTypeOf<Owner["_oid"]>().toEqualTypeOf<string>();
+    // @ts-expect-error Nickname was not selected in the sub-select
+    type _NotSelected = Owner["Nickname"];
     // @ts-expect-error Nmae was not selected (and is not an attribute)
     rows[0]!.Nmae;
     expect(rows).toHaveLength(1);
@@ -84,6 +89,31 @@ describe("typed queries", () => {
     const page = await client.queryPage({ from: "Story", select: ["Name"], page: { size: 1, start: 0 } });
     expectTypeOf(page.rows[0]!.Name).toEqualTypeOf<string>();
     expect(explicit.length + loose.length + typed.length + custom.length).toBeGreaterThan(0);
+  });
+});
+
+describe("typed sub-selects and a consumer's own row type", () => {
+  it("nested sub-selects type all the way down: a list for a multi-value relation, one row or null for a single one", async () => {
+    // The shape of a comment-thread read (a browser app consumer): relations of relations, each with its own select.
+    const rows = await client.all({ from: "Conversation", select: ["Topic", { from: "Participants", select: ["Name", "Nickname"] }, { from: "ContainedExpressions", select: ["Content", "IsDeletable", { from: "Author", select: ["Name", "IsInactive"] }, { from: "Mentions", select: ["Name"] }] }], page: { size: 1, start: 0 } }).catch(() => []);
+    type Row = (typeof rows)[number];
+    expectTypeOf<Row["Participants"][number]["Name"]>().toEqualTypeOf<string>();
+    expectTypeOf<Row["ContainedExpressions"][number]["Content"]>().toEqualTypeOf<string>();
+    expectTypeOf<NonNullable<Row["ContainedExpressions"][number]["Author"]>["IsInactive"]>().toEqualTypeOf<boolean | null | undefined>();
+    expectTypeOf<Row["ContainedExpressions"][number]["Author"]>().toBeNullable();
+    expectTypeOf<Row["ContainedExpressions"][number]["Mentions"][number]["_oid"]>().toEqualTypeOf<string>();
+    // A bare single relation can be null on a row even where the metamodel calls it required.
+    expectTypeOf<Row["Topic"]>().toBeNullable();
+  });
+
+  it("a row type of the consumer's own, with no SDK type in it, can be named at the call", async () => {
+    interface Card { _oid: string; Name: string; Estimate: number | null }
+    const cards = await client.query<Card>({ from: "Story", select: ["Name", "Estimate"], page: { size: 1, start: 0 } });
+    expectTypeOf(cards).toEqualTypeOf<Card[]>();
+    const page = await client.queryPage<Card>({ from: "Story", select: ["Name"], page: { size: 1, start: 0 } });
+    expectTypeOf(page.rows).toEqualTypeOf<Card[]>();
+    expectTypeOf(await client.get<Card>("Story:1", ["Name"])).toEqualTypeOf<Card | null>();
+    expectTypeOf(await client.all<Card>({ from: "Story", page: { size: 1, start: 0 } })).toEqualTypeOf<Card[]>();
   });
 });
 

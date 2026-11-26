@@ -37,6 +37,16 @@
         "default": "./dist/wire.cjs"
       }
     },
+    "./services": {
+      "import": {
+        "types": "./dist/services.d.ts",
+        "default": "./dist/services.js"
+      },
+      "require": {
+        "types": "./dist/services.d.cts",
+        "default": "./dist/services.cjs"
+      }
+    },
     "./testing": {
       "import": {
         "types": "./dist/testing.d.ts",

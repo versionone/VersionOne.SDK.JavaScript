@@ -130,8 +130,8 @@ describe("client: data.operate, copy, data.template", () => {
     const t = fake((o) => (o.path.startsWith("/rest-1.v1/New/") ? { _type: "Asset", href: "", id: "", Attributes: { Scope: { _type: "Relation", name: "Scope", act: "set", value: { _type: "Asset", href: "", idref: "Scope:0" } } } } : { _type: "Asset", href: "", id: "Story:9:1" }));
     const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, types: schema().cache });
     expect(await client.copy("Story:1")).toBe("Story:9");
-    expect(await client.data.operate("Story:1", "Inactivate")).toEqual({ oid: "Story:9", moment: "1" });
-    const tpl = await client.data.template("Story", { ctx: "Scope:0" });
+    expect(await client.operate("Story:1", "Inactivate")).toEqual({ oid: "Story:9", moment: "1" });
+    const tpl = await client.template("Story", { ctx: "Scope:0" });
     expect(tpl.Scope).toEqual({ _oid: "Scope:0" });
   });
 });

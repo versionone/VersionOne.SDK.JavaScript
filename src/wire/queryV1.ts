@@ -31,15 +31,19 @@ import { fromTypeOf } from "./select";
 export interface QueryRejection { type: string | null; message: string }
 
 /**
- * The error query.v1 sends for a query it refused: the exceptions'
+ * The error for a read the server refused, whichever endpoint refused it
+ * (query.v1 and rest-1 answer a 400 in the same document shape): the exceptions'
  * messages joined as the message, and `details` the exceptions alone
  * ({ type, message }[]) — not the whole error document, so a caller that
  * prints details prints what matters.
  */
-function rejected(error: ApiError): ApiError {
-  const details = error.details as { exceptions?: { type?: unknown; message?: unknown }[] } | undefined;
+export function rejected(error: ApiError): ApiError {
+  const details = error.details as { error?: unknown; exceptions?: { type?: unknown; message?: unknown }[] } | undefined;
   const rejections: QueryRejection[] = (details?.exceptions ?? []).filter((e) => e && typeof e.message === "string" && e.message).map((e) => ({ type: typeof e.type === "string" ? e.type : null, message: e.message as string }));
-  return rejections.length ? new ApiError(rejections.map((r) => r.message).join("; "), error.status, "QUERY_REJECTED", rejections) : error;
+  if (!rejections.length) return error;
+  // rest-1 names what it refused in `error` ("Invalid WHERE parameter"); query.v1 says only "Bad Request", which adds nothing.
+  const lead = typeof details?.error === "string" && details.error && details.error !== "Bad Request" ? [details.error] : [];
+  return new ApiError([...lead, ...rejections.map((r) => r.message)].join("; "), error.status, "QUERY_REJECTED", rejections);
 }
 
 /**

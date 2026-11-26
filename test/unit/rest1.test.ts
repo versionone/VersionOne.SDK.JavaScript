@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RequestOptions, Transport } from "../../src/core/transport";
 import type { Story } from "../../src/types/assets/Story";
-import { UsageError } from "../../src/core/errors";
+import { UsageError, apiErrorFromResponse } from "../../src/core/errors";
 import { fromAssetDocument, get, history, list, normalizeQuery, operate, template, toQuery, type AssetDocument, type AssetsDocument } from "../../src/wire/rest1";
 
 function fakeTransport(...answers: unknown[]): Transport & { calls: RequestOptions[] } {
@@ -37,9 +37,36 @@ describe("rest1: translation", () => {
     expect(row.Super).toBeNull();
     expect(row.Status).toEqual({ _oid: "StoryStatus:137", Name: "Accepted" });
     expect(row.Owners).toEqual([{ _oid: "Member:1035", Name: "Alfred Smith", Nickname: "alfred" }, { _oid: "Member:20", Name: "Betty Builder", Nickname: "betty" }]);
-    // The dotted columns stay too, for a caller that selected them by name.
-    expect((row as unknown as Record<string, unknown>)["Status.Name"]).toBe("Accepted");
-    expect((row as unknown as Record<string, unknown>)["Owners.Name"]).toEqual(["Alfred Smith", "Betty Builder"]);
+    // rest-1 sent those display columns uninvited: they are on the Refs, and the row has no key nobody selected.
+    expect(Object.keys(row).filter((k) => k.includes("."))).toEqual([]);
+  });
+
+  it("the rows rule on rest-1: a path selected by name keeps its key (a parallel array beside bare-looking Refs for a multi-value relation); one with no Ref to fold onto is kept as sent", () => {
+    const selected = fromAssetDocument<Story>(storyDoc, { select: ["Name", "Owners", "Owners.Name", "Status.Name"] }) as unknown as Record<string, unknown>;
+    expect(selected["Owners.Name"]).toEqual(["Alfred Smith", "Betty Builder"]);
+    expect(selected["Status.Name"]).toBe("Accepted");
+    expect(selected["Owners.Nickname"]).toBeUndefined(); // uninvited: on the Refs only
+    expect((selected.Owners as { Nickname: string }[]).map((o) => o.Nickname)).toEqual(["alfred", "betty"]);
+    // A dotted or type-qualified key whose relation is not in the row has nothing to fold onto: it is all there is of the value, so it stays.
+    const lone: AssetDocument = { _type: "Asset", href: "", id: "Story:1", Attributes: { "Scope.Name": { _type: "Attribute", name: "Scope.Name", value: "Release 1" }, "Story.Number": { _type: "Attribute", name: "Story.Number", value: "S-1" } } };
+    expect(fromAssetDocument(lone)).toEqual({ _oid: "Story:1", "Scope.Name": "Release 1", "Story.Number": "S-1" });
+    expect(fromAssetDocument(lone, { select: ["Name"] })).toEqual({ _oid: "Story:1", "Scope.Name": "Release 1", "Story.Number": "S-1" });
+  });
+
+  it("a read rest-1 refuses is a QUERY_REJECTED with the server's sentences, like one query.v1 refuses; a page has `more`", async () => {
+    // rest-1's answer to where=Nope=1, verbatim (the API-testing instance, 2026-11-26).
+    const refusal = apiErrorFromResponse(400, { _type: "Error", error: "Invalid WHERE parameter", exceptions: [{ type: "FormatException", message: "Invalid QueryFilter2 token Nope=1" }, { type: "NoViableAltException", message: "Position 6: unexpected token: [\"1\",<24>,col=6]" }] });
+    const t = { request: vi.fn(async () => { throw refusal; }) } as unknown as Transport;
+    await expect(list(t, "Story", { filter: ["Nope=1"], page: { size: 1, start: 0 } })).rejects.toMatchObject({
+      kind: "invalid", code: "QUERY_REJECTED", status: 400,
+      message: "Invalid WHERE parameter; Invalid QueryFilter2 token Nope=1; Position 6: unexpected token: [\"1\",<24>,col=6]",
+      details: [{ type: "FormatException", message: "Invalid QueryFilter2 token Nope=1" }, { type: "NoViableAltException", message: "Position 6: unexpected token: [\"1\",<24>,col=6]" }]
+    });
+    const page = (total: number | undefined, n: number) => fakeTransport({ _type: "Assets", total, pageSize: 2, pageStart: 0, Assets: Array.from({ length: n }, (_, i) => ({ _type: "Asset", href: "", id: `Story:${i}` })) });
+    expect((await list(page(5, 2), "Story", { page: { size: 2, start: 0 }, needTotal: true })).more).toBe(true);
+    expect((await list(page(2, 2), "Story", { page: { size: 2, start: 0 }, needTotal: true })).more).toBe(false);
+    expect(await list(page(undefined, 2), "Story", { page: { size: 2, start: 0 } })).toMatchObject({ total: null, more: true });
+    expect((await list(page(undefined, 1), "Story", { page: { size: 2, start: 0 } })).more).toBe(false);
   });
 
   it("keeps the moment on a history row's _oid and strips it on a data row", () => {

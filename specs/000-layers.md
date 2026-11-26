@@ -48,6 +48,16 @@ pulled through) in a create, in an update, and in a query result alike.
 in `Attributes` and rendering `AssetState` as a number — is translated in
 that endpoint's wire module, once, on the way in and on the way out.
 
+One rule for a row, on every read path (query.v1, api/asset, rest-1):
+**a relation you select is a Ref; a path you select by name is at
+`row[path]`; nothing arrives that you did not select.** A sub-select is
+how to ask for attributes on the related rows. rest-1 sends display
+columns beside a selected relation unasked; its wire module folds them
+onto the Refs and drops their keys from the row unless the path was
+selected, and keeps a dotted key that has no Ref to fold onto. An
+integration test reads one asset through all three paths and compares
+the keys.
+
 Corollaries:
 
 - Envelope types live **inside the wire module that owns them**
@@ -157,11 +167,15 @@ index lag, what a preview echoes — are what fakes cannot reproduce; the
 integration tier is where a live probe becomes permanent, with an
 expect-zero control beside every "it returned rows".
 
-## 5a. Three import paths, and a fake for consumers
+## 5a. Four import paths, and a fake for consumers
 
-The package has three entries: the root (the client, the model, the
-services), `/wire` (the wire modules, for passthroughs and transport
-authors) and `/testing`. They are built with shared chunks in both module
+The package has four entries: the root (the client, the model, the errors
+and what a client user imports), `/wire` (the wire modules, for
+passthroughs and transport authors), `/services` (the services as free
+functions over a Transport; their request sequences are internal) and
+`/testing`. All of them, and the chunks they share, are built into one
+flat `dist/` directory: a consumer that vendors the package copies that
+directory. They are built with shared chunks in both module
 formats, so a class is one class whichever path imported it; the CommonJS
 unit test proves it.
 
