@@ -4,7 +4,8 @@ import { AgilityApiClient } from "../../src/client";
 import { ApiError } from "../../src/core/errors";
 import { createFetchTransport } from "../../src/core/fetchTransport";
 import type { RequestOptions, Transport } from "../../src/core/transport";
-import { AttachmentUploadError, add, list, page } from "../../src/services/attachments";
+import { AttachmentUploadError, add, get, list, page } from "../../src/services/attachments";
+import { Schema } from "../../src/services/schema";
 import { queryPage } from "../../src/wire/assetApi";
 import { fromBase64, getBytes, getFile, normalizeEmbeddedImageUrls, numericId, toBase64, uploadEmbeddedImage } from "../../src/wire/attachment";
 
@@ -97,6 +98,41 @@ describe("attachments service", () => {
     expect(q).toMatchObject({ from: "Attachment", filter: ["Asset=$asset"], with: { $asset: "Story:1" }, sort: ["-CreateDate"], page: { size: 50, start: 0 } });
     expect(q.select).not.toContain("Content");
     expect(rows).toEqual([{ oid: "Attachment:5", id: "5", name: "n", filename: "f.png", contentType: "image/png", description: null, createDate: "2026-11-07T10:00:00", createdBy: "Dana" }]);
+  });
+
+  it("list and page take more to select: the extra values come back under `selected`, translated when a schema is given, and the metadata is read as before", async () => {
+    // Attachment and AttachmentCategory as far as this select goes; the row as query.v1 and api/asset spell it (the API-testing instance, 2026-11-26).
+    const text = (type: string, name: string) => ({ _type: "AttributeDefinition", Name: name, Token: `${type}.${name}`, DisplayName: "", AttributeType: "Text", IsReadOnly: false, IsRequired: false, IsMultivalue: false, IsCanned: false, IsCustom: false });
+    const schema = Schema.fromMetamodel({ Version: "x", AssetTypes: {
+      Attachment: { _type: "AssetType", Name: "Attachment", Token: "Attachment", DisplayName: "", Abstract: false, Attributes: {
+        "Attachment.Name": text("Attachment", "Name"),
+        "Attachment.Category": { ...text("Attachment", "Category"), AttributeType: "Relation", RelatedAsset: "AttachmentCategory" },
+        "Attachment.Days": { ...text("Attachment", "Days"), AttributeType: "Numeric" } } },
+      AttachmentCategory: { _type: "AssetType", Name: "AttachmentCategory", Token: "AttachmentCategory", DisplayName: "", Abstract: false, Attributes: { "AttachmentCategory.Name": text("AttachmentCategory", "Name") } }
+    } } as never);
+    const row = { _oid: "Attachment:5", Name: "n", Filename: "f.png", ContentType: "image/png", Description: null, CreateDate: "2026-11-07T10:00:00", "CreatedBy.Name": "Dana", Category: { _oid: "NULL" }, "Category.Name": null, Days: "19" };
+    const t = fake(envelope({ queryResult: { results: [[row]], resultMetaData: [], count: 1 } }), envelope({ queryResult: { results: [[row]], resultMetaData: [{ total: 1 }], count: 1 } }), envelope({ queryResult: { results: [[row]], resultMetaData: [], count: 1 } }));
+    const [listed] = await list(t, "Story:1", { select: ["Category", "Category.Name", "Days", "Name"], schema });
+    expect((t.calls[0]!.body as { select: string[] }[])[0]!.select).toEqual(["Name", "Filename", "ContentType", "Description", "CreateDate", "CreatedBy.Name", "Category", "Category.Name", "Days"]);
+    expect(listed).toEqual({ oid: "Attachment:5", id: "5", name: "n", filename: "f.png", contentType: "image/png", description: null, createDate: "2026-11-07T10:00:00", createdBy: "Dana", selected: { Category: null, "Category.Name": null, Days: 19, Name: "n" } });
+    const paged = await page(t, "Story:1", { select: ["Days"], schema });
+    expect(paged).toMatchObject({ total: 1, more: false, attachments: [{ oid: "Attachment:5", selected: { Days: 19 } }] });
+    // Without a schema the extra values keep the endpoint's spelling; without a select there is no `selected` at all.
+    expect((await list(t, "Story:1", { select: ["Days"] }))[0]!.selected).toEqual({ Days: "19" });
+  });
+
+  it("get with inline reads the row and its Content in one query.v1 request and decodes the bytes; a missing attachment is NOT_FOUND", async () => {
+    // Content inline as Base64, as query.v1 sends it (the API-testing instance, 2026-11-26).
+    const t = fake([[{ _oid: "Attachment:145797", Name: "n", Filename: "check.txt", ContentType: "text/plain", Description: null, CreateDate: "2026-11-07T10:00:00", "CreatedBy.Name": "Dana", Content: "aGVsbG8gYXR0YWNobWVudAo=" }]]);
+    const got = await get(t, "Attachment:145797", { inline: true });
+    expect(t.calls).toHaveLength(1);
+    expect(t.calls[0]).toMatchObject({ method: "POST", path: "/query.v1", idempotent: true });
+    expect((t.calls[0]!.body as Record<string, unknown>[])[0]).toMatchObject({ from: "Attachment", filter: ["ID=$id"], with: { $id: "Attachment:145797" }, page: { size: 1, start: 0 } });
+    expect(new TextDecoder().decode(got.bytes)).toBe("hello attachment\n");
+    expect(got).toMatchObject({ oid: "Attachment:145797", id: "145797", filename: "check.txt", contentType: "text/plain", recordedContentType: "text/plain" });
+    await expect(get(fake([[]]), 9, { inline: true })).rejects.toMatchObject({ code: "NOT_FOUND", kind: "notFound" });
+    // An attachment created empty reads as zero bytes, not as a failure.
+    expect((await get(fake([[{ _oid: "Attachment:6", Content: "" }]]), 6, { inline: true })).bytes).toEqual(new Uint8Array(0));
   });
 
   it("the client exposes attachments and embedded images, with URLs on its own base", () => {

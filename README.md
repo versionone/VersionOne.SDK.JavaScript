@@ -43,34 +43,53 @@ Changes between alphas are in `CHANGELOG.md`, each with its migration line.
 
 - `AgilityApiClient` - the client. One query body everywhere; the client picks the endpoint:
   - `query` / `queries` - rows, translated (numbers as numbers, booleans as booleans, a single relation as one `Ref`), through query.v1: read-only, so a request is retried like a GET. A page is required; a refused query throws, never an empty result. Written with a literal `from`, `select` completes from the type's attributes and the rows are typed by what was selected
-  - `get(oid, select)` - one asset or null; `queryPage(q)` - rows with the total and whether more follow; `pages(q, { limit })` / `all(q, { limit })` - page by page up to a limit (default 1000); `me()` - the member the credentials belong to
+  - `get(oid, select)` - one asset or null; `queryPage(q)` - rows with the total and whether more follow (`more` is what a pager reads: when the server reports no total, `total` is null and `more` is whether the page came back full); `pages(q, { limit })` / `all(q, { limit })` - page by page up to a limit (default 1000); `me()` - the member the credentials belong to
   - `assets.send` - an api/asset batch, answered as an `Outcome` (`created`, `modified`, `operated`, `failures` with parsed violations, `queryResults`); `throwOnFailure` throws a `CommandFailureError` carrying the same Outcome. `assets.preview` - the projection. `assets.sendGuarded` - a batch as a compare-and-set on each asset's ChangeDate; changed assets come back `skipped`
   - `batch.run` / `batch.reversible` - preview, snapshot, (confirm,) send guarded, and a receipt with a reverse batch; undo reactivates a closed asset before deleting it and reopens what a close cascaded to
   - `resolve.numbers` / `resolve.ref` - asset numbers and OID tokens to assets, in one request
-  - `attachments.list` / `page` / `info` / `get` / `add` / `put` / `remove` - files attached to an asset; `add` sends a small file inline and a large one in two steps, and a failed upload throws `AttachmentUploadError` naming the empty attachment it left
+  - `attachments.list` / `page` / `info` / `get` / `add` / `put` / `remove` - files attached to an asset; `list` and `page` answer metadata, plus whatever a `select` adds (under `selected`); `get` reads metadata and bytes in two requests, or in one with `{ inline: true }` for a small file; `add` sends a small file inline and a large one in two steps, and a failed upload throws `AttachmentUploadError` naming the empty attachment it left
   - `embeddedImages.upload` / `normalize` - images in rich text; they cannot be deleted
   - `copy(oid)` - the Copy operation, answering the copy's OID (api/asset performs it but never says what it made); `data.operate(oid, op)` is the general form
   - `fields.describe(type, scope)` - what a form needs: required attributes (meta), the ones the product shows there (`api/visibleFields`, custom fields included), the scheme's important fields and whether they are enforced at close
   - `urls.asset(oidOrNumber)` / `attachment` / `embeddedImage` - where a browser opens each
   - `data.list` / `get` / `history` / `template` - rest-1 reads: deleted assets, history, and a new asset's template for a context (`New/<Type>?ctx=`); `meta.*` - meta.v1 raw, with conditional reads (`read` / `readType` with `ifNoneMatch`, `etag()`: meta.v1 sends one ETag for the whole schema); `schema` - the translated, cached view, `schema.revalidate()` drops it only when that tag moves; `localize` - loc-2 labels for tags (a violation's `tag` is one)
-- Errors: everything thrown is an `ApiError` with a `kind` (`auth`, `forbidden`, `notFound`, `invalid`, `transient`, `aborted`, `commandFailure`, `protocol`, `usage`, `unknown`). A mistake caught before any request is a `UsageError`
+- `normalizeQuery(q)` - a query written with rest-1's spellings (`sel`, a textual `where`, comma-joined lists, a `"size,start"` page) as the `QueryBody` every read takes
+- Errors: everything thrown is an `ApiError` with a `kind` (`auth`, `forbidden`, `notFound`, `invalid`, `transient`, `aborted`, `commandFailure`, `protocol`, `usage`, `unknown`). A mistake caught before any request is a `UsageError`: `kind: "usage"` means nothing was sent (`status` is 0), so the fix is in the call, not on the server
 - `TypeCache` - one instance's loaded type definitions, shared by many clients (`new AgilityApiClient(config, { types })`)
 - `createFetchTransport` - configurable HTTP transport: `credentials` for same-origin cookie auth, `onUnauthorized` to re-authenticate on a 401 (resends idempotent requests once), and a per-request `signal`; `client.withSignal(signal)` ties a whole client to one
-- The wire modules (`assetApi`, `queryV1`, `rest1`, `meta`, `loc2`, `attachment`) are exported for passthroughs and transport authors; they speak the endpoints' own shapes
+- A custom `Transport` (`new AgilityApiClient(config, { transport })`) decides by itself where requests go; `config.baseUrl` is then used only for the links the client builds (`urls.*`, `embeddedImages.normalize`). `apiErrorFromResponse(status, data)` is the error the fetch transport throws for a refused response, for a custom transport to throw the same
+- `@versionone/agility-sdk/wire` - the wire modules (`assetApi`, `queryV1`, `rest1`, `meta`, `loc2`, `attachment`, `fields`, `select`), for passthroughs and transport authors; they speak the endpoints' own shapes. (The root still exports them in this alpha and stops in the next.)
+
+## Testing code that uses the SDK
+
+`@versionone/agility-sdk/testing` exports `FakeAgilityClient`: a real client over a transport that sends nothing and answers what the test scripted, in the shape the client hands your code.
+
+```ts
+import { FakeAgilityClient } from "@versionone/agility-sdk/testing";
+
+const fake = new FakeAgilityClient()
+  .onQuery("Story", [{ _oid: "Story:1", Name: "Logon", Estimate: 2 }]);
+
+await closeStory(fake, "Story:1");                    // your code, taking an AgilityApiClient
+
+expect(fake.asked[0]).toMatchObject({ from: "Story:1" });                         // what it read
+expect(fake.sent[0]).toEqual([{ from: "Story:1", execute: "QuickClose" }]);       // what it wrote
+```
+
+- `onQuery(match, rows)` answers every read (`query`, `get`, `queryPage`, `pages`, …). A list is the whole result: the fake pages it and answers a read by OID with that row. A function gets the query and answers one page. A read nothing was scripted for throws; it never looks like an empty result.
+- Writes need no script: a create answers a new OID, an update or operation by OID answers that OID. `onSend` scripts anything else, failures included.
+- `onRequest(path, answer)` answers any other endpoint in its own shape. An `Error` as an answer is thrown.
+- The fake evaluates no filter or sort and applies no write. It proves what your code asks and what it does with the answer; what the server answers is for a test against an instance.
 
 API reference: https://docs.digital.ai/agility-api/
 
-## Extend with new APIs
+## Adding to the SDK
 
-1. Add a new folder under `src/apis/`.
-2. Add request/response types under `src/types/`.
-3. Implement methods using `Transport.request`.
-4. Export from `src/index.ts`.
-5. Add tests under `test/`.
+`specs/000-layers.md` says how the code is arranged (types, wire modules, services, core) and what each layer may know; `CONTRIBUTING.md` says what may be committed to this public repository. A new endpoint is a new module under `src/wire/`, with a unit test that fakes the transport with a response copied from a live one and an integration test that proves it against an instance.
 
-## Installing before a release
+## Installing an unreleased commit
 
-No registry package yet. Pin a commit: `npm install github:versionone/VersionOne.SDK.JavaScript#<sha>` builds `dist` on install (the `prepare` script). CI also uploads an `npm pack` tarball on every run.
+`npm install github:versionone/VersionOne.SDK.JavaScript#<sha>` builds `dist` on install (the `prepare` script). CI also uploads an `npm pack` tarball on every run.
 
 ## Releasing
 

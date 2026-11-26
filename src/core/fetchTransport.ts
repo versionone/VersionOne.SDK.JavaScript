@@ -1,4 +1,4 @@
-import { ApiError } from "./errors";
+import { ApiError, apiErrorFromResponse } from "./errors";
 import type { RequestBody, RequestOptions, ResponseType, Transport } from "./transport";
 
 /**
@@ -118,26 +118,6 @@ async function readBody(response: Response, responseType: ResponseType): Promise
   return response.text();
 }
 
-/**
- * The message of an error response, from the shapes the Agility endpoints
- * actually send: rest-1's { _type: "Error", error, exceptions: [{ message }] },
- * api/asset's { Exceptions: ["…"] } (a request it could not parse — 400
- * with the parser's message since 2026-11, an opaque 500 before), a bare
- * { message }, or text.
- */
-function messageOf(data: unknown, status: number): string {
-  if (data && typeof data === "object") {
-    const d = data as Record<string, unknown>;
-    const first = Array.isArray(d.exceptions) && d.exceptions[0] && typeof d.exceptions[0] === "object" ? (d.exceptions[0] as Record<string, unknown>).message : undefined;
-    const listed = Array.isArray(d.Exceptions) ? d.Exceptions.filter((x): x is string => typeof x === "string" && !!x).join("; ") : undefined;
-    for (const candidate of [d.error, first, listed, d.message]) {
-      if (typeof candidate === "string" && candidate) return candidate;
-    }
-  }
-  if (typeof data === "string" && data.trim()) return data.trim().slice(0, 200);
-  return `HTTP ${status}`;
-}
-
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** The longest a Retry-After is honoured before the request is given up instead. */
@@ -227,7 +207,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           // An answer, not a failure to get one. 5xx may be retried when
           // idempotent; anything else is final.
           const data = await readBody(response, responseType === "bytes" ? "text" : responseType === "json" ? "auto" : responseType);
-          lastError = new ApiError(messageOf(data, response.status), response.status, undefined, data);
+          lastError = apiErrorFromResponse(response.status, data);
         } catch (error) {
           if (callerSignal?.aborted) throw abortedError(callerSignal);
           throw error;

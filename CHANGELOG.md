@@ -1,5 +1,72 @@
 # Changelog
 
+## 1.0.0-alpha.7 — what a browser app consumer asked for
+
+Nothing breaks in this alpha. Each entry says what a consumer changes, if
+anything.
+
+### Added
+
+- **`client.attachments.list` / `page` take a `select`**: more to read
+  with each attachment, as a query's `select` on Attachment
+  (`Category.Name`, `Asset.Number`, a sub-select). Each answer then
+  carries those values under `selected`, keyed as selected, translated
+  like any row and typed by what was selected. Without a `select` the
+  answer is the metadata alone, as before. Migration: a second query for
+  an attachment's other attributes becomes `list(asset, { select })`.
+- **A one-request read for a small attachment**:
+  `client.attachments.get(id, { inline: true })` reads the metadata and
+  the bytes in one query.v1 request (the Attachment's `Content` comes
+  back as Base64 beside its row) where the default is two (the row, then
+  attachment.img). For small files: the response is a third larger than
+  the file and is held in memory whole. `contentType` is then the
+  recorded one. Migration: none; add `{ inline: true }` where a thumbnail
+  or a small text file is read.
+- **`normalizeQuery(query)`**: a query written with rest-1's spellings
+  becomes the `QueryBody` every read takes — `sel` → `select`, a textual
+  `where` → `filter`, comma-joined `select` / `sort` / `findin` → lists,
+  a `"size,start"` page → `{ size, start }`, sub-selects the same way. A
+  `QueryBody` comes back equal. Saying one thing twice (`sel` and
+  `select`) or asking for `deleted` is a `UsageError`. `QueryBody` itself
+  gains no alias. Migration: a consumer's own `sel`-to-`select` shim
+  becomes `client.query(normalizeQuery(q))`.
+- **`@versionone/agility-sdk/testing`** exports `FakeAgilityClient`: a
+  real `AgilityApiClient` over a transport that sends nothing. A test
+  scripts answers in the model's shape (`onQuery("Story", rows)`,
+  `onSend(outcome)`, `onRequest(path, answer)` for any other endpoint)
+  and asserts on what was asked (`asked`, `sent`, `requests`). A scripted
+  list is paged by the fake, a write answers OIDs without a script, and a
+  read nothing was scripted for throws a `UsageError` instead of reading
+  as empty. It evaluates no filter and applies no write. Migration: a
+  hand-written fake client or fake Transport in a consumer's tests can be
+  replaced by it; nothing requires that.
+- **`apiErrorFromResponse(status, data)`**: the `ApiError` the fetch
+  transport throws for a refused response, exported for a custom
+  `Transport` to throw, so message, `kind` and `details` are the same
+  whichever transport sent the request. Migration: a custom transport's
+  `new ApiError(text, status)` becomes `apiErrorFromResponse(status,
+  body)`.
+- **`@versionone/agility-sdk/wire`**: the wire modules (`assetApi`,
+  `queryV1`, `rest1`, `meta`, `loc2`, `attachment`, `fields`, `select`)
+  under their own import path. The root still exports them in this
+  alpha and stops in the next. Migration: `import { assetApi } from
+  "@versionone/agility-sdk"` → `from "@versionone/agility-sdk/wire"`.
+
+### Documented
+
+- `Page.more` is the pager's signal: with a total it is exact; when
+  `total` is null it is whether the page came back full, so a pager
+  offers "next" on `more`, never on `total`.
+- `kind: "usage"` (on `ApiError.kind`): the SDK refused the call before
+  sending anything — no request reached the server and `status` is 0.
+- `ClientConfig.baseUrl` with a custom `Transport`: the transport alone
+  decides where requests go; `baseUrl` is then used only for the links
+  the client builds (`client.urls.*`, `embeddedImages.normalize`), so
+  give it the instance's public URL.
+- `client.query`'s doc said a resend needed `retries` raised from 0 and
+  that `details` was the whole error document; both changed in alpha.5
+  and the doc now says so.
+
 ## 1.0.0-alpha.6
 
 - The generated model is refreshed from meta.v1 26.3.2.13 (was

@@ -11,16 +11,21 @@
  *     Attachment with empty Content, then POST the raw bytes. A failed
  *     upload leaves an empty Attachment, which is reported, not hidden.
  *
- * Listing never selects Content: across many attachments that would Base64
- * every file into one response. Reading one file's bytes goes through
- * attachment.img.
+ * Listing never selects Content by itself: across many attachments that
+ * would Base64 every file into one response. Reading one file's bytes goes
+ * through attachment.img, or — for a small file, on request — comes inline
+ * with its row in one read (`get` with `inline`).
  */
 import { ApiError, WrappedError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import type { Oid } from "../types/asset";
+import type { Attachment } from "../types/assets/Attachment";
 import { momentless } from "../types/oid";
+import type { SelectKey, SelectPath, SelectValue } from "../types/query";
 import * as assetApi from "../wire/assetApi";
-import { getFile, numericId, putBytes, toBase64, toUint8Array, type Bytes } from "../wire/attachment";
+import { fromBase64, getFile, numericId, putBytes, toBase64, toUint8Array, type Bytes } from "../wire/attachment";
+import * as queryV1 from "../wire/queryV1";
+import type { Schema } from "./schema";
 
 /** Files up to this size go inline by default; larger ones in two steps. */
 export const INLINE_LIMIT = 1_000_000;
@@ -44,16 +49,56 @@ const infoOf = (r: Row): AttachmentInfo => {
   return { oid, id: numericId(oid), name: r.Name ?? null, filename: r.Filename ?? null, contentType: r.ContentType ?? null, description: r.Description ?? null, createDate: r.CreateDate ?? null, createdBy: r["CreatedBy.Name"] ?? null };
 };
 
-/** One page of the files attached to an asset, newest first, metadata only, with the total and whether more pages follow. */
-export async function page(transport: Transport, asset: Oid, options: { page?: { size: number; start: number } } = {}): Promise<{ attachments: AttachmentInfo[]; total: number | null; more: boolean }> {
-  const { rows, total, more } = await assetApi.queryPage(transport, { from: "Attachment", select: SELECT, filter: ["Asset=$asset"], with: { $asset: momentless(asset) }, sort: ["-CreateDate"], page: options.page ?? { size: 50, start: 0 } });
-  return { attachments: rows.map((r) => infoOf(r as unknown as Row)), total, more };
+/** What `list` and `page` take: the page (default the first 50) and, optionally, more to select. */
+export interface ListOptions<S extends readonly (SelectPath<Attachment> | assetApi.QueryBody)[] | undefined = undefined> {
+  page?: { size: number; start: number };
+  /**
+   * More to read with each attachment, as a query's `select` on Attachment
+   * (`Category.Name`, `Asset.Number`, a sub-select): each answer then
+   * carries those values under `selected`, keyed as selected. The
+   * metadata is always read. Selecting `Content` here Base64s every file
+   * on the page into one response: for one small file use `get` with
+   * `inline`.
+   */
+  select?: S;
+  /** The schema to translate the extra values with (numbers as numbers, a single relation as one Ref); the client passes its own. Without it they keep the endpoint's spelling. */
+  schema?: Schema;
 }
 
-/** The files attached to an asset, newest first, metadata only (one page; `page` also gives the total). */
-export async function list(transport: Transport, asset: Oid, options: { page?: { size: number; start: number } } = {}): Promise<AttachmentInfo[]> {
-  const rows = await assetApi.query(transport, { from: "Attachment", select: SELECT, filter: ["Asset=$asset"], with: { $asset: momentless(asset) }, sort: ["-CreateDate"], page: options.page ?? { size: 50, start: 0 } });
-  return rows.map((r) => infoOf(r as unknown as Row));
+/** The values an extra `select` read, keyed as selected. */
+export type AttachmentSelected<S> = S extends readonly (infer E)[] ? { [K in SelectKey<E>]: SelectValue<Attachment, K> } : never;
+
+/** What `list` and `page` answer per attachment: the metadata, and `selected` when the call selected more. */
+export type ListedAttachment<S> = S extends readonly unknown[] ? AttachmentInfo & { selected: AttachmentSelected<S> } : AttachmentInfo;
+
+const keyOf = (entry: string | assetApi.QueryBody): string => (typeof entry === "string" ? entry : entry.from);
+
+/** The query `list` and `page` send, and how one of its rows reads. */
+async function listing<S extends readonly (SelectPath<Attachment> | assetApi.QueryBody)[] | undefined>(asset: Oid, options: ListOptions<S>) {
+  const extra = (options.select ?? []) as readonly (string | assetApi.QueryBody)[];
+  const have = new Set(SELECT);
+  const q: assetApi.QueryBody = { from: "Attachment", select: [...SELECT, ...extra.filter((e) => !(typeof e === "string" && have.has(e)))], filter: ["Asset=$asset"], with: { $asset: momentless(asset) }, sort: ["-CreateDate"], page: options.page ?? { size: 50, start: 0 } };
+  if (options.select && options.schema) await options.schema.ensureFor([q]);
+  const read: assetApi.ReadOptions = options.select && options.schema ? { lookup: options.schema } : {};
+  const toInfo = (row: unknown): ListedAttachment<S> => {
+    const r = row as Row & Record<string, unknown>;
+    const info = infoOf(r);
+    return (options.select ? { ...info, selected: Object.fromEntries(extra.map(keyOf).map((k) => [k, r[k] ?? null])) } : info) as ListedAttachment<S>;
+  };
+  return { q, read, toInfo };
+}
+
+/** One page of the files attached to an asset, newest first, metadata only (plus whatever `select` adds), with the total and whether more pages follow. */
+export async function page<const S extends readonly (SelectPath<Attachment> | assetApi.QueryBody)[] | undefined = undefined>(transport: Transport, asset: Oid, options: ListOptions<S> = {}): Promise<{ attachments: ListedAttachment<S>[]; total: number | null; more: boolean }> {
+  const { q, read, toInfo } = await listing(asset, options);
+  const { rows, total, more } = await assetApi.queryPage(transport, q, read);
+  return { attachments: rows.map(toInfo), total, more };
+}
+
+/** The files attached to an asset, newest first, metadata only (plus whatever `select` adds); one page (`page` also gives the total). */
+export async function list<const S extends readonly (SelectPath<Attachment> | assetApi.QueryBody)[] | undefined = undefined>(transport: Transport, asset: Oid, options: ListOptions<S> = {}): Promise<ListedAttachment<S>[]> {
+  const { q, read, toInfo } = await listing(asset, options);
+  return (await assetApi.query(transport, q, read)).map(toInfo);
 }
 
 /** One attachment's metadata, or null when there is none with that id. */
@@ -62,12 +107,34 @@ export async function info(transport: Transport, id: Oid | string | number): Pro
   return row ? infoOf(row as unknown as Row) : null;
 }
 
+export interface GetOptions {
+  /**
+   * Read the bytes inline with the metadata, in one request instead of
+   * two: the Attachment's Content comes back as Base64 beside its row
+   * (through query.v1, so the read is resent like a GET). For small files:
+   * the response is a third larger than the file and is held in memory
+   * whole, and the size is not known until it arrives. `contentType` is
+   * then the Attachment's recorded one (no attachment.img response to
+   * read a served type from).
+   */
+  inline?: boolean;
+}
+
 /**
- * One attachment: its metadata and its bytes. `contentType` is the type the
- * server sent the bytes with, falling back to the Attachment's recorded
+ * One attachment: its metadata and its bytes. Two requests by default (the
+ * row, then attachment.img), one with `inline`. `contentType` is the type
+ * the server sent the bytes with, falling back to the Attachment's recorded
  * one; `recordedContentType` is always the latter.
  */
-export async function get(transport: Transport, id: Oid | string | number): Promise<AttachmentInfo & { bytes: Uint8Array; recordedContentType: string | null }> {
+export async function get(transport: Transport, id: Oid | string | number, options: GetOptions = {}): Promise<AttachmentInfo & { bytes: Uint8Array; recordedContentType: string | null }> {
+  if (options.inline) {
+    const [row] = await queryV1.query(transport, { from: "Attachment", select: [...SELECT, "Content"], filter: ["ID=$id"], with: { $id: `Attachment:${numericId(id)}` }, page: { size: 1, start: 0 } });
+    if (!row) throw new ApiError(`attachment ${numericId(id)}: not found`, 404, "NOT_FOUND");
+    const content = (row as { Content?: unknown }).Content;
+    if (typeof content !== "string") throw new ApiError(`attachment ${numericId(id)}: the row came without its Content`, 200, "BAD_RESPONSE", row);
+    const meta = infoOf(row as unknown as Row);
+    return { ...meta, bytes: fromBase64(content), recordedContentType: meta.contentType };
+  }
   const meta = await info(transport, id);
   if (!meta) throw new ApiError(`attachment ${numericId(id)}: not found`, 404, "NOT_FOUND");
   const file = await getFile(transport, meta.id);

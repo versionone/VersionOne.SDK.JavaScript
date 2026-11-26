@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { AgilityApiClient } from "../../src/client";
 import type { Story } from "../../src/types/assets/Story";
+import { normalizeQuery } from "../../src/wire/rest1";
 import { describeInstance, fixtureName, instance } from "./instance";
 
 /**
@@ -27,6 +28,14 @@ describeInstance("client reads (live)", () => {
     const all = await client.all<Story>(q, { limit: 7 });
     expect(all).toHaveLength(Math.min(7, first.total!));
     expect(new Set(all.map((r) => r._oid)).size).toBe(all.length);
+  });
+
+  it("a query written with rest-1's spellings, normalised, reads the same rows as the QueryBody it stands for (and a where that matches nothing reads none)", async () => {
+    const me = await client.me();
+    const loose = normalizeQuery({ from: "Member", sel: "Name,Username", where: `ID='${me._oid}';IsSelf='true'`, sort: "Name", page: "5,0" });
+    expect(loose).toEqual({ from: "Member", select: ["Name", "Username"], filter: [`ID='${me._oid}';IsSelf='true'`], sort: ["Name"], page: { size: 5, start: 0 } });
+    expect(await client.query(loose)).toEqual([{ _oid: me._oid, Name: me.Name, Username: me.Username }]);
+    expect(await client.query(normalizeQuery({ from: "Member", sel: "Name", where: `ID='${me._oid}';IsSelf='false'`, page: "5,0" }))).toEqual([]);
   });
 
   it("the asset page URL answers for a real asset (assetdetail.v1 redirects to the type's detail page)", async () => {

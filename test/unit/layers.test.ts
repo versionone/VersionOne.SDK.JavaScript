@@ -17,7 +17,9 @@ const ALLOWED: Record<string, string[]> = {
   core: ["core"],
   types: ["types", "core"],
   wire: ["wire", "types", "core"],
-  services: ["services", "wire", "types", "core"]
+  services: ["services", "wire", "types", "core"],
+  // The consumer-facing fake stands on the client itself (src/client.ts, the layer "client" here) and everything under it; nothing imports it.
+  testing: ["testing", "client", "services", "wire", "types", "core"]
 };
 
 function walk(dir: string): string[] {
@@ -44,6 +46,11 @@ describe("layers", () => {
       }
     }
     expect(violations).toEqual([]);
+  });
+
+  it("nothing in the SDK imports the testing entry: it ships beside the client, never inside it", () => {
+    const importers = walk(src).filter((f) => layerOf(f) !== "testing" && importedLayers(f).some(({ layer }) => layer === "testing"));
+    expect(importers.map((f) => relative(src, f))).toEqual([]);
   });
 
   it("envelope types live in the wire module that owns them, never in types", () => {

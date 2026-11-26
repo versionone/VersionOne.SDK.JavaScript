@@ -13,6 +13,10 @@ src/services   what to do             imports: types, wire, core
 src/core       transport, errors      imports: nothing above it
 ```
 
+Beside the table, not in it: `src/client.ts` binds the layers into the
+client, and `src/testing` (§5a) stands on the client. Nothing imports
+`src/testing`.
+
 - **`types`** is the vocabulary: the asset types generated from meta.v1
   (`src/types/assets/`, one file per asset type, the `extends` chain from
   the metamodel's `Base` chain) and the hand-written roots in
@@ -150,6 +154,24 @@ The API's real behaviours — silent empties, projection order, full-text
 index lag, what a preview echoes — are what fakes cannot reproduce; the
 integration tier is where a live probe becomes permanent, with an
 expect-zero control beside every "it returned rows".
+
+## 5a. Three import paths, and a fake for consumers
+
+The package has three entries: the root (the client, the model, the
+services), `/wire` (the wire modules, for passthroughs and transport
+authors) and `/testing`. They are built with shared chunks in both module
+formats, so a class is one class whichever path imported it; the CommonJS
+unit test proves it.
+
+`/testing` holds `FakeAgilityClient`: the real client over a transport
+that sends nothing. It is scripted in the **model's** shape, the one shape
+of §2, because that is the contract a consumer codes against; it runs with
+a schema that knows no type, so scripted rows pass through as written. It
+therefore proves nothing about translation or about the server, and says
+so: it evaluates no filter, applies no write, and throws for a read
+nothing was scripted for (§6: a failure never reads as an empty). The
+corollary of §2a still binds this repository's own unit tests, which fake
+the *transport* with what the server sends.
 
 ## 6. Politeness is in the layer
 

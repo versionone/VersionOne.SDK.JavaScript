@@ -1,6 +1,6 @@
 export { AgilityApiClient } from "./client";
 export type { ClientOptions, Me, Page, PagesOptions } from "./client";
-export { ApiError, UsageError, WrappedError, kindOf } from "./core/errors";
+export { ApiError, UsageError, WrappedError, apiErrorFromResponse, kindOf } from "./core/errors";
 export type { ErrorKind } from "./core/errors";
 export { createFetchTransport } from "./core/fetchTransport";
 export type { FetchTransportConfig, UnauthorizedContext, UnauthorizedDecision } from "./core/fetchTransport";
@@ -16,7 +16,9 @@ export type { AssetType, AttributeDefinition, AttributeLookup, AttributeType, At
 export type * from "./types/assets/index";
 export type { CreateType, CustomList, From, RowOf, RowsOf, SelectKey, SelectPath, SelectValue, Selected, TypeOf } from "./types/query";
 
-// The wire layer: one module per endpoint.
+// The wire layer: one module per endpoint. Also importable from
+// "@versionone/agility-sdk/wire", which is where these six move for good:
+// the root re-exports of the modules go in the next alpha.
 export { assetApi, rest1, meta, loc2, queryV1, attachment, fields } from "./wire";
 export type { OperationResult, Template } from "./wire/rest1";
 export type { FieldsOf } from "./services/fields";
@@ -26,7 +28,8 @@ export * as select from "./wire/select";
 export type { AssetApiResponse, Command, CommandBody, CommandFailureDetail, Outcome, CommandValue, CreateBody, ExecuteBody, QueryBody, UpdateBody, ReadOptions, RowContext, SendOptions } from "./wire/assetApi";
 export { CommandFailureError, parseViolation } from "./wire/assetApi";
 export type { Violation } from "./wire/assetApi";
-export type { AssetDocument, AssetsDocument, ReadParams, ReadResult } from "./wire/rest1";
+export type { AssetDocument, AssetsDocument, LooseQuery, ReadParams, ReadResult } from "./wire/rest1";
+export { normalizeQuery } from "./wire/rest1";
 export type { Localizations, LocalizeOptions } from "./wire/loc2";
 export type { ConditionalOptions, Tagged } from "./wire/meta";
 export type { QueryRejection } from "./wire/queryV1";
@@ -34,7 +37,7 @@ export type { QueryRejection } from "./wire/queryV1";
 // Services: what to do.
 export { Schema, TypeCache } from "./services/schema";
 export { AttachmentUploadError, INLINE_LIMIT } from "./services/attachments";
-export type { AddOptions as AttachmentAddOptions, AttachmentInfo } from "./services/attachments";
+export type { AddOptions as AttachmentAddOptions, AttachmentInfo, AttachmentSelected, GetOptions as AttachmentGetOptions, ListOptions as AttachmentListOptions, ListedAttachment } from "./services/attachments";
 export { CHUNK as RESOLVE_CHUNK, NUMBER_ROOTS, isAssetNumber, resolveNumbers, resolveRef } from "./services/resolve";
 export type { Resolution, ResolvedAsset } from "./services/resolve";
 export { UNGUARDABLE_TYPES, UnguardableError, guard, sendGuarded, stampsOf, touchedBy, unguardable } from "./services/guard";

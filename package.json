@@ -1,6 +1,6 @@
 {
   "name": "@versionone/agility-sdk",
-  "version": "1.0.0-alpha.6",
+  "version": "1.0.0-alpha.7",
   "description": "TypeScript SDK for the Digital.ai Agility (VersionOne) API: queries, batches, schema-translated rows, guarded writes, attachments",
   "keywords": [
     "agility",
@@ -25,6 +25,26 @@
       "require": {
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
+      }
+    },
+    "./wire": {
+      "import": {
+        "types": "./dist/wire.d.ts",
+        "default": "./dist/wire.js"
+      },
+      "require": {
+        "types": "./dist/wire.d.cts",
+        "default": "./dist/wire.cjs"
+      }
+    },
+    "./testing": {
+      "import": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
+      },
+      "require": {
+        "types": "./dist/testing.d.cts",
+        "default": "./dist/testing.cjs"
       }
     }
   },

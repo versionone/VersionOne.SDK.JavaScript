@@ -46,6 +46,32 @@ describeInstance("attachments (live)", () => {
     expect(first.attachments).toHaveLength(1);
   });
 
+  it("get with inline reads metadata and bytes in one request; list with a select brings the extra values, translated", async () => {
+    const a = await client.attachments.add(story, text("inline read\n"), { filename: "sdk-integration inline.txt", contentType: "text/plain", description: "one request" });
+    made.push(a.oid);
+    const calls: string[] = [];
+    const counting = new AgilityApiClient({ baseUrl: instance!.url }, { transport: { request: (o) => { calls.push(o.path); return t.request(o); } }, schema: client.schema });
+    const got = await counting.attachments.get(a.oid, { inline: true });
+    expect(calls).toEqual(["/query.v1"]);
+    expect(decode(got.bytes)).toBe("inline read\n");
+    expect(got).toMatchObject({ oid: a.oid, filename: "sdk-integration inline.txt", contentType: "text/plain", recordedContentType: "text/plain", description: "one request" });
+    // The same bytes the two-request read serves.
+    expect(decode((await client.attachments.get(a.oid)).bytes)).toBe("inline read\n");
+    // A two-step attachment whose upload never happened reads as zero bytes; one that does not exist is NOT_FOUND.
+    await expect(client.attachments.get("Attachment:1", { inline: true })).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    const listed = await client.attachments.list(story, { select: ["Asset", "Asset.Name", "Category", "Days", "IsDeleted"] });
+    const mine = listed.find((x) => x.oid === a.oid)!;
+    expect(mine.filename).toBe("sdk-integration inline.txt");
+    expect(mine.selected.Asset).toMatchObject({ _oid: story });
+    expect(mine.selected).toMatchObject({ Category: null, IsDeleted: false });
+    expect(typeof mine.selected.Days).toBe("number");
+    expect(String(mine.selected["Asset.Name"])).toMatch(/^sdk-integration attachments/);
+    const paged = await client.attachments.page(story, { select: ["Days"], page: { size: 1, start: 0 } });
+    expect(typeof paged.attachments[0]!.selected.Days).toBe("number");
+    expect(paged.total).toBeGreaterThanOrEqual(1);
+  });
+
   it("put replaces the bytes; remove deletes the attachment; a missing one is NOT_FOUND", async () => {
     const a = await client.attachments.add(story, text("before\n"), { filename: "sdk-integration replace.txt", contentType: "text/plain" });
     made.push(a.oid);
