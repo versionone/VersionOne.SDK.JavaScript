@@ -101,7 +101,8 @@ describe("FakeAgilityClient", () => {
     const fake = new FakeAgilityClient().onQuery("Story", [{ _oid: "Story:1", Number: "S-01001", Name: "template" }]);
     const outcome = await fake.send([{ "@story": { AssetType: "Story", Name: "new", Scope: "Scope:0" } }, { from: "@story", select: ["Number"], page: { size: 1, start: 0 } }]);
     expect(outcome.created).toEqual(["Story:1000"]);
-    expect(outcome.queryResults).toEqual([[{ _oid: "Story:1000", Number: "S-01001", Name: "template" }]]);
+    // The scripted row stands in for what the server adds (the Number); what the create sent wins (the Name); a relation is not copied.
+    expect(outcome.queryResults).toEqual([[{ _oid: "Story:1000", Number: "S-01001", Name: "new" }]]);
     await expect(new FakeAgilityClient().send([{ "@e": { AssetType: "Epic", Name: "x" } }, { from: "@e", page: { size: 1, start: 0 } }])).rejects.toThrow(/query of @e \(the Epic the batch creates\).*onQuery\("Epic"/);
   });
 

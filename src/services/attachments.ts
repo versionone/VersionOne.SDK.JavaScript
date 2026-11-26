@@ -34,9 +34,13 @@ export const INLINE_LIMIT = 1_000_000;
  * An attachment as the SDK answers it: a row of the Attachment asset type,
  * under meta.v1's own attribute names like every other row, with what was
  * selected and nothing else — plus `id`, the number attachment.img
- * addresses the file by (the one place the API uses a bare id).
+ * addresses the file by (the one place the API uses a bare id). The type
+ * is closed: it has these keys and the ones a `select` named, so reading
+ * any other (`row.filename`, `row.FileName`) is a compile error.
  */
-export interface AttachmentInfo extends Asset {
+export interface AttachmentInfo {
+  /** The attachment's OID token, momentless: "Attachment:5678". */
+  _oid: Oid;
   /** The numeric id attachment.img addresses it by: "5678" for Attachment:5678. */
   id: string;
   Name: string | null;

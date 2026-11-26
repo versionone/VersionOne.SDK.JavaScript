@@ -70,7 +70,7 @@ const scriptedRows = (script: Script): FakeRow[] =>
 const isNumberLookup = (q: QueryBody): boolean => q.filter?.length === 1 && q.filter[0] === "Number=$numbers" && Array.isArray(q.with?.$numbers);
 
 /** The scripted rows for one query, and the total a paged read would report. `created` is the asset an alias `from` ("@story") names: the create earlier in the same batch. */
-function answerQuery(script: Script, q: QueryBody, created?: { type: string; oid: Oid | undefined }): { rows: Asset[]; total: number | null } {
+function answerQuery(script: Script, q: QueryBody, created?: { type: string; oid: Oid | undefined; sent: Record<string, unknown> }): { rows: Asset[]; total: number | null } {
   script.seen.asked.push(q);
   const type = created?.type ?? typeOfFrom(q.from);
   const hit = hitFor(script, q, type);
@@ -85,8 +85,13 @@ function answerQuery(script: Script, q: QueryBody, created?: { type: string; oid
   // Rows scripted as a list are the whole result: a read by OID gets the row
   // with that OID, and a page gets its slice, so `get` and `pages` end as
   // they would against a server.
-  // A read-back of the batch's own create is the first scripted row of its type, under the OID the create answered.
-  if (created) return { rows: created.oid ? [{ ...(scripted[0] ?? {}), _oid: created.oid }] : [], total: created.oid ? 1 : 0 };
+  // A read-back of the batch's own create: the first scripted row of its type stands in for what the server
+  // would add (a Number, defaults), the scalar values the create sent win over it (a relation, sent as an
+  // OID token or an alias, is not a row's Ref and is left to the script), and the OID is the created one.
+  if (created) {
+    const sent = Object.fromEntries(Object.entries(created.sent).filter(([k, v]) => k !== "AssetType" && (v === null || typeof v !== "object") && !isOidToken(v) && !(typeof v === "string" && v.startsWith("@"))));
+    return { rows: created.oid ? [{ ...(scripted[0] ?? {}), ...sent, _oid: created.oid }] : [], total: created.oid ? 1 : 0 };
+  }
   const all = isOidToken(q.from) ? scripted.filter((row) => momentless(row._oid) === momentless(q.from)) : [...scripted];
   const page = q.page ?? { size: all.length, start: 0 };
   return { rows: all.slice(page.start, page.start + page.size), total: all.length };
@@ -134,7 +139,7 @@ function respond(script: Script, request: RequestOptions): unknown {
     const creates = writes.filter(({ body }) => "AssetType" in body);
     const createdBy = (from: string) => {
       const i = creates.findIndex(({ alias }) => alias === from);
-      return i < 0 ? undefined : { type: String((creates[i]!.body as { AssetType: unknown }).AssetType), oid: done.created[i] };
+      return i < 0 ? undefined : { type: String((creates[i]!.body as { AssetType: unknown }).AssetType), oid: done.created[i], sent: creates[i]!.body as Record<string, unknown> };
     };
     const asked = bodies.filter(({ body }) => isQuery(body)).map(({ body }) => body as QueryBody);
     let answers: { rows: Asset[]; total: number | null }[];
@@ -176,7 +181,9 @@ function respond(script: Script, request: RequestOptions): unknown {
  *   shape and come back as scripted. A list is the whole result: the fake
  *   pages it, reports its length as the total, and answers a read by OID
  *   with the row of that OID. A function gets the query and answers one
- *   page itself. No filter, `where` or sort is evaluated. A query nothing
+ *   page itself (`onQuery((q) => q.from === "StoryStatus" &&
+ *   q.filter?.[0]?.startsWith("Team."), teamStatuses)` tells two queries
+ *   of one type apart). No filter, `where` or sort is evaluated. A query nothing
  *   was scripted for throws a UsageError: an unscripted read never looks
  *   like an empty result.
  * - `send` needs no script: each create answers a new OID
@@ -185,7 +192,7 @@ function respond(script: Script, request: RequestOptions): unknown {
  *   index, a create's OID).
  * - A query from an alias of a create in the same batch (`from: "@story"`)
  *   answers the first row scripted for the created type, under the OID the
- *   create answered. `resolve.numbers` and `resolve.ref` find a number
+ *   create answered and with the scalar values the create sent. `resolve.numbers` and `resolve.ref` find a number
  *   among every row scripted as a list, by its `Number`; one no row has is
  *   `missing`. `localize` answers each tag with its `onLocalize` label, or
  *   with the tag itself.

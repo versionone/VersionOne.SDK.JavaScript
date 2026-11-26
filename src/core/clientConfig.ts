@@ -15,7 +15,14 @@ export interface ClientConfig extends Pick<FetchTransportConfig, "credentials" |
   authorization?: string;
   /** An access token, sent as "Bearer <token>". */
   accessToken?: string;
+  /** Per-attempt timeout of the built-in fetch transport. A custom Transport does its own timing. */
   timeoutMs?: number;
+  /**
+   * Resends of an idempotent request by the built-in fetch transport
+   * (default 1). Retrying is the transport's job: with a custom Transport
+   * this is not read, and nothing is resent unless that transport does it
+   * (`RequestOptions.idempotent` tells it which requests may be).
+   */
   retries?: number;
   defaultHeaders?: Record<string, string>;
 }

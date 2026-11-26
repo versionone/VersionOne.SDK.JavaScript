@@ -98,6 +98,17 @@ describe("typed attachment listing", () => {
     expectTypeOf(more[0]!["Asset.Number"]).toBeUnknown();
     // @ts-expect-error IsDeleted was not selected
     void more[0]!.IsDeleted;
+    // The row type is closed: a stale camelCase name, a misspelling and an unselected custom attribute are compile errors.
+    // @ts-expect-error the attribute is Filename
+    void plain[0]!.filename;
+    // @ts-expect-error the attribute is Filename
+    void plain[0]!.FileName;
+    // @ts-expect-error not selected
+    void plain[0]!.Custom_Anything;
+    const file = await client.attachments.get(5, { inline: true }).catch(() => null);
+    // @ts-expect-error get answers ContentType (recorded) and servedContentType
+    void file?.contentType;
+    expectTypeOf<NonNullable<typeof file>["servedContentType"]>().toEqualTypeOf<string | null>();
     const paged = await client.attachments.page("Story:1", { select: ["Days"], page: { size: 1, start: 0 } });
     expectTypeOf(paged.attachments[0]!.Days).toEqualTypeOf<number | null | undefined>();
   });

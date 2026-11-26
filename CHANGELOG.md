@@ -80,7 +80,10 @@ entry says what a consumer changes, if anything.
     recorded one) → `servedContentType ?? ContentType`;
     `recordedContentType` → `ContentType`
   `add`'s options (`filename`, `contentType`, `name`, `description`,
-  `inlineLimit`) are unchanged.
+  `inlineLimit`) are unchanged. The row type is closed (it does not
+  extend `Asset`): it has these keys and the ones a `select` named, so a
+  read the migration missed (`row.filename`) is a compile error rather
+  than `undefined`.
 
 ### Added
 
@@ -150,6 +153,17 @@ entry says what a consumer changes, if anything.
   decides where requests go; `baseUrl` is then used only for the links
   the client builds (`client.urls.*`, `embeddedImages.normalize`), so
   give it the instance's public URL.
+- **For authors of a custom `Transport`** (this should have been under
+  "Breaking" in alpha.5): a request with `acceptNotModified` must
+  resolve to `undefined` on a 304, after calling `onResponse` with the
+  304's status and headers, instead of rejecting. `client.meta.etag`,
+  `meta.read`, `meta.readType` and `schema.revalidate` send such
+  requests. And `retries` / `timeoutMs` configure the built-in fetch
+  transport only: a client given its own Transport resends nothing unless
+  that transport does.
+- `client.meta` answers the model's `Metamodel` / `AssetType`
+  (references as tokens), not meta.v1's own document; its doc said
+  "raw".
 - `client.query`'s doc said a resend needed `retries` raised from 0 and
   that `details` was the whole error document; both changed in alpha.5
   and the doc now says so.
