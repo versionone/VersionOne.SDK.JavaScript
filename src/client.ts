@@ -1,12 +1,14 @@
-import type { ClientConfig } from "./core/clientConfig";
+import { CLIENT_CONFIG_KEYS, type ClientConfig } from "./core/clientConfig";
+import { keysOf, refuseUnknownKeys } from "./core/knownKeys";
 import { ApiError, UsageError } from "./core/errors";
 import { createFetchTransport } from "./core/fetchTransport";
-import { DEFAULT_TIMEOUT_MS, withErrorHook, withRequestStamp, withRetry, withTimeout } from "./core/retry";
+import { DEFAULT_TIMEOUT_MS, withErrorHook, withRequestStamp, withRetry, withTimeout, governsItself } from "./core/retry";
 import type { Transport } from "./core/transport";
 import * as attachments from "./services/attachments";
 import * as batch from "./services/batch";
 import * as explainService from "./services/explain";
 import * as fieldsService from "./services/fields";
+import * as listsService from "./services/lists";
 import * as guard from "./services/guard";
 import * as resolve from "./services/resolve";
 import { Schema, type TypeCache } from "./services/schema";
@@ -69,6 +71,8 @@ export type Me = Pick<Member, "_oid" | "Name" | "Username" | "Nickname" | "Email
 
 const DEFAULT_LIMIT = 1000;
 
+const CLIENT_OPTION_KEYS = keysOf<ClientOptions>()({ transport: true, types: true });
+
 /** Transports a client has already put its resend rule and error hook around. */
 const dressed = new WeakSet<Transport>();
 
@@ -106,7 +110,13 @@ export class AgilityApiClient {
   readonly transport: Transport;
   readonly schema: Schema;
 
+  /**
+   * A key the config or the options do not know is refused here with a
+   * UsageError naming it: a misspelt option is never ignored silently.
+   */
   constructor(config: ClientConfig, opts: ClientOptions = {}) {
+    refuseUnknownKeys("the client's config", config, CLIENT_CONFIG_KEYS);
+    refuseUnknownKeys("the client's options", opts, CLIENT_OPTION_KEYS);
     // The built-in transport times its attempts and resends idempotent requests itself (it can read Retry-After); a
     // custom one gets the same two rules from the client. A transport another client of ours already dressed (withSignal) is taken as it is.
     let transport = opts.transport ?? createFetchTransport({
@@ -118,11 +128,14 @@ export class AgilityApiClient {
       defaultHeaders: config.defaultHeaders,
       credentials: config.credentials,
       onUnauthorized: config.onUnauthorized,
-      unauthorizedStatuses: config.unauthorizedStatuses
+      unauthorizedStatuses: config.unauthorizedStatuses,
+      fetchImpl: config.fetchImpl
     });
     if (!dressed.has(transport)) {
-      // A custom transport: each attempt under the client's deadline, and the resend rule around that.
-      if (opts.transport) transport = withRetry(withTimeout(transport, config.timeoutMs ?? DEFAULT_TIMEOUT_MS), config.retries ?? 1);
+      // A custom transport: each attempt under the client's deadline, and the resend rule around that. The built-in
+      // transport applies both itself, also when it was made by the caller and handed in: wrapping it again would
+      // send a failed read four times instead of two.
+      if (!governsItself(transport)) transport = withRetry(withTimeout(transport, config.timeoutMs ?? DEFAULT_TIMEOUT_MS), config.retries ?? 1);
       // Every error says what was asked (so an explanation can tell a failed read from a write whose fate is unknown).
       transport = withRequestStamp(transport);
       if (config.onError) transport = withErrorHook(transport, config.onError);
@@ -361,6 +374,27 @@ export class AgilityApiClient {
     describe: (type: From, scope: Oid) => fieldsService.describe(this.transport, this.schema, type, scope),
     visible: (types: readonly From[], scopes: readonly Oid[]) => fields.visibleFields(this.transport, types, scopes),
     visibleByAsset: (oid: Oid) => fields.visibleFieldsByAsset(this.transport, oid)
+  };
+
+  /**
+   * Which values a list-typed attribute (Status, Priority, a custom
+   * dropdown) may take: for an existing asset (`{ asset }`: its own scope
+   * and team apply, a team with its own process included) or for one not
+   * created yet (`{ type, scope, team? }`). The scope's scheme and the
+   * team's process decide, as in the product's own pickers; the server
+   * itself enforces less on a write (it accepts a status outside the
+   * scope's scheme), so resolve a name here before writing it.
+   * `values` answers a map from attribute to rows `{ _oid, Name }` in the
+   * list's order, one request per attribute; `value` answers the one
+   * value a name (or an OID) means there, or throws NO_SUCH_VALUE /
+   * AMBIGUOUS_VALUE with the candidates as rows in `details.values`.
+   * Only relations to a list type: the endpoint cannot be paged, so for
+   * Owners, Team or Timebox use `client.query` on the related type with a
+   * filter and a page.
+   */
+  readonly lists = {
+    values: (input: listsService.ValuesInput) => listsService.values(this.transport, this.schema, input),
+    value: (input: listsService.ValueInput) => listsService.value(this.transport, this.schema, input)
   };
 
   // ---- writes -----------------------------------------------------------------------

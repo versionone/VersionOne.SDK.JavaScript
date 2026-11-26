@@ -56,8 +56,9 @@ Four paths, and `package.json`'s `exports` lists no others (spec 000 §5a):
 
 A new export goes on the lowest of these that serves it; the root grows
 only for something a client user writes or reads. On the client, reads are
-`client.query` / `queryPage` / `get`, `client.search` across asset types
-and `client.deleted`, and writes are `client.send`,
+`client.query` / `queryPage` / `get`, `client.search` across asset types,
+`client.deleted` and `client.lists` (the values a list-typed attribute may
+take), and writes are `client.send`,
 `client.preview` and `client.sendGuarded` (a guarded write compares each
 asset's `Moment`; what matched nothing is a conflict, never a success:
 spec 000 §6).
@@ -111,6 +112,46 @@ change, by design: `layers.test.ts` (imports point down the layer table),
 - **A change a consumer can see gets a changelog entry with its migration
   line.** Until 1.0.0, breaking changes are allowed between alphas and are
   listed under "Breaking".
+
+## Reference data on the testing instance
+
+The API-testing instance holds nine assets that are there to stay, so
+that a consumer can prove valid values (`client.lists`, api/ValidValues)
+and status-by-name against real values.
+
+A team with its own process and the three statuses it owns, in this
+Order:
+
+| OID | Name | |
+|---|---|---|
+| `Team:152495` | sdk-reference team | `HasProcess` is true |
+| `StoryStatus:152496` | sdk-reference Ready | RollupState Future |
+| `StoryStatus:152497` | sdk-reference In Progress | RollupState Active |
+| `StoryStatus:152498` | sdk-reference Done | RollupState Closed |
+
+Five global story statuses with the product's own names, on no team,
+selected in the Default Scheme (`Scheme:1000`, which nearly every project
+on the instance uses), in this Order:
+
+| OID | Name | |
+|---|---|---|
+| `StoryStatus:152567` | Future | RollupState Active |
+| `StoryStatus:152568` | In Progress | RollupState Active |
+| `StoryStatus:152569` | QA / Test | RollupState Active |
+| `StoryStatus:152570` | Done | RollupState Closed |
+| `StoryStatus:152571` | Accepted | RollupState Closed |
+
+A Story created as a fixture in the system project (`Scope:0`) on no team
+is offered exactly those five; one with `Team: "Team:152495"` exactly the
+three `sdk-reference` ones.
+
+**Nothing creates, edits, closes, reorders or deletes any of the nine, or
+anything named `sdk-reference`, and nothing changes what `Scheme:1000`
+selects.** `sdk-reference` marks permanent data; `sdk-integration` marks
+what a test creates and deletes in its own run. `deleteFixtures` refuses a
+list that contains any of the nine OIDs or any asset whose name starts
+with `sdk-reference` (test/integration/referenceData.ts), and no test may
+assume the instance has no status, team or other asset of a kind.
 
 ## Pull requests and releases
 

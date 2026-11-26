@@ -16,6 +16,7 @@ import type { AssetTypeToken } from "../types/metamodel";
 import { momentless } from "../types/oid";
 import * as assetApi from "../wire/assetApi";
 import * as fields from "../wire/fields";
+import { listTypeOf } from "./lists";
 import type { Schema } from "./schema";
 
 export interface FieldsOf {
@@ -31,6 +32,13 @@ export interface FieldsOf {
   important: string[];
   /** Whether the scheme enforces its important fields when an asset is closed. */
   requiredAtClose: boolean;
+  /**
+   * Which of the attributes above (required, visible or important) are
+   * list-typed, and the list type each points to: `{ Status:
+   * "StoryStatus", Priority: "WorkitemPriority" }`. These are the
+   * attributes `client.lists.values` answers for.
+   */
+  lists: Record<string, AssetTypeToken>;
 }
 
 type SchemeRow = Asset & { Scheme?: (Ref & { ImportantFields?: unknown; IsRequiredAtClose?: unknown }) | null };
@@ -70,6 +78,13 @@ export async function describe(transport: Transport, schema: Schema, type: Asset
   const scheme = row?.Scheme ?? null;
   const tokens = Array.isArray(scheme?.ImportantFields) ? scheme.ImportantFields.filter((t): t is string => typeof t === "string") : [];
   const important = [...new Set(tokens.map((t) => importantName(t, types)).filter((n): n is string => !!n))].sort();
+  const lists: Record<string, AssetTypeToken> = {};
+  for (const name of [...new Set([...required, ...(visible[type] ?? []), ...important])].sort()) {
+    // Only a relation can be list-typed; the related type is loaded only for those.
+    if (definition && schema.attribute(type, name)?.AttributeType !== "Relation") continue;
+    const listType = await listTypeOf(schema, type, name);
+    if (listType) lists[name] = listType;
+  }
   return {
     type,
     scope: scopeOid,
@@ -77,6 +92,7 @@ export async function describe(transport: Transport, schema: Schema, type: Asset
     required,
     visible: visible[type] ?? [],
     important,
-    requiredAtClose: scheme?.IsRequiredAtClose === true
+    requiredAtClose: scheme?.IsRequiredAtClose === true,
+    lists
   };
 }

@@ -91,6 +91,17 @@ export function resendable(error: unknown): boolean {
   return error instanceof ApiError && error.kind === "transient" && error.code !== "TIMEOUT" && error.code !== "SERVER_TIMEOUT" && error.status !== 408 && error.status !== 504;
 }
 
+const selfGoverned = new WeakSet<Transport>();
+/** A transport declares that it times its own attempts and applies the resend rule itself. The built-in fetch transport does. */
+export function declareSelfGoverned<T extends Transport>(transport: T): T { selfGoverned.add(transport); return transport; }
+/**
+ * Does this transport time its attempts and resend by the rule itself?
+ * Then the client adds neither: a rule applied twice is a request sent
+ * four times. True only of the very object `createFetchTransport`
+ * returned; a wrapper around it is a custom transport like any other.
+ */
+export function governsItself(transport: Transport): boolean { return selfGoverned.has(transport); }
+
 /**
  * The resend rule, for any Transport: an idempotent request (a GET, or one
  * the caller marked: a query.v1 read; never a write, guarded or not)
@@ -106,7 +117,8 @@ export function resendable(error: unknown): boolean {
  * rule, so each attempt has its own deadline), so the rule is the client's
  * and not each transport's to re-implement. The built-in fetch transport
  * applies the same rule itself (it can also read Retry-After) and is not
- * wrapped again.
+ * wrapped again, whether the client made it or was handed it: the
+ * transport says so itself (`governsItself`).
  */
 export function withRetry(transport: Transport, retries: number): Transport {
   const extra = Math.max(0, retries);

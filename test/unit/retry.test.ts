@@ -91,6 +91,70 @@ describe("the resend rule above a custom Transport", () => {
     expect(t.calls).toHaveLength(2);
   });
 
+  it("the built-in transport handed to a client is not wrapped again: a failed read is sent twice, not four times (a CLI consumer finding); a wrapper around it is a custom transport", async () => {
+    const counting = () => { const sent: string[] = []; const fetchImpl = (async (url: string | URL) => { sent.push(new URL(String(url)).pathname); return new Response("down", { status: 503 }); }) as typeof fetch; return { sent, fetchImpl }; };
+    // Handed in, as the README shows for a fetch of the caller's own.
+    const handed = counting();
+    await expect(new AgilityApiClient({ baseUrl: "https://x" }, { transport: createFetchTransport({ baseUrl: "https://x", fetchImpl: handed.fetchImpl }) }).query(q)).rejects.toMatchObject({ status: 503, request: { method: "GET", path: "/meta.v1/Story", idempotent: true } });
+    expect(handed.sent).toEqual(["/meta.v1/Story", "/meta.v1/Story"]);
+    // The transport's own `retries` is the one that counts then; the client's config does not add to it.
+    const off = counting();
+    await expect(new AgilityApiClient({ baseUrl: "https://x", retries: 3 }, { transport: createFetchTransport({ baseUrl: "https://x", retries: 0, fetchImpl: off.fetchImpl }) }).query(q)).rejects.toMatchObject({ status: 503 });
+    expect(off.sent).toHaveLength(1);
+    // Made by the client from its config, with a fetch of the caller's: the same two sends, and the fetch is the one given.
+    const made = counting();
+    await expect(new AgilityApiClient({ baseUrl: "https://x", fetchImpl: made.fetchImpl }).query(q)).rejects.toMatchObject({ status: 503 });
+    expect(made.sent).toEqual(["/meta.v1/Story", "/meta.v1/Story"]);
+    // A wrapper of the caller's around the built-in transport is a custom transport: the client's rule goes around it.
+    // To have one rule only, the wrapped transport is made with retries: 0 and timeoutMs: 0.
+    const wrapped = counting();
+    const inner = createFetchTransport({ baseUrl: "https://x", retries: 0, timeoutMs: 0, fetchImpl: wrapped.fetchImpl });
+    await expect(new AgilityApiClient({ baseUrl: "https://x" }, { transport: { request: (o) => inner.request(o) } }).query(q)).rejects.toMatchObject({ status: 503 });
+    expect(wrapped.sent).toHaveLength(2);
+  });
+
+  it("one rule, once, however the client is built: from its config, on a built-in transport handed in, on a custom transport. Attempts counted for a 502, a lost connection, a 429 with Retry-After and a timeout", async () => {
+    type Failure = "502" | "lost" | "429" | "timeout";
+    /** A fetch that fails every request the given way and counts the requests for the query (not the schema load). */
+    const failing = (how: Failure) => {
+      const state = { sends: 0 };
+      const fetchImpl = ((url: string | URL, init?: RequestInit) => {
+        if (new URL(String(url)).pathname.startsWith("/meta.v1/")) return Promise.resolve(new Response("{}", { status: 404 }));
+        state.sends += 1;
+        if (how === "lost") return Promise.reject(new TypeError("fetch failed"));
+        if (how === "timeout") return new Promise<Response>((_, reject) => init!.signal!.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+        return Promise.resolve(new Response("no", { status: Number(how), headers: how === "429" ? { "retry-after": "0" } : {} }));
+      }) as typeof fetch;
+      return { state, fetchImpl };
+    };
+    const base = { baseUrl: "https://x", timeoutMs: 60 };
+    const builds: Record<string, (fetchImpl: typeof fetch) => AgilityApiClient> = {
+      "from its config": (fetchImpl) => new AgilityApiClient({ ...base, fetchImpl }),
+      "a built-in transport handed in": (fetchImpl) => new AgilityApiClient({ baseUrl: "https://x" }, { transport: createFetchTransport({ ...base, fetchImpl }) }),
+      // A custom transport: plain fetch, errors as the built-in one words them, no rule of its own.
+      "a custom transport": (fetchImpl) => new AgilityApiClient(base, { transport: { request: async (o) => {
+        let response: Response;
+        try { response = await fetchImpl(`https://x${o.path}`, { method: o.method, body: o.body === undefined ? undefined : JSON.stringify(o.body), signal: o.signal }); }
+        catch (error) { throw new ApiError((error as Error).message, 0, "NETWORK_ERROR"); }
+        if (!response.ok) throw new ApiError("refused", response.status);
+        return response.json();
+      } } })
+    };
+    const expected: Record<Failure, { sends: number; code?: string; status: number }> = { "502": { sends: 2, status: 502 }, lost: { sends: 2, code: "NETWORK_ERROR", status: 0 }, "429": { sends: 2, status: 429 }, timeout: { sends: 1, code: "TIMEOUT", status: 0 } };
+    for (const [built, make] of Object.entries(builds)) {
+      for (const how of Object.keys(expected) as Failure[]) {
+        const { state, fetchImpl } = failing(how);
+        const started = Date.now();
+        const error = await make(fetchImpl).query(q).catch((e: unknown) => e);
+        const want = expected[how];
+        expect(error, `${built}, ${how}`).toMatchObject({ status: want.status, kind: "transient", ...(want.code ? { code: want.code } : {}) });
+        expect(state.sends, `${built}, ${how}: attempts`).toBe(want.sends);
+        // One deadline, not two stacked: a timeout ends at about timeoutMs.
+        if (how === "timeout") expect(Date.now() - started, `${built}: one deadline`).toBeLessThan(1000);
+      }
+    }
+  }, 30_000);
+
   it("once, not forever; `retries` says how many times, and 0 turns it off", async () => {
     const down = () => new ApiError("Service Unavailable", 503);
     const once = custom(down(), down(), [[]]);

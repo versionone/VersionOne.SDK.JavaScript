@@ -60,7 +60,9 @@ npm test
 | Write with a record and an undo | `client.batch.run(commands, { guard })` then `client.batch.reversible(receipt)` | `guard` has no default. |
 | Copy an asset, or run an operation for its result | `client.copy(oid)` / `client.operate(oid, op)` | |
 | Defaults for a new asset | `client.template(type, { ctx })` | Nothing is created. |
-| What a form needs | `client.fields.describe(type, scope)` | Required, visible and important attributes. |
+| What a form needs | `client.fields.describe(type, scope)` | Required, visible and important attributes, and which of them are list-typed. |
+| The values a Status, Priority or other list may take | `client.lists.values({ asset, attributes })` or `{ type, scope, team?, attributes }` | As the project's scheme and the team's process allow. See "List values". |
+| The value a name means | `client.lists.value({ asset, attribute, name })` | `{ _oid, Name }` to write; `NO_SUCH_VALUE` with the valid values otherwise. |
 | Files | `client.attachments.*`, `client.embeddedImages.*` | |
 | A link for a person | `client.urls.asset(oidOrNumber)` | |
 | An error, said to a person | `client.explain(error)` | "Project is required.", with the instance's labels. |
@@ -124,6 +126,30 @@ A date is spelled one way on every read: `"2026-09-06T13:52:51.903"`, three deci
 
 Rows are typed from what you select, against the product's metamodel: a selected key is its value or `null`, never `undefined`. For an attribute your instance has and the generated model does not (a custom field's relation, a product module's attribute), name your own row type at the call: `client.query<MyRow>(q)` needs only `_oid` on `MyRow`.
 
+### List values
+
+Which values a list-typed attribute may take depends on where the asset is. `client.lists` asks the server, as the product's own pickers do:
+
+```ts
+// For an existing asset: its own project and team apply.
+const { Status, Priority } = await client.lists.values({ asset: "Story:1077", attributes: ["Status", "Priority"], select: ["Order"] });
+// → Status: [{ _oid: "StoryStatus:133", Name: "Future", Order: "115" }, …], in the list's own order
+
+// For one not created yet: say where it will be.
+await client.lists.values({ type: "Defect", scope: "Scope:1005", team: "Team:1030", attributes: ["Priority"] });
+
+// From a name a person typed (or an OID) to the value to write.
+const done = await client.lists.value({ asset: "Story:1077", attribute: "Status", name: "done" });
+await client.send([{ from: "Story:1077", update: { Status: done._oid } }]);
+```
+
+- **What decides.** The project's scheme: only the values selected in it. A team that has its own process (it owns statuses; `Team.HasProcess`) replaces the scheme's statuses with its own, and `{ asset }` alone applies that, so there is nothing to switch on. A team without a process changes nothing. An inactive value is left out, and "no value" is never an entry. The order is the values' `Order`.
+- **Resolve before you write.** A team's process IS enforced on a write: a status outside it is refused, as a command failure `Violation'PrimaryWorkitemCannotHaveInvalidStatus`. A scheme's selection is NOT: a status the project's scheme does not select is accepted, with no violation at all. Nothing but this lookup stops a write from setting a value the project does not use.
+- **`lists.value` matches the whole name**, ignoring case and surrounding space. `match: "prefix"` also accepts the start of the name or of a word in it ("prog" finds "In Progress") when no name matches whole. It never picks among several: no match is an `ApiError` coded `NO_SUCH_VALUE`, more than one is `AMBIGUOUS_VALUE`, and both carry the candidates as rows in `error.details.values` (every valid value, or the ones that matched), ready to offer.
+- **Only lists.** The server's endpoint takes no page and no filter and would answer every member, team or iteration in the project, so for `Owners`, `Team`, `Timebox` and any relation that is not to a list type, `client.lists` throws a `UsageError` before sending anything. There is no "valid values" call for those: read them with `client.query({ from: "Member", filter, page })`, bounded like every other read.
+- **Costs and limits.** One request per attribute, sent one after another, and on a cold schema cache the type loads that tell a list from another relation (for Status: `StoryStatus`, `Status`, `List`); nothing is cached, because an administrator can change a scheme at any time. `select` takes attributes of the value itself (`Order`, `RollupState`), not paths and not dates, and every value arrives as a string. On an instance without the endpoint the call fails as the server's 404; it does not fall back to every value of the list type, which would be a different answer.
+- `client.fields.describe(type, scope).lists` says which of a form's attributes are list-typed and to which list type each points.
+
 ### Reference
 
 Changes between alphas are in `CHANGELOG.md`, each with its migration line.
@@ -148,6 +174,8 @@ Changes between alphas are in `CHANGELOG.md`, each with its migration line.
 - `createFetchTransport` - configurable HTTP transport: `credentials` for same-origin cookie auth, `onUnauthorized` to re-authenticate on a 401 (resends idempotent requests once), and a per-request `signal`; `client.withSignal(signal)` ties a whole client to one
 - **Timeouts are the client's business with any transport**: each attempt has `timeoutMs` (default 60000; 0 for none), and at the deadline the request rejects with an `ApiError` coded `TIMEOUT`, whether or not a custom transport lets go of it (the transport is handed a `signal` that fires then; a late answer is discarded). A timed-out write may still have been applied. A custom transport that waits for a person inside `request` (a sign-in prompt before it replays the request) sets `timeoutMs: 0`: the deadline cannot tell a person from a slow network. The built-in transport's `onUnauthorized` hook runs outside the deadline
 - Every `ApiError` the client lets out says what was asked: `error.request` is `{ method, path, idempotent }` (never the body or headers). `client.explain(error)` uses it: a write that got no answer, or a server failure for one, is explained as "Agility did not confirm the change. It may or may not have been made: check before trying again." with `retrySafe: false`, where a read is `retrySafe: true`, except a read the server itself gave up on (`SERVER_TIMEOUT`), which is `false`: the same request would cost and fail the same. The two questions after a failure are two fields: `retrySafe` (may the same request be sent again as it is?) and `outcome` (is it known whether the change was made?). `outcome` is `"unknown"` for a write that got no confirmation (no answer, a timeout, a 5xx: look before acting), `"notApplied"` where the server answered a refusal before doing the work (a 4xx or a 429 in answer to a write, a conflict, and each failed command in the explanation of a batch, which says nothing of the batch's other commands: those are in the Outcome), and `null` for a read or when the error does not say what was asked. A guarded write (`sendGuarded`) is a write here too: it is never sent again by the client, because a second send of one that landed applies nothing and reports a conflict, which would tell you someone else changed the asset when the change was yours. When one gets no answer (`outcome: "unknown"`), read the asset again: you see your change or you do not, and the guard makes sending it again safe. Decide on `retrySafe`, not on the sentence; it is `null` when the server answered, or when the error carries no stamp (one from a `/wire` function on a bare transport)
+- A config key that is not one the factory takes (`new AgilityApiClient`, `createFetchTransport`, `new FakeAgilityClient`) is refused at construction with a `UsageError` naming it, with the nearest known key when it looks like a typo. Nothing is ignored silently, and no value is repeated in the message.
+- A `fetch` of your own goes in the client's config (`fetchImpl`). A transport you make yourself with `createFetchTransport` and hand to the client keeps its own `retries` and `timeoutMs` and is not given the client's rules a second time; a wrapper of yours around it is a custom transport and is, so make the inner one with `retries: 0, timeoutMs: 0`.
 - Resends and failures are the client's business with any transport: an idempotent request (a GET, a read; never a write, guarded or not) is sent once more after a network failure, a 5xx or a 429 (`retries`, default 1, 0 for none; never a plain write, a 401 or a 403, and **never after a timeout**: the client's `TIMEOUT`, a 408, a 504, or the server's own SQL execution timeout, which arrives as an error document and is coded `SERVER_TIMEOUT` (ask for less: a smaller page, fewer selected paths, a tighter filter). A timeout or an abort ends the client's wait and does not stop the work on the server, so a query that timed out may still be running; `pages` and `all` stop at the first one), and `onError(error, request)` in the config is told about each request that finally failed
 - A custom `Transport` (`new AgilityApiClient(config, { transport })`) decides by itself where requests go; `config.baseUrl` is then used only for the links the client builds (`urls.*`, `embeddedImages.normalize`). `apiErrorFromResponse(status, data)` is the error the fetch transport throws for a refused response, for a custom transport to throw the same
 - `@versionone/agility-sdk/services` - the services as free functions over a `Transport` (`guard`, `batch`, `resolve`, `schema`, `attachments`, `fields`), for a caller that composes one differently; the client's methods are the same things
@@ -174,6 +202,7 @@ expect(fake.sent[0]).toEqual([{ from: "Story:1", execute: "QuickClose" }]);     
 - `onSearch(rows)` answers a search, whether your code calls `fake.search` or builds its own client on `fake.transport`: the fake pages the rows and reports the total, each row comes back with exactly the selected keys, and `fake.searched` is what was asked. Script it before the first search.
 - `sendGuarded` and `batch.run` work on assets addressed by OID that you scripted a row for: `fake.touch(oid)` is someone else changing the asset (the next write stamped earlier is a conflict), `fake.remove(oid)` is it being deleted.
 - `resolve.numbers` finds a number among the scripted rows; `localize` answers `onLocalize` labels and echoes any other tag; `fake.transport` can be the transport of a client your code builds itself.
+- `onValues({ Status: [{ _oid: "StoryStatus:135", Name: "Done" }] })` scripts the valid values by attribute (rows, a function of what was asked, or an Error). `lists.value`'s matching and its errors are the client's own, and `fake.valuesAsked` records each request: the type, the attribute and the asset or the scope and team.
 - `onList(type, rows)` answers rest-1's list read the same way (`client.deleted`, and `rest1.list` from `/wire`). `onRequest(path, answer)` answers any other endpoint in its own shape; with `new FakeAgilityClient({ metamodel })` (a meta.v1 document) a response captured from a server reads translated, as it would live. An `Error` as an answer is thrown.
 - A custom `Transport` has its own suite: `transportConformance(make)` answers the SDK's expectations of a transport as named checks (`for (const c of transportConformance(make)) it(c.name, c.run)`), and the SDK's fetch transport runs the same ones.
 - The fake evaluates no filter or sort and applies no write. It proves what your code asks and what it does with the answer; what the server answers is for a test against an instance.

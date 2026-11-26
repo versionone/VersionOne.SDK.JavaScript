@@ -1,5 +1,6 @@
 import { ApiError, apiErrorFromResponse } from "./errors";
-import { DEFAULT_TIMEOUT_MS, deadline, resendable } from "./retry";
+import { keysOf, refuseUnknownKeys } from "./knownKeys";
+import { DEFAULT_TIMEOUT_MS, deadline, declareSelfGoverned, resendable } from "./retry";
 import type { RequestBody, RequestOptions, ResponseType, Transport } from "./transport";
 
 /**
@@ -79,15 +80,19 @@ export interface FetchTransportConfig {
  *                  `unauthorizedStatuses` means nothing in the request was
  *                  executed — the sign-in was checked before any command
  *                  ran — so sending it again cannot apply anything twice.
- *                  What is known: on one product release, an api/asset
- *                  create sent with no session and one sent with an
- *                  invalid session were each answered 401 with an empty
- *                  body before any command ran, and nothing was created
- *                  (a consumer's check, by an exact-name query afterwards).
- *                  What is not: a session that was valid and has expired,
- *                  a 403, and rest-1. The SDK's own tests run where every
+ *                  What is known, from a consumer's checks on one product
+ *                  release: an api/asset create sent with no session,
+ *                  with an invalid one, and with a credential that had
+ *                  been valid and expired was each answered 401 before
+ *                  any command ran, and nothing was created (checked by
+ *                  an exact-name query afterwards); with the expired
+ *                  credential a rest-1 attribute write was refused the
+ *                  same way and not applied, and a query.v1 read got the
+ *                  same 401. No 403 and no redirect was seen. What is
+ *                  not known: a 403, other releases, and other ways of
+ *                  signing in. The SDK's own tests run where every
  *                  request is authenticated and check none of it, so
- *                  beyond that case it remains your assertion. Answer it
+ *                  beyond those cases it remains your assertion. Answer it
  *                  only where it holds (a missing or lapsed sign-in; not a
  *                  permission problem, which api/asset reports per command
  *                  inside a 200). Honoured once per request, like "retry".
@@ -171,13 +176,21 @@ function retryDelay(response: { status: number; headers: { get(name: string): st
   return 150 * (attempt + 1);
 }
 
+/** Every key of FetchTransportConfig. A key added to the type and not here, or here and not in the type, does not compile. */
+export const FETCH_TRANSPORT_CONFIG_KEYS = keysOf<FetchTransportConfig>()({ baseUrl: true, authorization: true, accessToken: true, defaultHeaders: true, timeoutMs: true, retries: true, fetchImpl: true, credentials: true, onUnauthorized: true, unauthorizedStatuses: true });
+
+/**
+ * The built-in transport. A config with a key it does not know is refused
+ * here with a UsageError naming the key: nothing is ignored silently.
+ */
 export function createFetchTransport(config: FetchTransportConfig): Transport {
+  refuseUnknownKeys("createFetchTransport's config", config, FETCH_TRANSPORT_CONFIG_KEYS);
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const retries = Math.max(0, config.retries ?? 1);
   const authorization = config.authorization ?? (config.accessToken ? `Bearer ${config.accessToken}` : undefined);
   const unauthorizedStatuses = config.unauthorizedStatuses ?? [401];
 
-  return {
+  return declareSelfGoverned({
     async request<T>(options: RequestOptions): Promise<T> {
       const url = buildUrl(config.baseUrl, options.path, options.query);
       const { body, contentType } = encodeBody(options.body, options.contentType);
@@ -263,5 +276,5 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
       }
       throw lastError instanceof ApiError ? lastError : new ApiError("Unknown transport error", 0, "UNKNOWN_ERROR", { cause: lastError });
     }
-  };
+  });
 }

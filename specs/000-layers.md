@@ -189,10 +189,12 @@ committed files.
   is its name, and this repository is public); any other hosted URL and
   anything named V1Production is **refused**. A suite that
   recycles the app domain (custom fields) runs on local instances only.
-  Suites bring their own data — a hosted testing instance may be nearly
-  empty (it had no StoryStatus at all on 2026-11-04) — and fixtures are
-  named `sdk-integration …` and deleted by exact OID by the suite that made
-  them.
+  Suites bring their own data and assume nothing about what else the
+  instance holds, and fixtures are named `sdk-integration …` and deleted
+  by exact OID by the suite that made them. The API-testing instance also
+  holds a little permanent reference data (AGENTS.md lists it by OID):
+  nothing creates, edits or deletes it, and `deleteFixtures` refuses a
+  list that contains any of it.
 
 The API's real behaviours — silent empties, projection order, full-text
 index lag, what a preview echoes — are what fakes cannot reproduce; the
@@ -235,7 +237,17 @@ another 4xx, never after a timeout (below), and once by default (`retries: 1`); 
 the client's, not one transport's: the built-in fetch transport applies it
 itself (it can read Retry-After), and the client applies it around a
 custom Transport (`core/retry`), so a consumer's transport does not
-re-implement it and cannot forget it. `retries: 0` turns it off for a
+re-implement it and cannot forget it. Each rule is applied once, in one
+place: the transport `createFetchTransport` returns declares that it
+times its attempts and resends by the rule itself (`governsItself`), and
+the client then adds neither, whether it made that transport or was
+handed it; every other transport gets both from the client. (The rule
+stays inside the built-in transport because only there is the response
+at hand, with its Retry-After. Before this was declared, a built-in
+transport handed to a client got the rule twice and sent a failed read
+four times.) A caller's wrapper around the built-in transport is a
+custom transport, and its author gives the inner one `retries: 0,
+timeoutMs: 0`. `retries: 0` turns it off for a
 client. A 401 or 403 is never resent by it.
 
 So is the timeout. Each attempt has `timeoutMs` (60 s unless told; 0 for
@@ -248,6 +260,13 @@ nothing about timing beyond honouring `signal`, which the conformance
 suite checks; one with a shorter timeout of its own simply rejects first.
 A timeout says the client stopped waiting, never that the server did not
 act, which is one more reason a write is not resent.
+
+One endpoint cannot be bounded at all: api/ValidValues takes no page and no
+filter, and answers for any attribute. The lists service therefore asks it
+only for relations to a list type (one that descends from List), which are
+short by nature, and refuses every other attribute before sending, naming
+the bounded read to use instead. The wire module says in its header that a
+caller using it directly takes that care itself.
 
 **Nothing is resent after a timeout, a read included.** A timeout or an
 abort ends the client's wait; it does not stop the work on the server. A
@@ -276,13 +295,14 @@ and the caller decides. There is one way round that, and it is the
 consumer's assertion, not the SDK's: a hook that answers "retry-write"
 has the refused request sent once more, a plain write included, on its
 own word that on its server such a refusal means nothing in the request
-was executed. The premise has been checked once, by a consumer, on one
-product release: an api/asset create sent with no session, and one sent
-with an invalid session, were each answered 401 with an empty body before
-any command ran, and nothing was created. It has not been checked for a
-session that was valid and has expired, for a 403, or for rest-1, and the
-SDK's own tests (which run where every request is authenticated) check
-none of it. So the SDK never assumes it. A guarded write is a write here
+was executed. The premise has been checked by a consumer, on one product
+release: an api/asset create sent with no session, with an invalid one,
+and with a credential that had been valid and expired was each answered
+401 before any command ran, and nothing was created; with the expired
+credential a rest-1 attribute write was refused the same way and not
+applied. It has not been checked for a 403, on other releases, or for
+other ways of signing in, and the SDK's own tests (which run where every
+request is authenticated) check none of it. So the SDK never assumes it. A guarded write is a write here
 too: `retryable` is false for it, and "retry-write" is what resumes it. A request sent with `reauthorize: false` skips
 the hook: it is how a hook asks whether the session is alive without
 waiting on itself. A caller's abort (`signal`) ends the request as
@@ -346,7 +366,8 @@ every `ApiError` has a `kind`: `auth`, `forbidden`, `notFound`, `invalid`,
 `transient`, `aborted`, `commandFailure`, `conflict`, `protocol`, `usage` or
 `unknown`. `status` and `code` say what happened; `kind` says what to do.
 A mistake the SDK catches before any request (an unpaged read, an empty
-batch, a bad OID token) is a `UsageError` (`kind: "usage"`, `status: 0`),
+batch, a bad OID token, a config object with a key its factory does not
+know: named in the message, never with its value) is a `UsageError` (`kind: "usage"`, `status: 0`),
 never a bare `Error` or `TypeError`. An error raised around another (a
 batch send that failed, an upload that failed after its create) is a
 `WrappedError` carrying the cause and the cause's kind, so the branch a

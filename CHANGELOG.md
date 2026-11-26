@@ -1,5 +1,128 @@
 # Changelog
 
+## 1.0.0-alpha.12
+
+### Breaking
+
+- **A config object with a key its factory does not know is refused.**
+  `new AgilityApiClient(config, options)`, `createFetchTransport(config)`
+  and `new FakeAgilityClient(config)` (the fake this package exports
+  from `/testing`, not a test double of your own that happens to share
+  the name) each throw a `UsageError` at
+  construction when the object has a key that is not one of theirs. The
+  message names the key or keys, suggests the nearest known key when one
+  looks like a typo (`"retrys" (did you mean "retries"?)`), lists the
+  keys the factory takes, and never repeats a value. Until now such a
+  key was ignored without a word, which a TypeScript caller is told at
+  compile time and a JavaScript or JSDoc-checked caller never was: a
+  consumer's `fetchImpl` on the client's config did nothing for several
+  releases. A key is refused whatever its value, `undefined` included
+  (the name is the mistake); a known key may still be `undefined`.
+  Migration: read each `new AgilityApiClient(…)`,
+  `createFetchTransport(…)` and `new FakeAgilityClient(…)` in your code
+  and remove or correct any key the README does not list for it. The two
+  most likely: an option in the wrong object (`transport` and `types` go
+  in the client's second argument; `onError` is the client's, not the
+  transport's), and a config object shared between the client and
+  something else that added its own keys to it (pass the client its own
+  object).
+
+### Fixed
+
+- **A built-in transport handed to a client was wrapped in the resend
+  and timeout rules a second time**, so a read that failed with a 5xx,
+  a 429 or a lost connection was sent four times instead of two
+  (`new AgilityApiClient(config, { transport: createFetchTransport(…)
+  })`, the way to give the client a `fetch` of your own until now; a
+  CLI consumer finding, present since alpha.5). The transport
+  `createFetchTransport` returns now says that it applies both rules
+  itself, and the client adds neither. Its own `retries` and `timeoutMs`
+  are then the ones that count: set them on `createFetchTransport`, not
+  on the client. Migration: nothing, unless you counted on four sends.
+  A wrapper of your own around the built-in transport is a custom
+  transport and gets the client's rules around it; make the inner one
+  with `retries: 0, timeoutMs: 0` to have each rule once.
+
+### Changed
+
+- **More is known about `"retry-write"`** (no behaviour change). A
+  browser-app consumer checked the case that matters most to a browser:
+  a credential that had been valid and expired. On one product release
+  an api/asset batch of creates and a rest-1 attribute write were each
+  answered 401 and not applied, and a query.v1 read got the same 401;
+  no 403 and no redirect was seen. The doc comment, spec 000 and example
+  09 now say so. Still not checked: a 403, other releases, other ways of
+  signing in. The same check showed that a 401 can carry a body
+  (`{"error":"Unauthorized"}`, or rest-1's `{"_type":"Error", …}`) or
+  none; all three are `kind: "auth"`, and `transportConformance` now has
+  each as a case.
+
+### Added
+
+- `fetchImpl` in the client's config: the `fetch` the built-in transport
+  calls (a proxy-aware one, a recording one in a test), so a caller no
+  longer has to build the transport to supply it. It was accepted and
+  silently ignored by a JavaScript caller before.
+
+- **`client.lists`: the values a list-typed attribute may take, and the
+  one a name means.** For Status, Priority, Source, Category and any
+  other relation to a list type, over the server's api/ValidValues, as
+  the product's own pickers ask it.
+  - `client.lists.values({ asset, attributes, select? })` for an existing
+    asset, or `{ type, scope, team?, attributes }` for one not created
+    yet: a map from attribute to rows `{ _oid, Name, …selected }` in the
+    list's own order. One request per attribute, one after another;
+    nothing is cached.
+  - `client.lists.value({ asset | type+scope, attribute, name, match? })`:
+    the one value a name means there, matched whole, ignoring case and
+    surrounding space; `name` may be an OID, which is checked to be among
+    the valid values; `match: "prefix"` also accepts the start of the
+    name or of a word in it when no name matches whole. No match is an
+    `ApiError` coded `NO_SUCH_VALUE`, several is `AMBIGUOUS_VALUE` (both
+    `kind: "invalid"`), each with the candidates as rows in
+    `details.values`.
+  - What decides, proved live on fixtures: the scope's scheme (only the
+    values selected in it); a team that owns statuses replaces the
+    scheme's statuses with its own, and `{ asset }` alone applies that;
+    a team that owns none changes nothing; an inactive value is left
+    out; there is no "none" entry; a base type (`PrimaryWorkitem`) is
+    accepted.
+  - The server enforces less on a write than this list says: it refuses
+    a status outside a team's process, and accepts one the scope's
+    scheme does not select. Resolve a name with `lists.value` before
+    writing it.
+  - Only relations to a list type. The endpoint takes no page and no
+    filter and answers any attribute whole, so `Owners`, `Team`,
+    `Timebox` and the like are a `UsageError` before anything is sent,
+    naming the bounded read to use (`client.query` on the related type
+    with a filter and a page). An attribute the type does not have, a
+    date in `select` (the endpoint writes dates in the server's culture
+    format) and a path in `select` are refused the same way.
+  - Telling a list from another relation walks the related type's
+    ancestors to `List` (for Status: `StoryStatus`, `Status`, `List`), so
+    a cold schema cache pays up to two more type loads. A type in that
+    chain that cannot be loaded is an `ApiError` coded `NOT_FOUND` naming
+    it, never "not a list type" (a test that serves captured meta.v1
+    types needs those two as well).
+  - No fallback: on an instance without the endpoint the call fails as
+    the server's 404, never as an empty list. From which product release
+    the endpoint exists is not established here.
+- `client.fields.describe(type, scope)` answers `lists` as well: which
+  of the required, visible and important attributes are list-typed, and
+  the list type of each (`{ Status: "StoryStatus" }`). A consumer that
+  compares the whole answer with `toEqual` adds the key.
+- `/wire`: `validValues.forAsset` and `validValues.forNew`, the endpoint
+  as it is, unbounded; its header says what care that needs. `/services`:
+  `lists`.
+- `/testing`: `fake.onValues({ Status: rows })` scripts the valid values
+  by attribute (rows, a function of what was asked, or an Error), and
+  `fake.valuesAsked` records each request. Name matching and the two
+  errors are the client's own on the fake. Without a `metamodel` the
+  fake does not know what an attribute nobody scripted is and says so
+  in its own words; to test what the client refuses (`Owners`), give
+  the fake a metamodel.
+- `examples/12-list-values.ts`.
+
 ## 1.0.0-alpha.11
 
 ### Breaking

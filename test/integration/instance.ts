@@ -10,6 +10,7 @@ import type { Transport } from "../../src/core/transport";
 import { CommandFailureError, momentless, send, type AssetApiResponse } from "../../src/wire/assetApi";
 import type { Command } from "../../src/types/command";
 import { instance, type Instance } from "./instanceConfig";
+import { assertNotReference } from "./referenceData";
 
 export { instance, type Instance };
 
@@ -33,9 +34,12 @@ export const fixtureName = (what: string): string => `sdk-integration ${what} ${
  * if any is still there: a fixture left behind is a failure, not a shrug.
  * Agility refuses to delete a closed asset, so one that would not delete
  * is reactivated and deleted again. An asset already gone is fine (the
- * server answers a command for it with success).
+ * server answers a command for it with success). Before anything is
+ * deleted the names are read: permanent reference data (named
+ * `sdk-reference …`) in the list stops the whole cleanup with an error.
  */
 export async function deleteFixtures(transport: Transport, oids: readonly string[]): Promise<void> {
+  await assertNotReference(transport, oids);
   const left: string[] = [];
   for (const oid of oids) {
     const first = await send(transport, [{ from: oid, execute: "Delete" }]);
