@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { ConflictError, sendGuarded } from "../../src/services/guard";
 import { assetApi } from "../../src/wire";
-import { deleteFixtures, describeInstance, fixtureName, instance } from "./instance";
+import { deleteFixtures, describeInstance, fixtureName, instance, sendFixtures } from "./instance";
 
 /**
  * The guard against a real instance. Brings its own Stories (deleted
@@ -18,10 +18,10 @@ describeInstance("guard (live)", () => {
   const estimate = async (oid: string) => (await assetApi.query<{ _oid: string; Estimate: string }>(t, { from: oid, select: ["Estimate"], page: { size: 1, start: 0 } }))[0]!.Estimate;
 
   beforeAll(async () => {
-    const res = await assetApi.send(t, [
+    const res = await sendFixtures(t, [
       { AssetType: "Story", Name: fixtureName("guard a"), Scope: { _oid: "Scope:0" }, Estimate: 1 },
       { AssetType: "Story", Name: fixtureName("guard b"), Scope: { _oid: "Scope:0" }, Estimate: 1 }
-    ], { throwOnFailure: true });
+    ]);
     [a, b] = res.assetsCreated.oidTokens.map(assetApi.momentless) as [string, string];
     created.push(a, b);
   });

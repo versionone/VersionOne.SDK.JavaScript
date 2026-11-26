@@ -10,6 +10,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: integration ? ["test/integration/**/*.test.ts"] : ["test/unit/**/*.test.ts"],
+    // Before the live tier: one check that its member can do what the suites need, with one clear message if not.
+    globalSetup: integration ? ["test/integration/preflight.ts"] : [],
     testTimeout: integration ? 30_000 : 5_000,
     // One live suite at a time: the custom-fields suite recycles the app
     // domain, which would fail any other suite talking to the instance.

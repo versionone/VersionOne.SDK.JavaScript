@@ -3,7 +3,7 @@ import { AgilityApiClient } from "../../src/client";
 import { Schema } from "../../src/services/schema";
 import type { Story } from "../../src/types/assets/Story";
 import { assetApi } from "../../src/wire";
-import { deleteFixtures, describeInstance, fixtureName, instance } from "./instance";
+import { deleteFixtures, describeInstance, fixtureName, instance, sendFixtures } from "./instance";
 
 /**
  * The schema service and schema-driven translation against a real
@@ -20,11 +20,11 @@ describeInstance("schema (live)", () => {
 
   beforeAll(async () => {
     const [me] = await assetApi.query(t, { from: "Member", select: ["Name"], where: { IsSelf: "true" }, page: { size: 1, start: 0 } });
-    const res = await assetApi.send(t, [
+    const res = await sendFixtures(t, [
       { "@status": { AssetType: "StoryStatus", Name: fixtureName("status"), RollupState: "Active" } },
       { "@story": { AssetType: "Story", Name: fixtureName("schema story"), Scope: { _oid: "Scope:0" }, Estimate: 3, Status: "@status", Owners: [{ _oid: me!._oid }] } },
       { "@task": { AssetType: "Task", Name: fixtureName("schema task"), Parent: "@story" } }
-    ], { throwOnFailure: true });
+    ]);
     created.push(...res.assetsCreated.oidTokens.map(assetApi.momentless));
     story = created.find((oid) => oid.startsWith("Story:"))!;
   });
