@@ -87,7 +87,11 @@ const chunks = <T>(list: T[]): T[][] => Array.from({ length: Math.ceil(list.leng
 const plain = (v: unknown): unknown =>
   Array.isArray(v) ? v.map(plain) : v && typeof v === "object" && "_oid" in v ? momentless(String((v as { _oid: unknown })._oid)) : v ?? null;
 
-export interface Named { number: string | null; name: string | null }
+/** What a receipt says of an asset besides its OID, under the names a row uses: its Number and Name, null where its type has none or the lookup failed. */
+export interface Named { Number: string | null; Name: string | null }
+
+/** An asset on a receipt: a row, as `client.resolve` answers one, without the state. */
+export interface ReceiptAsset extends Named { _oid: Oid; AssetType: AssetTypeToken }
 
 /** Told about a name lookup that failed: the type, the assets left unnamed, and why. */
 export type NameLookupFailure = (failure: { type: AssetTypeToken; oids: Oid[]; error: unknown }) => void;
@@ -114,7 +118,7 @@ export async function namesOf(transport: Transport, schema: Schema, oids: Iterab
     for (const part of chunks(list)) {
       try {
         const rows = await assetApi.query<Asset & { Name?: string; Number?: string }>(transport, { from: type, select, filter: ["ID=$oids"], with: { $oids: part }, page: { size: part.length, start: 0 } });
-        for (const r of rows) out.set(momentless(r._oid), { number: r.Number ?? null, name: r.Name ?? null });
+        for (const r of rows) out.set(momentless(r._oid), { Number: r.Number ?? null, Name: r.Name ?? null });
       } catch (error) {
         onFailure?.({ type, oids: part, error });
       }
@@ -291,8 +295,10 @@ export interface Receipt {
   sentAt?: string;
   /** What the server says the batch did. */
   outcome?: assetApi.Outcome;
-  created: ({ alias: string | null; type: string; oid: Oid } & Named)[];
-  touched: ({ oid: Oid } & Named)[];
+  /** The assets the batch created, in order, each a row with the alias its create carried (null for a bare create). */
+  created: (ReceiptAsset & { alias: string | null })[];
+  /** The assets the batch changed or operated on, each a row. */
+  touched: ReceiptAsset[];
   /** Moment of everything the batch touched, just after it: the stamp a later reverse checks for drift. */
   after: Record<Oid, string>;
   /** ChangeDate of the same assets at the same read: `after`, readable, for a message. */
@@ -402,6 +408,8 @@ export async function runBatch(transport: Transport, schema: Schema, commands: C
     } else {
       receipt.sentCommands = commands;
       done = assetApi.outcomeOf(await assetApi.send(transport, commands));
+      // Unguarded is where a write to an asset that is gone goes unremarked by the server: say so.
+      done.unmatched = assetApi.unmatchedOf(commands, done);
     }
   } catch (error) {
     if (error instanceof GuardedPassError) {
@@ -417,9 +425,9 @@ export async function runBatch(transport: Transport, schema: Schema, commands: C
 
   // The record, from the response alone: nothing below this block can lose it.
   const hit = [...new Set([...done.modified, ...done.operated])];
-  const unnamed = { number: null, name: null };
-  receipt.created = done.created.map((oid, i) => ({ alias: described.creates[i]?.alias ?? null, type: described.creates[i]?.type ?? typeOfOid(oid), oid, ...unnamed }));
-  receipt.touched = hit.map((oid) => ({ oid, ...(names.get(oid) ?? unnamed) }));
+  const unnamed: Named = { Number: null, Name: null };
+  receipt.created = done.created.map((oid, i) => ({ _oid: oid, AssetType: typeOfOid(oid), alias: described.creates[i]?.alias ?? null, ...unnamed }));
+  receipt.touched = hit.map((oid) => ({ _oid: oid, AssetType: typeOfOid(oid), ...(names.get(oid) ?? unnamed) }));
   // A failed command names its asset in what was sent: the guard's
   // with.$oid, or the from of a per-asset command sent as written.
   const sentAs = receipt.sentCommands ?? [];
@@ -445,8 +453,8 @@ export async function runBatch(transport: Transport, schema: Schema, commands: C
       receipt.reverse = reverseOf(described, receipt.before, done, { openDescendants: receipt.openDescendants, cascaded: receipt.cascaded, canOperate });
     }
     const more = await namesOf(transport, schema, [...done.created, ...hit.filter((oid) => !names.has(oid))], noteFailure);
-    receipt.created = receipt.created.map((c) => ({ ...c, ...(more.get(c.oid) ?? unnamed) }));
-    receipt.touched = receipt.touched.map((t) => (names.has(t.oid) ? t : { ...t, ...(more.get(t.oid) ?? unnamed) }));
+    receipt.created = receipt.created.map((c) => ({ ...c, ...(more.get(c._oid) ?? unnamed) }));
+    receipt.touched = receipt.touched.map((t) => (names.has(t._oid) ? t : { ...t, ...(more.get(t._oid) ?? unnamed) }));
     // The cascade's descendants too: a later reverse reopens them, and checks them for changes first.
     const all = [...new Set([...done.created, ...hit, ...Object.values(receipt.cascaded).flat()])];
     const versions = all.length ? await versionsOf(transport, all) : {};
@@ -488,15 +496,15 @@ async function versionsOf(transport: Transport, oids: Oid[]): Promise<Record<Oid
 
 /**
  * A receipt in a format this version cannot check for drift: `receipt: 1`
- * (before 1.0.0-alpha.8) recorded ChangeDates, and the guard now compares
+ * recorded ChangeDates, and the guard now compares
  * Moments. Its reverse can still be sent with `force`, which checks
  * nothing; or run the batch again and keep the new receipt.
  */
 export class ReceiptVersionError extends ApiError {
   constructor(readonly receiptVersion: unknown, readonly targets: Oid[]) {
     super(receiptVersion === undefined
-      ? "this receipt has no format version (`receipt`): pass the whole receipt to reversible, not only its reverse and after. Without the version its stamps cannot be read, so it cannot be checked for changes made since."
-      : `this receipt is in format ${JSON.stringify(receiptVersion)}, from before 1.0.0-alpha.8: it recorded ChangeDates, and assets are now checked by Moment, so it cannot be checked for changes made since. Reverse it with force (no check: later changes are overwritten), or run the batch again and keep the new receipt.`, 0, "RECEIPT_VERSION", { receiptVersion, targets }, "usage");
+      ? "this receipt has no format number (`receipt`): pass the whole receipt to reversible, not only its reverse and after. Without it the receipt's stamps cannot be read, so it cannot be checked for changes made since."
+      : `this receipt is in format ${JSON.stringify(receiptVersion)}, which recorded each asset's ChangeDate; receipts are now format 2 and record its Moment, which is what is compared. An old receipt therefore cannot be checked for changes made since it was written. Reverse it with force (no check: later changes are overwritten), or run the batch again and keep the new receipt.`, 0, "RECEIPT_VERSION", { receiptVersion, targets }, "usage");
     this.name = "ReceiptVersionError";
   }
 }

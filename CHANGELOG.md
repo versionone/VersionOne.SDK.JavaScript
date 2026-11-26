@@ -78,7 +78,11 @@ Each entry has the line a consumer follows to migrate.
   defaulted to true). Migration: `client.batch.run(commands)` →
   `client.batch.run(commands, { guard: true })`.
 - **Receipts are `receipt: 2`**: `skipped` → `conflicts`; new `stamps`,
-  `changedAt` and `stopped`. **A stored `receipt: 1` cannot be checked
+  `changedAt` and `stopped`; and the assets a receipt names are rows,
+  like every other asset the SDK answers: in `created` and `touched`,
+  `oid` → `_oid`, `type` → `AssetType`, `number` → `Number`, `name` →
+  `Name` (`touched` gains `AssetType`); in `names[oid]`, `number` →
+  `Number`, `name` → `Name`. **A stored `receipt: 1` cannot be checked
   for drift**: `batch.reversible` throws a `ReceiptVersionError` (`kind:
   "usage"`, code `RECEIPT_VERSION`) for it. Migration for a holder of old
   receipts: reverse one with `{ force: true }`, which sends its reverse
@@ -126,7 +130,9 @@ Each entry has the line a consumer follows to migrate.
   as `details`. Migration: a formatter that special-cased rest-1 can
   print `message` for both.
 - **Row types**: a sub-select is typed as rows of the related type with
-  what it selected (it was typed as bare Refs, which was wrong), and a
+  what it selected (it was typed as bare Refs, which was wrong); a
+  selected key is its value or null and never `undefined` (a row has the
+  keys that were selected); and a
   single relation is always `| null` on a row, also where the metamodel
   calls it required (the asset it pointed at may be gone). Migration: a
   cast that worked around the old sub-select type can go; code that read
@@ -183,9 +189,13 @@ Each entry has the line a consumer follows to migrate.
   because the asset is gone. The server answers such a command with
   success; a caller that checked `operated.length === 0` by hand reads
   this instead. (A command that applied without changing a value, and
-  one the server refused, are not in it.)
-- `assetStateKind(value)`: an AssetState name or code as `"open"`,
-  `"closed"`, `"template"`, `"deleted"` or `"other"`.
+  one the server refused, are not in it.) It is filled by `client.send`
+  and on the receipt of an unguarded `batch.run`, for aliased commands
+  by OID as for bare ones.
+- `assetStateKind(value)`: an AssetState name or code as `"open"`
+  (Active), `"closed"` (Closed), `"template"` (code 200) or `"deleted"`
+  (Deleted), each checked against a server, and `"other"` for every
+  other state: it does not guess at Future, Dead or a split story.
 - The fetch transport calls the global `fetch` as it is at each request
   (it captured it when the transport was made), so a stub installed
   later is used without passing `fetchImpl`.

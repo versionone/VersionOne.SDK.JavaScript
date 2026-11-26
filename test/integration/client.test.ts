@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { AgilityApiClient } from "../../src/client";
 import type { Story } from "../../src/types/assets/Story";
+import { assetStateKind } from "../../src/types/asset";
 import { normalizeQuery } from "../../src/wire/rest1";
 import { describeInstance, fixtureName, instance } from "./instance";
 
@@ -92,6 +93,10 @@ describeInstance("client reads (live)", () => {
     // Both are gone now (the Conversation went with its last Expression): an update by OID matches nothing, and says so.
     expect(await client.send([{ from: story, update: { Name: "x" } }, { from: conversation, execute: "Join" }])).toMatchObject({ modified: [], operated: [], failures: [], unmatched: [0, 1] });
     expect(await client.get(conversation)).toBeNull();
+    // The same for a command under an alias, and on the receipt of a batch sent unguarded (where nothing else would say so).
+    expect(await client.send([{ "@u": { from: story, update: { Name: "x" } } }])).toMatchObject({ modified: [], failures: [], unmatched: [0] });
+    const receipt = await client.batch.run([{ "@u": { from: story, update: { Name: "x" } } }], { guard: false });
+    expect(receipt).toMatchObject({ sent: true, guarded: false, conflicts: [], outcome: { modified: [], failures: [], unmatched: [0] } });
   });
 
   it("explain says real failures in a sentence with the instance's labels, in one loc-2 request; nothing is created", async () => {
@@ -110,6 +115,27 @@ describeInstance("client reads (live)", () => {
     expect(explained[0]!.typeLabel).not.toBe("AssetType'Story");
     expect(explained[1]!.sentence).toMatch(/: no .+ matches the value given\.$/);
     expect(explained[2]!.sentence).toBe(outcome.failures[2]!.message);
+  });
+
+  it("assetStateKind agrees with the server for the states it names: a live story open, then closed, then deleted; a template, where the instance has one", async () => {
+    const made = await client.send([{ AssetType: "Story", Name: fixtureName("state kind"), Scope: "Scope:0" }], { throwOnFailure: true });
+    const story = made.created[0]!;
+    const state = async () => (await client.get<{ _oid: string; AssetState: string }>(story, ["AssetState"]))?.AssetState;
+    try {
+      expect([await state(), assetStateKind(await state())]).toEqual(["Active", "open"]);
+      await client.send([{ from: story, execute: "QuickClose" }], { throwOnFailure: true });
+      expect([await state(), assetStateKind(await state())]).toEqual(["Closed", "closed"]);
+      await client.send([{ from: story, execute: "Reactivate" }], { throwOnFailure: true });
+    } finally {
+      await client.send([{ from: story, execute: "Delete" }]);
+    }
+    // Gone from an ordinary read; rest-1's deleted read still shows it, and says Deleted.
+    expect(await client.get(story)).toBeNull();
+    const [deleted] = (await client.data.list<{ _oid: string; AssetState: string }>("Story", { select: ["AssetState"], filter: [`ID='${story}'`], deleted: true, page: { size: 1, start: 0 } })).rows;
+    expect([deleted?.AssetState, assetStateKind(deleted?.AssetState)]).toEqual(["Deleted", "deleted"]);
+    // A template is state 200, which query.v1 sends as "200" and the model names Template. (None on an empty instance: then nothing is asserted.)
+    const [template] = await client.query<{ _oid: string; AssetState: string }>({ from: "Story", select: ["AssetState"], filter: ["AssetState='200'"], page: { size: 1, start: 0 } });
+    if (template) expect(assetStateKind(template.AssetState)).toBe("template");
   });
 
   it("the asset page URL answers for a real asset (assetdetail.v1 redirects to the type's detail page)", async () => {

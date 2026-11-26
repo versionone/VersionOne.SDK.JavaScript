@@ -75,20 +75,25 @@ export interface Asset extends CustomAttributes {
 }
 
 /**
- * What an AssetState means for someone deciding what to do with the asset:
- * "open" (Future, Active), "closed" (Closed), "template" (Template),
- * "deleted" (Dead, Deleted), or "other" for the server's two rare states
- * (OldBrokenDownStory, Deprecated) and anything unknown. Takes a name or a
- * code, as assetStateOf does; null for no value.
+ * What an AssetState means for someone deciding what to do with the asset,
+ * for the four states whose meaning is established against a server:
+ *   "open"      Active
+ *   "closed"    Closed
+ *   "template"  code 200, which the server sends as "200" (it has no name
+ *               for it; `Template` is this SDK's)
+ *   "deleted"   Deleted
+ * and "other" for every other state — Future, Dead (the server's word for
+ * the whole range from 192 up, not a state rows are seen to carry),
+ * OldBrokenDownStory (a story that was split: dead, not deleted),
+ * Deprecated — and for a value it does not know. Null for no value. Takes
+ * a name or a code, as assetStateOf does.
  */
 export function assetStateKind(value: unknown): "open" | "closed" | "template" | "deleted" | "other" | null {
   switch (assetStateOf(value)) {
     case null: return null;
-    case "Future":
     case "Active": return "open";
     case "Closed": return "closed";
     case "Template": return "template";
-    case "Dead":
     case "Deleted": return "deleted";
     default: return "other";
   }

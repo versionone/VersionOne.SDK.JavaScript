@@ -46,7 +46,7 @@ describeInstance("resolve (live)", () => {
     expect(await client.resolve.ref("I-999999999")).toBeNull();
   });
 
-  it("refs reads numbers and OID tokens mixed, in the order asked, in two requests; what names nothing is missing", async () => {
+  it("refs reads numbers and OID tokens mixed, in the order first asked, in two requests; an asset named twice is found once; what names nothing is missing", async () => {
     const calls: string[] = [];
     const counting = new AgilityApiClient({ baseUrl: instance!.url }, { transport: { request: (o) => { if (!o.path.startsWith("/meta.v1")) calls.push(o.path); return t.request(o); } }, types: client.schema.cache });
     await counting.schema.load("Story"); await counting.schema.load("Issue"); await counting.schema.load("Member");
@@ -57,9 +57,8 @@ describeInstance("resolve (live)", () => {
     expect(res.found).toEqual([
       { _oid: issue.oid, AssetType: "Issue", Number: issue.number, Name: expect.stringContaining("resolve issue"), AssetState: "Active" },
       { _oid: story.oid, AssetType: "Story", Number: story.number, Name: expect.stringContaining("resolve story"), AssetState: "Active" },
-      { _oid: me._oid, AssetType: "Member", Number: null, Name: me.Name, AssetState: "Active" }, // a Member has no Number: not asked for, so the query is not refused
-      { _oid: story.oid, AssetType: "Story", Number: story.number, Name: expect.stringContaining("resolve story"), AssetState: "Active" }
-    ]);
+      { _oid: me._oid, AssetType: "Member", Number: null, Name: me.Name, AssetState: "Active" } // a Member has no Number: not asked for, so the query is not refused
+    ]); // the story was asked for twice, by its number and by its OID: one asset, found once
     expect(res.missing).toEqual(["Story:999999999", "S-999999999"]);
   });
 });

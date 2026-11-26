@@ -197,7 +197,7 @@ describe("FakeAgilityClient", () => {
     const receipt = await fake.batch.run([{ from: "Story:1", update: { Estimate: 8 } }, { from: "Story:2", update: { Estimate: 8 } }, { "@t": { AssetType: "Task", Name: "new", Parent: "Story:1" } }], { guard: true });
     expect(receipt).toMatchObject({ receipt: 2, sent: true, guarded: true, stopped: null, conflicts: [], failed: [], stamps: { "Story:1": "1", "Story:2": "1" }, after: { "Story:1": "2", "Story:2": "2", "Task:1000": "1" } });
     expect(receipt.before["Story:1"]).toMatchObject({ Estimate: 3, Moment: "1" });
-    expect(receipt.created).toMatchObject([{ alias: "@t", type: "Task", oid: "Task:1000" }]);
+    expect(receipt.created).toMatchObject([{ alias: "@t", AssetType: "Task", _oid: "Task:1000" }]);
     expect(receipt.reverse.commands).toEqual([{ from: "Story:1", update: { Estimate: 3 } }, { from: "Story:2", update: { Estimate: 3 + 2 } }, { from: "Task:1000", execute: "Delete" }]);
     expect((await fake.batch.reversible(receipt)).drifted).toEqual([]);
     fake.touch("Story:2");
@@ -208,6 +208,9 @@ describe("FakeAgilityClient", () => {
     fake.onQuery("Epic", [{ _oid: "Epic:9", Name: "Nine" }]);
     const racing = await fake.batch.run([{ from: "Epic:9", update: { Name: "x" } }], { guard: true, confirm: () => { fake.touch("Epic:9"); return true; } });
     expect(racing).toMatchObject({ sent: true, conflicts: ["Epic:9"], touched: [] });
+    // Sent unguarded to an asset that is gone: the receipt's outcome says the command matched nothing.
+    fake.remove("Epic:9");
+    expect((await fake.batch.run([{ from: "Epic:9", update: { Name: "x" } }], { guard: false })).outcome).toMatchObject({ modified: [], unmatched: [0] });
     expect(await fake.batch.run([{ from: "Epic:9", update: { Name: "x" } }], { guard: true, dryRun: true })).toMatchObject({ sent: false, stopped: "dryRun" });
   });
 

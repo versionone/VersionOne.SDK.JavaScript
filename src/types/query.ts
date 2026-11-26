@@ -56,11 +56,13 @@ export type SelectKey<E> = E extends string ? E : E extends { from: infer F exte
 /**
  * The value a selected key carries on rows of T: the attribute's type when
  * the key is one, a number for an aggregate, unknown for a path the model
- * cannot follow. A single relation is always `| null`, even one the
+ * cannot follow. A selected key is never absent from a row (the rows
+ * rule), so an optional attribute loses its `undefined`: it is its value
+ * or null. A single relation is always `| null`, even one the
  * metamodel calls required: the asset it pointed at may have been deleted
  * (a Conversation's Topic, live 2026-11-26).
  */
-export type SelectValue<T, K> = K extends keyof T ? (T[K] extends { _oid: string } ? T[K] | null : T[K]) : K extends `${string}.@${string}` ? number : unknown;
+export type SelectValue<T, K> = K extends keyof T ? (Exclude<T[K], undefined> extends { _oid: string } ? Exclude<T[K], undefined> | null : Exclude<T[K], undefined>) : K extends `${string}.@${string}` ? number : unknown;
 
 /** The asset type behind a relation attribute's value (`Ref<Member>[]`, `Ref<Status> | null`), or Asset when it is not one. */
 type Related<V> = NonNullable<V> extends readonly (infer R)[] ? Target<R> : Target<NonNullable<V>>;

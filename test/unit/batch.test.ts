@@ -78,8 +78,8 @@ group("batch", () => {
     expect(sent[1]).toEqual({ from: "Story", where: { ID: "$oid", Moment: "$moment" }, filter: ["RetireDateUTC=''"], with: { $oid: "Story:1", $moment: "100" }, update: { Estimate: { add: ["5"], remove: [] }, Owners: { add: ["Member:20"], remove: [] } } });
     expect(t.calls.at(-3)!.idempotent).toBe(false); // the batch creates: never resent
     expect(r.sent && r.guarded).toBe(true);
-    expect(r.created).toEqual([{ alias: "@t", type: "Task", oid: "Task:50", number: "TK-50", name: "new task" }]);
-    expect(r.touched).toEqual([{ oid: "Story:1", number: "S-1", name: "One" }, { oid: "Epic:9", number: "E-9", name: "Nine" }]);
+    expect(r.created).toEqual([{ _oid: "Task:50", AssetType: "Task", alias: "@t", Number: "TK-50", Name: "new task" }]);
+    expect(r.touched).toEqual([{ _oid: "Story:1", AssetType: "Story", Number: "S-1", Name: "One" }, { _oid: "Epic:9", AssetType: "Epic", Number: "E-9", Name: "Nine" }]);
     expect(r.conflicts).toEqual(["Story:2"]);
     expect(r).toMatchObject({ receipt: 2, stopped: null, stamps: { "Story:1": "100", "Story:2": "200", "Epic:9": "300" } });
     expect(r.after).toEqual(AFTER);
@@ -207,7 +207,7 @@ group("batch", () => {
     expect(sent).toEqual(close);
     expect(r.sent).toBe(true);
     expect(r.described.deferred).toEqual([{ index: 0, alias: "@close", from: "Story:20", kind: "execute" }]);
-    expect(r.touched).toEqual([{ oid: "Story:20", number: "S-20", name: "Twenty" }]); // named after the send: preview never listed it
+    expect(r.touched).toEqual([{ _oid: "Story:20", AssetType: "Story", Number: "S-20", Name: "Twenty" }]); // named after the send: preview never listed it
     expect(r.after).toEqual({ "Story:20": "900" });
     expect(r.changedAt).toEqual({ "Story:20": "2026-11-06T10:00:00.1" });
     expect(r.conflicts).toEqual([]); // not guarded: nothing is compared, so nothing conflicts
@@ -220,10 +220,10 @@ group("batch", () => {
     const t = server({ preview: PREVIEW, lookup, send: () => envelope({ assetsCreated: { oidTokens: ["Task:50"], count: 1 }, assetsModified: { oidTokens: ["Story:1"], count: 1 }, assetsOperatedOn: { oidTokens: ["Epic:9"], count: 1 } }) });
     let seen: Receipt["names"] | undefined;
     const r = await runBatch(t, schema, REQUEST, { guard: true, confirm: (receipt) => { seen = receipt.names; return true; } });
-    expect(seen).toEqual({ "Story:1": { number: "S-1", name: "One" }, "Story:2": { number: "S-2", name: "Two" }, "Epic:9": { number: "E-9", name: "Nine" } });
+    expect(seen).toEqual({ "Story:1": { Number: "S-1", Name: "One" }, "Story:2": { Number: "S-2", Name: "Two" }, "Epic:9": { Number: "E-9", Name: "Nine" } });
     const nameQueries = t.calls.filter((c) => (c.body as Q[])[0]?.select?.includes("Name") && (c.body as Q[])[0]?.with?.$oids?.some((o) => o.startsWith("Story")));
     expect(nameQueries).toHaveLength(1); // not again after the send
-    expect(r.touched.map((x) => x.name)).toEqual(["One", "Nine"]);
+    expect(r.touched.map((x) => x.Name)).toEqual(["One", "Nine"]);
     expect(r.notes).toEqual([]);
 
     const refusing = server({ preview: PREVIEW, lookup: (q) => { if (q.select!.includes("Name") && q.with!.$oids![0]!.startsWith("Epic")) throw new Error("Unknown AttributeDefinition: Epic.Name"); return lookup(q); }, send: () => envelope({ assetsOperatedOn: { oidTokens: ["Epic:9"], count: 1 } }) });
@@ -240,7 +240,7 @@ group("batch", () => {
     expect(e.message).toMatch(/sent and its outcome recorded.*receipt\.after is incomplete.*socket hang up/);
     expect(e.receipt.sent).toBe(true);
     expect(e.receipt.outcome?.created).toEqual(["Task:50"]);
-    expect(e.receipt.created).toEqual([{ alias: "@t", type: "Task", oid: "Task:50", number: "TK-50", name: "new task" }]);
+    expect(e.receipt.created).toEqual([{ _oid: "Task:50", AssetType: "Task", alias: "@t", Number: "TK-50", Name: "new task" }]);
     expect(e.receipt.reverse.commands.length).toBeGreaterThan(0);
     expect(e.receipt.after).toEqual({});
   });
@@ -277,12 +277,13 @@ group("batch", () => {
     const error = (await reversible(t, old).catch((e: unknown) => e)) as ReceiptVersionError;
     expect(error).toBeInstanceOf(ReceiptVersionError);
     expect(error).toMatchObject({ kind: "usage", code: "RECEIPT_VERSION", status: 0, receiptVersion: 1, targets: ["Story:1"] });
-    expect(error.message).toMatch(/before 1\.0\.0-alpha\.8.*Reverse it with force.*or run the batch again/);
+    expect(error.message).toMatch(/format 1, which recorded each asset's ChangeDate.*format 2.*Reverse it with force.*or run the batch again/);
+    expect(error.message).not.toMatch(/alpha/); // a consumer's user knows the consumer's version, not this package's
     expect(await reversible(t, old, { force: true })).toEqual({ commands: old.reverse.commands, drifted: [], reactivated: [] });
     // Fields picked by hand without the version: a compile error; for a caller the types do not reach, a refusal that says what is missing.
     // @ts-expect-error `receipt` (the format) is required
     const picked = reversible(t, { after: {}, reverse: old.reverse });
-    await expect(picked).rejects.toThrow(/has no format version.*pass the whole receipt/);
+    await expect(picked).rejects.toThrow(/has no format number.*pass the whole receipt/);
     await expect(picked).rejects.toMatchObject({ code: "RECEIPT_VERSION", receiptVersion: undefined });
     expect(t.calls).toHaveLength(0);
   });

@@ -32,28 +32,35 @@ const envelope = (over: Partial<AssetApiResponse> = {}): AssetApiResponse => ({
 });
 
 describe("unmatched, asset state kinds and the fetch a transport calls", () => {
-  it("unmatchedOf flags an update or operation by OID that is in neither list and has no failure; a query-scoped or aliased command, a failed one, and a failure nobody can place are not flagged", () => {
+  it("unmatchedOf flags an update or operation by OID that is in neither list and has no failure; a query-scoped command, a failed one, and a failure nobody can place are not flagged", () => {
     const commands = [
       { from: "Story:1", update: { Name: "a" } },          // applied
       { from: "Story:2:77", update: { Name: "b" } },       // nothing: gone
       { from: "Conversation:3", execute: "Delete" },       // nothing: no such operation
       { from: "Story:4", execute: "QuickClose" },          // failed
       { from: "Story", filter: ["Number='S-0'"], update: { Name: "c" } }, // matching nothing is an answer
-      { "@u": { from: "Story:5", update: { Name: "d" } } },  // aliased: not known from the request
+      { "@u": { from: "Story:5", update: { Name: "d" } } },  // aliased, by OID: counts like a bare one
       { from: "Story:6", select: ["Name"], page: { size: 1, start: 0 } },
       { AssetType: "Story", Name: "new" }
     ] as never[];
     const failure = (index: number | null) => ({ index, message: "x", violation: null, echoed: {} });
-    expect(unmatchedOf(commands, { modified: ["Story:1:900"], operated: [], failures: [failure(3)] })).toEqual([1, 2]);
+    expect(unmatchedOf(commands, { modified: ["Story:1:900"], operated: [], failures: [failure(3)] })).toEqual([1, 2, 5]);
+    expect(unmatchedOf(commands, { modified: ["Story:1", "Story:5"], operated: [], failures: [failure(3)] })).toEqual([1, 2]);
+    // An aliased write from another alias names no asset the request can show.
+    expect(unmatchedOf([{ "@u": { from: "@s", update: { Name: "d" } } }] as never[], { modified: [], operated: [], failures: [] })).toEqual([]);
     expect(unmatchedOf(commands, { modified: ["Story:1"], operated: [], failures: [failure(null)] })).toEqual([]);
     // An update does not count as an operation, nor the reverse.
     expect(unmatchedOf([{ from: "Story:1", execute: "QuickClose" }], { modified: ["Story:1"], operated: [], failures: [] })).toEqual([0]);
   });
 
-  it("assetStateKind reads a name or a code as what to do with the asset", () => {
-    expect(["Active", "Future", 64, "0"].map(assetStateKind)).toEqual(["open", "open", "open", "open"]);
-    expect(["Closed", 128, "Template", "200", "Dead", 255, "Deleted"].map(assetStateKind)).toEqual(["closed", "closed", "template", "template", "deleted", "deleted", "deleted"]);
-    expect([208, "Deprecated", "Whatever", null, undefined].map(assetStateKind)).toEqual(["other", "other", "other", null, null]);
+  it("assetStateKind names the four states whose meaning is established against a server, by name or code, and calls everything else other", () => {
+    expect(["Active", 64, "64"].map(assetStateKind)).toEqual(["open", "open", "open"]);
+    expect(["Closed", 128].map(assetStateKind)).toEqual(["closed", "closed"]);
+    expect(["200", 200, "Template"].map(assetStateKind)).toEqual(["template", "template", "template"]); // the server sends "200"; Template is this SDK's name for it
+    expect(["Deleted", 255].map(assetStateKind)).toEqual(["deleted", "deleted"]);
+    // Not claimed: Future, Dead (a range, not a state rows carry), a split story (dead, not deleted), Deprecated, the unknown.
+    expect(["Future", 0, "Dead", 192, "OldBrokenDownStory", 208, "Deprecated", "Whatever"].map(assetStateKind)).toEqual(Array(8).fill("other"));
+    expect([null, undefined].map(assetStateKind)).toEqual([null, null]);
   });
 
   it("the fetch transport calls whatever the global fetch is when the request is made, so a stub installed after the client was built is used", async () => {

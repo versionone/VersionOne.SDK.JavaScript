@@ -229,8 +229,9 @@ export function mergeOutcome<Row extends Asset = Asset>(into: Outcome<Row>, done
  * nothing (see Outcome.unmatched). An update that matched is in `modified`
  * even when it changed no value, and an operation that ran is in
  * `operated`, so absence from both with no failure is "nothing was there to
- * act on". Aliased commands are left out: an alias's target is not known
- * from the request.
+ * act on". An aliased command counts like a bare one when its `from` is an
+ * OID; one whose `from` is another alias is left out (its target is not
+ * known from the request).
  */
 export function unmatchedOf(commands: readonly Command[], outcome: Pick<Outcome, "modified" | "operated" | "failures">): number[] {
   const failed = new Set(outcome.failures.map((f) => f.index));
@@ -238,8 +239,9 @@ export function unmatchedOf(commands: readonly Command[], outcome: Pick<Outcome,
   if (failed.has(null)) return [];
   const modified = new Set(outcome.modified.map(momentless)), operated = new Set(outcome.operated.map(momentless));
   return commands.flatMap((c, index) => {
-    const body = c as Partial<UpdateBody & ExecuteBody>;
-    if (typeof body.from !== "string" || !/^[A-Za-z][A-Za-z0-9_]*:\d+(:\d+)?$/.test(body.from) || failed.has(index)) return [];
+    // Aliased or bare: what matters is that the command names one asset by its OID.
+    const body = bodyOf(c) as Partial<UpdateBody & ExecuteBody>;
+    if (typeof body?.from !== "string" || !/^[A-Za-z][A-Za-z0-9_]*:\d+(:\d+)?$/.test(body.from) || failed.has(index)) return [];
     if ("update" in body) return modified.has(momentless(body.from)) ? [] : [index];
     if ("execute" in body) return operated.has(momentless(body.from)) ? [] : [index];
     return [];
@@ -300,7 +302,7 @@ export interface SendOptions extends ReadOptions {
 }
 
 /** A command's body, aliased or bare. */
-const bodyOf = (c: Command): unknown => { const keys = Object.keys(c); return keys.length === 1 && keys[0]!.startsWith("@") ? (c as Record<string, unknown>)[keys[0]!] : c; };
+function bodyOf(c: Command): unknown { const keys = Object.keys(c); return keys.length === 1 && keys[0]!.startsWith("@") ? (c as Record<string, unknown>)[keys[0]!] : c; }
 const isQuery = (body: unknown): body is QueryBody => !!body && typeof body === "object" && typeof (body as QueryBody).from === "string" && !("update" in body) && !("execute" in body) && !("AssetType" in body);
 /** The query commands of a batch, in order, each with its index in the batch. */
 function queriesIn(commands: Command[]): { body: QueryBody; index: number }[] {

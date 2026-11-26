@@ -36,15 +36,15 @@ describeInstance("batch (live)", () => {
       { "@t": { AssetType: "Task", Name: fixtureName("batch task"), Parent: { _oid: a } } }
     ], { guard: true });
     const task = receipt.created[0]!;
-    created.push(task.oid);
+    created.push(task._oid);
     expect(receipt.sent && receipt.guarded).toBe(true);
     expect(receipt.outcome!.failures).toEqual([]);
     expect(receipt.conflicts).toEqual([]);
-    expect(task).toMatchObject({ alias: "@t", type: "Task", number: expect.stringMatching(/-\d+$/) });
-    expect(receipt.touched.map((x) => x.oid).sort()).toEqual([a, b].sort());
+    expect(task).toMatchObject({ alias: "@t", AssetType: "Task", Number: expect.stringMatching(/-\d+$/) });
+    expect(receipt.touched.map((x) => x._oid).sort()).toEqual([a, b].sort());
     expect(receipt.before[a]).toMatchObject({ Estimate: "1", Owners: [] });
     expect(receipt.before[b]).toMatchObject({ Estimate: null, Owners: [] });
-    expect(Object.keys(receipt.after).sort()).toEqual([a, b, task.oid].sort());
+    expect(Object.keys(receipt.after).sort()).toEqual([a, b, task._oid].sort());
     // Stamps are Moments: digits, guarded on the snapshot's, advanced by the batch; the readable time rides beside.
     expect(receipt).toMatchObject({ receipt: 2, stopped: null });
     for (const oid of [a, b]) {
@@ -61,7 +61,7 @@ describeInstance("batch (live)", () => {
     expect(undone.outcome!.failures).toEqual([]);
     expect(await read(a)).toMatchObject({ Estimate: "1", Owners: [] });
     expect(await read(b)).toMatchObject({ Estimate: null, Owners: [] });
-    const [gone] = await assetApi.query<{ _oid: string; AssetState: string }>(t, { from: task.oid, select: ["AssetState"], page: { size: 1, start: 0 } });
+    const [gone] = await assetApi.query<{ _oid: string; AssetState: string }>(t, { from: task._oid, select: ["AssetState"], page: { size: 1, start: 0 } });
     expect(gone?.AssetState ?? "Deleted").toMatch(/Dead|Deleted/);
   });
 
@@ -82,7 +82,7 @@ describeInstance("batch (live)", () => {
     expect(receipt.sent).toBe(true);
     expect(receipt.outcome!.failures).toEqual([]);
     expect(receipt.described.deferred).toEqual([{ index: 0, alias: "@close", from: story, kind: "execute" }]);
-    expect(receipt.touched).toEqual([expect.objectContaining({ oid: story, name: expect.stringContaining("batch aliased") })]);
+    expect(receipt.touched).toEqual([expect.objectContaining({ _oid: story, AssetType: "Story", Name: expect.stringContaining("batch aliased") })]);
     expect(receipt.after[story]).toMatch(/^\d+$/);
     expect(receipt.changedAt[story]).toMatch(/^\d{4}-/);
     const [row] = await assetApi.query<{ _oid: string; AssetState: string }>(t, { from: story, select: ["AssetState"], page: { size: 1, start: 0 } });
@@ -90,7 +90,7 @@ describeInstance("batch (live)", () => {
   });
   it("undoing a batch whose created asset was closed since reactivates it first, then deletes it (Agility refuses to delete a closed asset)", async () => {
     const receipt = await client.batch.run([{ "@s": { AssetType: "Story", Name: fixtureName("batch undo closed"), Scope: { _oid: "Scope:0" } } }], { guard: true });
-    const story = receipt.created[0]!.oid;
+    const story = receipt.created[0]!._oid;
     created.push(story);
     await assetApi.send(t, [{ from: story, execute: "QuickClose" }], { throwOnFailure: true });
     // Closing it changed it since the batch, so the reverse is forced.
@@ -142,7 +142,7 @@ describeInstance("batch (live)", () => {
       { "@e": { AssetType: "Expression", BelongsTo: "@c", Content: fixtureName("reverse conversation") } }
     ], { guard: true });
     expect(receipt.outcome!.failures).toEqual([]);
-    const [conversation, expression] = [receipt.created[0]!.oid, receipt.created[1]!.oid];
+    const [conversation, expression] = [receipt.created[0]!._oid, receipt.created[1]!._oid];
     expect(conversation).toMatch(/^Conversation:/);
     expect(receipt.reverse.commands).toEqual([{ from: expression, execute: "Delete" }]);
     expect(receipt.reverse.notes.join("\n")).toMatch(new RegExp(`${conversation}: Conversation has no Delete operation`));

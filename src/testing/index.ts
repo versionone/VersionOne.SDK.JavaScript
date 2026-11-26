@@ -160,8 +160,9 @@ function answerSend(script: Script, commands: Command[], writes: { body: Command
   const out: Required<FakeOutcome> = { created: [], modified: [], operated: [], failures: [] };
   for (const { body } of writes) {
     const guarded = guardedOn(body);
-    // A guarded command applies only to an asset that exists, at the moment it was guarded on; anything else matches nothing.
-    const target = guarded ? (exists(script, guarded.oid) && String(momentOf(script, guarded.oid)) === guarded.moment ? guarded.oid : null) : "from" in body && isOidToken(body.from) ? momentless(body.from) : null;
+    // A guarded command applies only to an asset that exists, at the moment it was guarded on; anything else matches
+    // nothing. A plain one applies to whatever its OID names, unless the test removed that asset.
+    const target = guarded ? (exists(script, guarded.oid) && String(momentOf(script, guarded.oid)) === guarded.moment ? guarded.oid : null) : "from" in body && isOidToken(body.from) && !script.gone.has(momentless(body.from)) ? momentless(body.from) : null;
     if ("AssetType" in body) { const oid = `${String(body.AssetType)}:${script.nextId++}`; out.created.push(oid); script.known.add(oid); }
     else if (target && "update" in body) { out.modified.push(target); bump(script, target); }
     else if (target && "execute" in body) { out.operated.push(target); bump(script, target); }

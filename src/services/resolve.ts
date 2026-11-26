@@ -162,7 +162,8 @@ export async function resolveRef(transport: Transport, spec: string, options: { 
  * Several refs at once, numbers and OID tokens mixed, as a message or a
  * command line mentions them: every one is read, so each answer carries its
  * Number, Name and AssetState where its type has them, and one that names
- * nothing is `missing`. Two requests at most, however many refs: one for
+ * nothing is `missing`. An asset named twice (by its number and by its
+ * OID) is found once. Two requests at most, however many refs: one for
  * the numbers (every number root asked at once), one for the OID tokens
  * (one query per asset type among them). `schema` says which of the three
  * attributes each OID's type has; an unknown select would fail the query.
@@ -192,5 +193,7 @@ export async function resolveRefs(transport: Transport, schema: Schema, specs: r
   }
   const isOid = (spec: string): boolean => isOidToken(spec);
   const answer = (spec: string): ResolvedAsset | undefined => (isOid(spec) ? byOid.get(momentless(spec)) : byNumber.get(spec.toUpperCase()));
-  return { found: asked.flatMap((s) => answer(s) ?? []), missing: asked.filter((s) => !answer(s)) };
+  // One entry per asset, in the order first asked for: a number and the OID of the same asset are one asset.
+  const found = [...new Map(asked.flatMap((s) => { const a = answer(s); return a ? [[a._oid, a] as const] : []; })).values()];
+  return { found, missing: asked.filter((s) => !answer(s)) };
 }

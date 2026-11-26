@@ -23,8 +23,8 @@ describe("typed queries", () => {
     const rows = await client.query({ from: "Story", select: ["Name", "Estimate", "Status", "Status.Name", "Owners.@Count", { from: "Owners", select: ["Name"] }], page: { size: 1, start: 0 } });
     expectTypeOf(rows[0]!._oid).toEqualTypeOf<string>();
     expectTypeOf(rows[0]!.Name).toEqualTypeOf<string>();
-    expectTypeOf(rows[0]!.Estimate).toEqualTypeOf<number | null | undefined>();
-    expectTypeOf(rows[0]!.Status).toEqualTypeOf<Ref<StoryStatus> | null | undefined>();
+    expectTypeOf(rows[0]!.Estimate).toEqualTypeOf<number | null>();
+    expectTypeOf(rows[0]!.Status).toEqualTypeOf<Ref<StoryStatus> | null>();
     expectTypeOf(rows[0]!["Status.Name"]).toEqualTypeOf<unknown>();
     expectTypeOf(rows[0]!["Owners.@Count"]).toEqualTypeOf<number>();
     // A sub-select is rows of the related type with what it selected, not bare Refs.
@@ -42,20 +42,20 @@ describe("typed queries", () => {
     const [byOid] = await client.query({ from: "Story:1055", select: ["Name"], page: { size: 1, start: 0 } });
     expectTypeOf(byOid!.Name).toEqualTypeOf<string>();
     const got = await client.get("Story:1055", ["Name", "Number"]);
-    expectTypeOf(got).toEqualTypeOf<(Asset & { Name: string; Number: string | null | undefined }) | null>();
+    expectTypeOf(got).toEqualTypeOf<(Asset & { Name: string; Number: string | null }) | null>();
   });
 
   it("a custom list type (Custom_<Name>, a subtype of List) has List's attributes and its own token; custom and reciprocal attributes are attribute values", async () => {
     const [value] = await client.query({ from: "Custom_Demo_List", select: ["Name", "Order", "Inactive", "ReciprocalOf_Story_Custom_Demo_Single_List"], page: { size: 1, start: 0 } });
     expectTypeOf(value!.Name).toEqualTypeOf<string>();
-    expectTypeOf(value!.Order).toEqualTypeOf<number | null | undefined>();
-    expectTypeOf(value!.Inactive).toEqualTypeOf<boolean | null | undefined>();
-    expectTypeOf(value!.ReciprocalOf_Story_Custom_Demo_Single_List).toEqualTypeOf<AttributeValue | undefined>();
+    expectTypeOf(value!.Order).toEqualTypeOf<number | null>();
+    expectTypeOf(value!.Inactive).toEqualTypeOf<boolean | null>();
+    expectTypeOf(value!.ReciprocalOf_Story_Custom_Demo_Single_List).toEqualTypeOf<AttributeValue>();
     const byOid = await client.get("Custom_Demo_List:12", ["AssetType", "ColorName"]);
     expectTypeOf(byOid!.AssetType).toEqualTypeOf<"Custom_Demo_List">();
     expectTypeOf(byOid!.ColorName).toEqualTypeOf<string>();
     const [story] = await client.query({ from: "Story", select: ["Custom_Demo_List", "Custom_Points"], page: { size: 1, start: 0 } });
-    expectTypeOf(story!.Custom_Demo_List).toEqualTypeOf<AttributeValue | undefined>();
+    expectTypeOf(story!.Custom_Demo_List).toEqualTypeOf<AttributeValue>();
     // @ts-expect-error a List has no Estimate
     value!.Estimate;
     expect(value).toBeDefined();
@@ -67,7 +67,7 @@ describe("typed queries", () => {
       { from: "Story", select: ["Name", "Estimate"], page: { size: 1, start: 0 } },
       { from: "Scope", select: ["Name"], page: { size: 1, start: 0 } }
     ]);
-    expectTypeOf(stories[0]!.Estimate).toEqualTypeOf<number | null | undefined>();
+    expectTypeOf(stories[0]!.Estimate).toEqualTypeOf<number | null>();
     expectTypeOf(scopes[0]!.Name).toEqualTypeOf<string>();
     // @ts-expect-error Estimate was not selected on Scope
     scopes[0]!.Estimate;
@@ -99,7 +99,7 @@ describe("typed sub-selects and a consumer's own row type", () => {
     type Row = (typeof rows)[number];
     expectTypeOf<Row["Participants"][number]["Name"]>().toEqualTypeOf<string>();
     expectTypeOf<Row["ContainedExpressions"][number]["Content"]>().toEqualTypeOf<string>();
-    expectTypeOf<NonNullable<Row["ContainedExpressions"][number]["Author"]>["IsInactive"]>().toEqualTypeOf<boolean | null | undefined>();
+    expectTypeOf<NonNullable<Row["ContainedExpressions"][number]["Author"]>["IsInactive"]>().toEqualTypeOf<boolean | null>();
     expectTypeOf<Row["ContainedExpressions"][number]["Author"]>().toBeNullable();
     expectTypeOf<Row["ContainedExpressions"][number]["Mentions"][number]["_oid"]>().toEqualTypeOf<string>();
     // A bare single relation can be null on a row even where the metamodel calls it required.
@@ -124,7 +124,7 @@ describe("typed attachment listing", () => {
     expectTypeOf(plain[0]!.Filename).toEqualTypeOf<string | null>();
     const more = await client.attachments.list("Story:1", { select: ["Category", "Days", "Asset.Number"] });
     expectTypeOf(more[0]!.Name).toEqualTypeOf<string | null>();
-    expectTypeOf(more[0]!.Days).toEqualTypeOf<number | null | undefined>();
+    expectTypeOf(more[0]!.Days).toEqualTypeOf<number | null>();
     expectTypeOf(more[0]!["Asset.Number"]).toBeUnknown();
     // @ts-expect-error IsDeleted was not selected
     void more[0]!.IsDeleted;
@@ -140,6 +140,6 @@ describe("typed attachment listing", () => {
     void file?.contentType;
     expectTypeOf<NonNullable<typeof file>["servedContentType"]>().toEqualTypeOf<string | null>();
     const paged = await client.attachments.page("Story:1", { select: ["Days"], page: { size: 1, start: 0 } });
-    expectTypeOf(paged.attachments[0]!.Days).toEqualTypeOf<number | null | undefined>();
+    expectTypeOf(paged.attachments[0]!.Days).toEqualTypeOf<number | null>();
   });
 });
