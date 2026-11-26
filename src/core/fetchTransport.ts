@@ -79,15 +79,19 @@ export interface FetchTransportConfig {
  *                  `unauthorizedStatuses` means nothing in the request was
  *                  executed — the sign-in was checked before any command
  *                  ran — so sending it again cannot apply anything twice.
- *                  What is known: on one product release, an api/asset
- *                  create sent with no session and one sent with an
- *                  invalid session were each answered 401 with an empty
- *                  body before any command ran, and nothing was created
- *                  (a consumer's check, by an exact-name query afterwards).
- *                  What is not: a session that was valid and has expired,
- *                  a 403, and rest-1. The SDK's own tests run where every
+ *                  What is known, from a consumer's checks on one product
+ *                  release: an api/asset create sent with no session,
+ *                  with an invalid one, and with a credential that had
+ *                  been valid and expired was each answered 401 before
+ *                  any command ran, and nothing was created (checked by
+ *                  an exact-name query afterwards); with the expired
+ *                  credential a rest-1 attribute write was refused the
+ *                  same way and not applied, and a query.v1 read got the
+ *                  same 401. No 403 and no redirect was seen. What is
+ *                  not known: a 403, other releases, and other ways of
+ *                  signing in. The SDK's own tests run where every
  *                  request is authenticated and check none of it, so
- *                  beyond that case it remains your assertion. Answer it
+ *                  beyond those cases it remains your assertion. Answer it
  *                  only where it holds (a missing or lapsed sign-in; not a
  *                  permission problem, which api/asset reports per command
  *                  inside a 200). Honoured once per request, like "retry".

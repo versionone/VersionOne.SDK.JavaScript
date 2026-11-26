@@ -295,13 +295,14 @@ and the caller decides. There is one way round that, and it is the
 consumer's assertion, not the SDK's: a hook that answers "retry-write"
 has the refused request sent once more, a plain write included, on its
 own word that on its server such a refusal means nothing in the request
-was executed. The premise has been checked once, by a consumer, on one
-product release: an api/asset create sent with no session, and one sent
-with an invalid session, were each answered 401 with an empty body before
-any command ran, and nothing was created. It has not been checked for a
-session that was valid and has expired, for a 403, or for rest-1, and the
-SDK's own tests (which run where every request is authenticated) check
-none of it. So the SDK never assumes it. A guarded write is a write here
+was executed. The premise has been checked by a consumer, on one product
+release: an api/asset create sent with no session, with an invalid one,
+and with a credential that had been valid and expired was each answered
+401 before any command ran, and nothing was created; with the expired
+credential a rest-1 attribute write was refused the same way and not
+applied. It has not been checked for a 403, on other releases, or for
+other ways of signing in, and the SDK's own tests (which run where every
+request is authenticated) check none of it. So the SDK never assumes it. A guarded write is a write here
 too: `retryable` is false for it, and "retry-write" is what resumes it. A request sent with `reauthorize: false` skips
 the hook: it is how a hook asks whether the session is alive without
 waiting on itself. A caller's abort (`signal`) ends the request as

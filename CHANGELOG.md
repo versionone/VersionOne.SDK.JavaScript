@@ -18,6 +18,20 @@
   transport and gets the client's rules around it; make the inner one
   with `retries: 0, timeoutMs: 0` to have each rule once.
 
+### Changed
+
+- **More is known about `"retry-write"`** (no behaviour change). A
+  browser-app consumer checked the case that matters most to a browser:
+  a credential that had been valid and expired. On one product release
+  an api/asset batch of creates and a rest-1 attribute write were each
+  answered 401 and not applied, and a query.v1 read got the same 401;
+  no 403 and no redirect was seen. The doc comment, spec 000 and example
+  09 now say so. Still not checked: a 403, other releases, other ways of
+  signing in. The same check showed that a 401 can carry a body
+  (`{"error":"Unauthorized"}`, or rest-1's `{"_type":"Error", …}`) or
+  none; all three are `kind: "auth"`, and `transportConformance` now has
+  each as a case.
+
 ### Added
 
 - `fetchImpl` in the client's config: the `fetch` the built-in transport

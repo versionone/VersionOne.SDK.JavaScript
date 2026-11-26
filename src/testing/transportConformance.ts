@@ -160,6 +160,9 @@ export function transportConformance(make: (server: ConformanceServer) => Transp
         [401, "Unauthorized"],
         // As api/asset refuses a request with no session: a 401 with nothing in the body. The status alone makes it kind "auth".
         [401, ""],
+        // As query.v1 and rest-1 refuse an expired credential: a 401 with a body. Still kind "auth".
+        [401, { error: "Unauthorized" }],
+        [401, { _type: "Error", error: "Unauthorized" }],
         [503, ""]
       ];
       for (const [status, data] of bodies) {
