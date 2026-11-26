@@ -220,8 +220,13 @@ export class AgilityApiClient {
   // ---- the endpoints behind the reads -----------------------------------------------
 
   /**
-   * meta.v1: the instance's schema, raw. (The translated, cached view is
-   * `schema`; `schema.revalidate()` drops it when the schema's tag moves.)
+   * meta.v1: the instance's schema, read on request and not cached (the
+   * cached view queries use is `schema`; `schema.revalidate()` drops it
+   * when the schema's tag moves). What comes back is the model's
+   * `Metamodel` / `AssetType` — references as tokens (`Base: "Story"`,
+   * `RelatedAsset: "Member"`), operations by name — not meta.v1's own
+   * document, which spells them `{ nameref, href }`; for that document,
+   * read `/meta.v1` through the transport.
    * `read` and `readType` are conditional: pass the tag a previous answer
    * carried and an unchanged schema answers null without a download —
    * meta.v1 sends one strong ETag for the whole schema. `etag()` reads that
