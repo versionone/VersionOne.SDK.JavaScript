@@ -76,14 +76,30 @@ export function withTimeout(transport: Transport, timeoutMs: number): Transport 
 }
 
 /**
+ * May a request that failed this way be sent again by the SDK? Only when
+ * the failure says the server never took the request up, or took it up and
+ * fell over: no connection (NETWORK_ERROR), a 429, a 5xx.
+ *
+ * Not after a timeout, of the client's (TIMEOUT) or of the server's or a
+ * gateway's (408, 504). A timeout ends the wait; it does not stop the
+ * work. The request may still be running on the server, and a request that
+ * ran out of time is likely one that costs a lot: sending it again runs
+ * the cost twice and keeps the caller waiting twice as long.
+ */
+export function resendable(error: unknown): boolean {
+  return error instanceof ApiError && error.kind === "transient" && error.code !== "TIMEOUT" && error.status !== 408 && error.status !== 504;
+}
+
+/**
  * The resend rule, for any Transport: an idempotent request (a GET, or one
  * the caller marked — a query.v1 read, a guarded batch with no creates)
- * that fails with a transient error (no answer, a timeout, a 5xx, a 429)
- * is sent again, `retries` times at most, a little later each time.
- * Nothing else is: not a plain write, whatever happened to it; not a 401
- * or 403 (re-authentication is the unauthorized hook's business, and a
- * resend would prompt twice); not any other 4xx, which is an answer; not a
- * request its caller aborted.
+ * that fails because it never reached the server or the server fell over
+ * (no connection, a 5xx other than 504, a 429) is sent again, `retries`
+ * times at most, a little later each time. Nothing else is: not a plain
+ * write, whatever happened to it; not a request that timed out, here or on
+ * the server (see `resendable`); not a 401 or 403 (re-authentication is
+ * the unauthorized hook's business, and a resend would prompt twice); not
+ * any other 4xx, which is an answer; not a request its caller aborted.
  *
  * The client puts this around a custom Transport (outside the timeout
  * rule, so each attempt has its own deadline), so the rule is the client's
@@ -102,10 +118,29 @@ export function withRetry(transport: Transport, retries: number): Transport {
         try {
           return await transport.request<T>(options);
         } catch (error) {
-          const again = attempt + 1 < attempts && error instanceof ApiError && error.kind === "transient" && !options.signal?.aborted;
+          const again = attempt + 1 < attempts && resendable(error) && !options.signal?.aborted;
           if (!again) throw error;
           await delay(150 * (attempt + 1));
         }
+      }
+    }
+  };
+}
+
+/**
+ * A Transport whose errors say what was asked: every ApiError that comes
+ * out carries `request` (method, path, whether it was safe to send twice).
+ * It is what lets an explanation tell a read that failed from a write
+ * whose fate is unknown.
+ */
+export function withRequestStamp(transport: Transport): Transport {
+  return {
+    async request<T>(options: RequestOptions): Promise<T> {
+      try {
+        return await transport.request<T>(options);
+      } catch (error) {
+        if (error instanceof ApiError && !error.request) error.request = { method: options.method, path: options.path.split("?")[0]!, idempotent: options.idempotent ?? options.method === "GET" };
+        throw error;
       }
     }
   };

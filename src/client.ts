@@ -1,7 +1,7 @@
 import type { ClientConfig } from "./core/clientConfig";
 import { ApiError, UsageError } from "./core/errors";
 import { createFetchTransport } from "./core/fetchTransport";
-import { withErrorHook, DEFAULT_TIMEOUT_MS, withRetry, withTimeout } from "./core/retry";
+import { DEFAULT_TIMEOUT_MS, withErrorHook, withRequestStamp, withRetry, withTimeout } from "./core/retry";
 import type { Transport } from "./core/transport";
 import * as attachments from "./services/attachments";
 import * as batch from "./services/batch";
@@ -123,6 +123,8 @@ export class AgilityApiClient {
     if (!dressed.has(transport)) {
       // A custom transport: each attempt under the client's deadline, and the resend rule around that.
       if (opts.transport) transport = withRetry(withTimeout(transport, config.timeoutMs ?? DEFAULT_TIMEOUT_MS), config.retries ?? 1);
+      // Every error says what was asked (so an explanation can tell a failed read from a write whose fate is unknown).
+      transport = withRequestStamp(transport);
       if (config.onError) transport = withErrorHook(transport, config.onError);
       dressed.add(transport);
     }

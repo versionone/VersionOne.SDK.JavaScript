@@ -34,16 +34,17 @@ const read: RequestOptions = { method: "GET", path: "/loc-2.v1" };
 const write: RequestOptions = { method: "POST", path: "/api/asset", body: [{ from: "Story:1", update: { Name: "x" } }] };
 
 describe("the timeout rule above a custom Transport", () => {
-  it("an attempt that takes longer than timeoutMs is a TIMEOUT, and an idempotent request is then sent once more, with a deadline of its own", async () => {
-    const t = honouring((n) => (n === 1 ? never : later(5, { ok: true })));
-    expect(await clientOn(t, { timeoutMs: 30 }).request(read)).toEqual({ ok: true });
-    expect(t.calls).toHaveLength(2);
-    // The first attempt was told to stop; the second got a fresh signal.
-    expect([t.calls[0]!.signal!.aborted, t.calls[1]!.signal!.aborted]).toEqual([true, false]);
-    // Every attempt slow: the caller gets the TIMEOUT, a transient failure, after the one resend.
-    const slow = honouring(() => never);
-    await expect(clientOn(slow, { timeoutMs: 20 }).request(read)).rejects.toMatchObject({ code: "TIMEOUT", status: 0, kind: "transient", message: "Timed out after 20 ms" });
-    expect(slow.calls).toHaveLength(2);
+  it("an attempt that takes longer than timeoutMs is a TIMEOUT, and it is not sent again, a read included: the first one may still be running", async () => {
+    const slow = honouring((n) => (n === 1 ? never : later(5, { ok: true })));
+    await expect(clientOn(slow, { timeoutMs: 20, retries: 3 }).request(read)).rejects.toMatchObject({ code: "TIMEOUT", status: 0, kind: "transient", message: "Timed out after 20 ms", request: { method: "GET", path: "/loc-2.v1", idempotent: true } });
+    expect(slow.calls).toHaveLength(1);
+    // The attempt was told to stop.
+    expect(slow.calls[0]!.signal!.aborted).toBe(true);
+    // A lost connection is another matter (the request never arrived): that read is sent once more, with a deadline of its own.
+    const dropped = honouring((n) => (n === 1 ? Promise.reject(new ApiError("fetch failed", 0, "NETWORK_ERROR")) : later(5, { ok: true })));
+    expect(await clientOn(dropped, { timeoutMs: 50 }).request(read)).toEqual({ ok: true });
+    expect(dropped.calls).toHaveLength(2);
+    expect(dropped.calls[1]!.signal!.aborted).toBe(false);
   });
 
   it("a plain write that times out is not sent again: the client stopped waiting, which says nothing about whether the server acted", async () => {
@@ -127,5 +128,48 @@ describe("the built-in transport under the same rule", () => {
     // The hook takes three times the timeout, as someone typing a password would.
     const transport = createFetchTransport({ baseUrl: "https://x", timeoutMs: 20, retries: 0, fetchImpl, onUnauthorized: async () => { await later(60, null); return "retry" as const; } });
     expect(await transport.request(read)).toEqual({ ok: true });
+  });
+});
+
+describe("what to tell a person when a request got no answer", () => {
+  const failing = (failure: ApiError): Transport => ({ request: (() => Promise.reject(failure)) as Transport["request"] });
+  const say = async (failure: () => ApiError, request: RequestOptions) => {
+    const client = new AgilityApiClient({ baseUrl: "https://agility.example.com/I", retries: 0 }, { transport: failing(failure()) });
+    const error = await client.transport.request(request).catch((e: unknown) => e);
+    const [said] = await client.explain(error);
+    return { stamp: (error as ApiError).request, sentence: said!.sentence, retrySafe: said!.retrySafe, audience: said!.audience };
+  };
+  const guarded: RequestOptions = { ...write, idempotent: true };
+  const timeout = () => new ApiError("Timed out after 60000 ms", 0, "TIMEOUT");
+  const dropped = () => new ApiError("fetch failed", 0, "NETWORK_ERROR");
+
+  it("a write that got no answer, or a server failure for one, is never 'try again': the change may or may not have been made, and retrySafe is false", async () => {
+    for (const failure of [timeout, dropped, () => new ApiError("Bad Gateway", 502), () => new ApiError("Internal Server Error", 500), () => new ApiError("Gateway Timeout", 504)]) {
+      expect(await say(failure, write)).toEqual({ stamp: { method: "POST", path: "/api/asset", idempotent: false }, audience: "user", retrySafe: false, sentence: "Agility did not confirm the change. It may or may not have been made: check before trying again." });
+    }
+  });
+
+  it("a read, or a guarded batch, that timed out is safe to repeat but may still be running; one that never got through may work in a moment", async () => {
+    for (const request of [read, guarded]) {
+      for (const failure of [timeout, () => new ApiError("Gateway Timeout", 504), () => new ApiError("Request Timeout", 408)]) {
+        expect(await say(failure, request)).toMatchObject({ retrySafe: true, sentence: "Agility did not answer in time. The request may still be running: wait before trying again." });
+      }
+      for (const failure of [dropped, () => new ApiError("Service Unavailable", 503)]) {
+        expect(await say(failure, request)).toMatchObject({ retrySafe: true, sentence: "Agility could not be reached, or is busy. The same request may work in a moment." });
+      }
+    }
+  });
+
+  it("a 429 was turned away before any work, so even a write is safe to send again; an error that does not say what was asked gets only what is known", async () => {
+    expect(await say(() => new ApiError("Too Many Requests", 429), write)).toMatchObject({ retrySafe: true, sentence: "Agility is busy. The same request may work in a moment." });
+    // An error from a function of /wire on a transport no client wrapped carries no stamp.
+    const client = new AgilityApiClient({ baseUrl: "https://agility.example.com/I" }, { transport: failing(timeout()) });
+    const [bare] = await client.explain(timeout());
+    expect(bare).toMatchObject({ retrySafe: null, audience: "user", sentence: "Agility could not be reached, or is busy." });
+    // The stamp never carries the body or the headers.
+    const stamped = await client.transport.request({ ...write, headers: { authorization: "Bearer secret" } }).catch((e: unknown) => e) as ApiError;
+    expect(Object.keys(stamped.request!).sort()).toEqual(["idempotent", "method", "path"]);
+    // And the question does not arise for an answered refusal.
+    expect((await client.explain([{ index: 0, message: "Violation'Required'Story.Scope", command: {} } as never]))[0]!.retrySafe).toBeNull();
   });
 });

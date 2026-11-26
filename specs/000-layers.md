@@ -231,7 +231,7 @@ made), which api/asset's `execute` performs but does not report. The transport
 retries only idempotent requests (GET by default, and every query.v1
 POST, since that endpoint cannot write), only on a network
 failure, a 5xx or a 429 (Retry-After honoured, up to 30 s), never
-another 4xx, and once by default (`retries: 1`); a batch write is never retried unless the
+another 4xx, never after a timeout (below), and once by default (`retries: 1`); a batch write is never retried unless the
 caller has made it idempotent with a guard and says so. That rule is
 the client's, not one transport's: the built-in fetch transport applies it
 itself (it can read Retry-After), and the client applies it around a
@@ -248,7 +248,16 @@ abandoned request answers later is discarded. A transport therefore owes
 nothing about timing beyond honouring `signal`, which the conformance
 suite checks; one with a shorter timeout of its own simply rejects first.
 A timeout says the client stopped waiting, never that the server did not
-act, which is one more reason a write is not resent. The deadline cannot
+act, which is one more reason a write is not resent.
+
+**Nothing is resent after a timeout, a read included.** A timeout or an
+abort ends the client's wait; it does not stop the work on the server. A
+query that timed out may still be running, and a request that ran out of
+time is likely one that costs a lot, so sending it again runs the cost
+twice and makes the caller wait twice. That holds whoever gave up: the
+client (`TIMEOUT`), the server (408) or a gateway in front of it (504).
+`pages` and `all` stop at the first timeout rather than pressing on. A
+caller that wants to try again does so itself, knowing the cost. The deadline cannot
 tell the network from a person: a custom transport that waits for someone
 inside `request` turns the client's timeout off (`timeoutMs: 0`), and the
 built-in transport's re-authentication hook runs outside the deadline.

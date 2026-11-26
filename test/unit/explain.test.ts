@@ -42,7 +42,7 @@ describe("explain", () => {
       "Agility Warning: Attempting to delete a closed item.  This change was not saved."
     ]);
     expect(explained[0]).toEqual({
-      sentence: "Project is required.", audience: "user", echoed: false, index: 0, rule: "Required", attribute: "Story.Scope", attributeLabel: "Project", typeLabel: "Backlog Item", relatedType: null, relatedTypeLabel: null,
+      sentence: "Project is required.", audience: "user", echoed: false, retrySafe: null, index: 0, rule: "Required", attribute: "Story.Scope", attributeLabel: "Project", typeLabel: "Backlog Item", relatedType: null, relatedTypeLabel: null,
       localized: LOC2["Violation'Required'AttributeDefinition'Scope'Story"], message: "Violation'Required'AttributeDefinition'Scope'Story"
     });
     // A Resolution failure names the attribute as a token and then the related type; loc-2 has no label for these here, so their own names stand in.
@@ -80,7 +80,8 @@ describe("explain", () => {
     const say = async (e: unknown) => (await explain(t, e))[0]!.sentence;
     expect(await say(new ApiError("Unauthorized", 401))).toBe("Agility did not accept the sign-in: the token is missing, wrong or no longer valid.");
     expect(await say(new ApiError("Forbidden", 403))).toBe("Agility refused: this member is not allowed to do that.");
-    expect(await say(new ApiError("fetch failed", 0, "NETWORK_ERROR"))).toBe("Agility could not be reached, or is busy. The same request may work in a moment.");
+    // An error that does not say what was asked (no client stamped it): only what is known, and no invitation to send it again.
+    expect(await say(new ApiError("fetch failed", 0, "NETWORK_ERROR"))).toBe("Agility could not be reached, or is busy.");
     expect(await say(new ApiError("Request aborted", 0, "ABORTED"))).toBe("The request was cancelled.");
     // The SDK's own sentences and the server's (a rejected query) are said as they are.
     expect(await say(new UsageError("query of Story without a page: every read must be bounded"))).toBe("query of Story without a page: every read must be bounded");

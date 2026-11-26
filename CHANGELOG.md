@@ -1,5 +1,53 @@
 # Changelog
 
+## 1.0.0-alpha.11
+
+### Breaking
+
+- **A request that timed out is no longer sent again, a read included.**
+  Since alpha.5 an idempotent request (a GET, a query.v1 read, a guarded
+  batch) that timed out was sent once more. A timeout ends the client's
+  wait; it does not stop the work on the server. A slow query was
+  therefore run twice while the first might still be running, and the
+  caller waited two timeouts. Now nothing is resent after a timeout,
+  whoever gave up: the client (`TIMEOUT`), the server (a 408) or a
+  gateway (a 504). A lost connection, a 429 and any other 5xx are resent
+  once as before. `client.pages` and `client.all` stop at the first
+  timeout. `TIMEOUT` is still `kind: "transient"` (the same request may
+  work later): the kind says what the failure is, and the resend rule is
+  narrower than the kind. Migration: nothing, unless you relied on the
+  second attempt; a caller that wants one resends in its own code,
+  knowing a costly request may then run twice. Applies to the built-in
+  transport and to a custom one alike.
+
+### Changed
+
+- **`client.explain` no longer tells a person to try again after a write
+  that got no answer.** For any `transient` error it said "Agility could
+  not be reached, or is busy. The same request may work in a moment.",
+  which for a write whose fate is unknown is how a duplicate gets made.
+  Now: a write with no answer, a timeout or a 5xx is "Agility did not
+  confirm the change. It may or may not have been made: check before
+  trying again."; a read or a guarded batch that timed out is "Agility
+  did not answer in time. The request may still be running: wait before
+  trying again."; a 429 is "Agility is busy. The same request may work in
+  a moment."; an error that does not say what was asked is "Agility could
+  not be reached, or is busy.". Migration: a test that asserts the old
+  sentence for a write; a consumer that offers a retry button should
+  decide on `retrySafe` (below).
+
+### Added
+
+- `Explanation.retrySafe`: `true` when sending the same request again is
+  safe (a read, a guarded batch, anything refused with a 429), `false`
+  for a write that got no answer or a server failure, `null` when the
+  server answered and said why, or when it cannot be told.
+- `ApiError.request`: `{ method, path, idempotent }`, stamped by the
+  client on every error it lets out, with any transport. Never the body
+  or headers. Absent on an error from a `/wire` or `/services` function
+  used on a transport no client wrapped; such an error is explained with
+  the cautious sentence and `retrySafe: null`.
+
 ## 1.0.0-alpha.10
 
 ### Breaking (for a consumer with its own `Transport`)

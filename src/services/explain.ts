@@ -54,6 +54,18 @@ export interface Explanation {
   audience: "user" | "developer";
   /** True when `sentence` is nothing more than the message as the server (or the SDK) sent it: nothing was explained. */
   echoed: boolean;
+  /**
+   * Is it safe to send the same request again? True: nothing was changed
+   * by the failed attempt, or sending it twice changes nothing more (a
+   * read, a guarded batch, anything the server turned away with a 429).
+   * False: a write that got no answer, or a server failure in answer to
+   * one; the change may or may not have been made, so look before trying
+   * again. Null when the question does not arise (the server answered and
+   * said why) or cannot be told (the error does not say what was asked,
+   * as one from a `/wire` function on a bare transport does not). Decide
+   * on this field, not on the wording of `sentence`.
+   */
+  retrySafe: boolean | null;
   /** The failed command's index in the batch, when this explains one; null otherwise. */
   index: number | null;
   /** What was violated: Required, Invalid, Unresolved, Ambiguous, AssetCannotDeleteClosed, …; null when the message is not such a token. */
@@ -90,8 +102,9 @@ const typeTag = (type: string): string => `AssetType'${type}`;
 /** A token that looks like one loc-2 would know: no spaces, apostrophe-delimited. A plain sentence is not asked about. */
 const isTag = (message: string): boolean => /^[A-Za-z]\w*'[^\s]+$/.test(message.trim());
 
-type Said = Pick<Explanation, "sentence" | "audience" | "echoed">;
-const forUser = (sentence: string): Said => ({ sentence, audience: "user", echoed: false });
+type Said = Pick<Explanation, "sentence" | "audience" | "echoed" | "retrySafe">;
+const forUser = (sentence: string, retrySafe: boolean | null = null): Said => ({ sentence, audience: "user", echoed: false, retrySafe });
+const forDeveloper = (sentence: string, echoed: boolean): Said => ({ sentence, audience: "developer", echoed, retrySafe: null });
 
 function sentenceOf(problem: Problem, label: string | null, related: string | null, localized: string | null, message: string): Said {
   if (label) {
@@ -107,9 +120,9 @@ function sentenceOf(problem: Problem, label: string | null, related: string | nu
   // A rule the instance has no words for (seen live: Violation'AssetCannotInactivateClosed, Violation'MessageMustNotBeSent):
   // never the bare token, but the rule's name spelled out is still a token and not a sentence written for a person. It can
   // read as the opposite of what happened ("message must not be sent" is said of a message that was). So it is for a developer.
-  if (problem.rule) return { sentence: `${label ? `${label}: refused` : "Refused"} (${words(problem.rule)}).`, audience: "developer", echoed: false };
+  if (problem.rule) return forDeveloper(`${label ? `${label}: refused` : "Refused"} (${words(problem.rule)}).`, false);
   // Anything else is the server's own text, as it came.
-  return { sentence: message, audience: "developer", echoed: true };
+  return forDeveloper(message, true);
 }
 /** A rule's name as words: AssetCannotInactivateClosed → "asset cannot inactivate closed". */
 const words = (rule: string): string => rule.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
@@ -121,17 +134,42 @@ function failuresOf(input: unknown): CommandFailureDetail[] | null {
   return null;
 }
 
+/**
+ * A request that got no answer, or a failure for one. What to tell a
+ * person depends on what was asked, which the client stamps on the error
+ * (`error.request`):
+ *   - a 429, whatever was asked: the server turned it away before doing
+ *     anything, so it is safe to send again;
+ *   - a write (not idempotent) with no answer, a timeout or a 5xx: nobody
+ *     knows whether the change was made, and saying "try again" is how a
+ *     duplicate happens;
+ *   - a read, or a guarded batch (which the guard makes safe to repeat),
+ *     that timed out: safe to repeat, but it may still be running, so not
+ *     at once;
+ *   - a read that never got through: safe, and may work in a moment;
+ *   - no stamp: say only what is known.
+ */
+function unanswered(error: ApiError): Said {
+  if (error.status === 429) return forUser("Agility is busy. The same request may work in a moment.", true);
+  const asked = error.request;
+  if (!asked) return forUser("Agility could not be reached, or is busy.");
+  if (!asked.idempotent) return forUser("Agility did not confirm the change. It may or may not have been made: check before trying again.", false);
+  const timedOut = error.code === "TIMEOUT" || error.status === 408 || error.status === 504;
+  if (timedOut) return forUser("Agility did not answer in time. The request may still be running: wait before trying again.", true);
+  return forUser("Agility could not be reached, or is busy. The same request may work in a moment.", true);
+}
+
 /** A sentence for an error that is not a list of failed commands, by its kind, and who it is for. */
 function sentenceForError(error: unknown): Said {
-  if (!(error instanceof ApiError)) return { sentence: error instanceof Error ? error.message : String(error), audience: "developer", echoed: true };
+  if (!(error instanceof ApiError)) return forDeveloper(error instanceof Error ? error.message : String(error), true);
   switch (error.kind) {
     case "auth": return forUser("Agility did not accept the sign-in: the token is missing, wrong or no longer valid.");
     case "forbidden": return forUser("Agility refused: this member is not allowed to do that.");
-    case "transient": return forUser("Agility could not be reached, or is busy. The same request may work in a moment.");
+    case "transient": return unanswered(error);
     case "aborted": return forUser("The request was cancelled.");
     case "conflict": return forUser("Someone else changed this since it was read; nothing was applied. Look at it again and decide.");
     // notFound, invalid, usage, protocol and the rest: the message is the SDK's or the server's own, about the call.
-    default: return { sentence: error.message, audience: "developer", echoed: true };
+    default: return forDeveloper(error.message, true);
   }
 }
 

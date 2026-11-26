@@ -57,6 +57,14 @@ export class ApiError extends Error {
    * word it as a server error.
    */
   readonly kind: ErrorKind;
+  /**
+   * What was asked when this error came back, stamped by the client: the
+   * method, the path, and whether the request was one that is safe to send
+   * twice (a GET, a read, a guarded batch with no creates). Never the body
+   * or the headers: errors get logged. Absent on an error from a function
+   * of `/wire` or `/services` used on a transport no client has wrapped.
+   */
+  request?: { method: string; path: string; idempotent: boolean };
 
   constructor(message: string, status: number, code?: string, details?: unknown, kind: ErrorKind = kindOf(status, code)) {
     const cause = causeOf(details);

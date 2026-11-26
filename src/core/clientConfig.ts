@@ -20,8 +20,11 @@ export interface ClientConfig extends Pick<FetchTransportConfig, "credentials" |
   /**
    * How long one attempt may take, in milliseconds, whichever Transport
    * the client has. Default 60000. When it has passed, the request
-   * rejects with an ApiError coded TIMEOUT (transient: an idempotent
-   * request is then sent again, see `retries`). The client stops waiting
+   * rejects with an ApiError coded TIMEOUT. It is NOT sent again, a read
+   * included: a timeout (like an abort) ends the client's wait and does
+   * not stop the work on the server, so a query that timed out may still
+   * be running, and sending it again would run its cost twice. `pages`
+   * and `all` stop at the first timeout. The client stops waiting
    * at the deadline whether or not a custom transport lets go of the
    * request: the transport is given a `signal` that fires then, and
    * whatever it answers afterwards is discarded. A timed-out write may
@@ -39,11 +42,13 @@ export interface ClientConfig extends Pick<FetchTransportConfig, "credentials" |
   timeoutMs?: number;
   /**
    * How many times an idempotent request (a GET, a query.v1 read, a
-   * guarded batch with no creates) is sent again after a transient
-   * failure: no answer, a timeout, a 5xx, a 429. Default 1; 0 turns it
-   * off. It applies whichever Transport the client has: the built-in one
-   * does it itself, and the client does it around a custom one. A plain
-   * write is never resent, nor is a 401 or 403.
+   * guarded batch with no creates) is sent again after a failure that
+   * says the server never took it up or fell over: no connection, a 5xx,
+   * a 429. Default 1; 0 turns it off. It applies whichever Transport the
+   * client has: the built-in one does it itself, and the client does it
+   * around a custom one. Never resent: a plain write; a request that
+   * timed out, on the client (TIMEOUT) or on the server or a gateway (408,
+   * 504), since it may still be running; a 401 or 403.
    */
   retries?: number;
   defaultHeaders?: Record<string, string>;

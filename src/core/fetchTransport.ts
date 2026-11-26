@@ -1,5 +1,5 @@
 import { ApiError, apiErrorFromResponse } from "./errors";
-import { DEFAULT_TIMEOUT_MS, deadline } from "./retry";
+import { DEFAULT_TIMEOUT_MS, deadline, resendable } from "./retry";
 import type { RequestBody, RequestOptions, ResponseType, Transport } from "./transport";
 
 /**
@@ -160,9 +160,6 @@ function retryDelay(response: { status: number; headers: { get(name: string): st
   return 150 * (attempt + 1);
 }
 
-/** A status the same request may succeed after: too many requests, or a server-side failure. */
-const retriable = (status: number): boolean => status === 429 || status >= 500;
-
 export function createFetchTransport(config: FetchTransportConfig): Transport {
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const retries = Math.max(0, config.retries ?? 1);
@@ -201,10 +198,10 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           settle();
           // The caller gave up: final, whatever attempt this was.
           if (callerSignal?.aborted) throw abortedError(callerSignal);
-          // Network failure or timeout: the only case a retry can help.
-          lastError = limit.expired()
-            ? new ApiError(`Timed out after ${timeoutMs} ms`, 0, "TIMEOUT", { cause: error })
-            : new ApiError(error instanceof Error ? error.message : String(error), 0, "NETWORK_ERROR", { cause: error });
+          // A timeout ends the wait, not the work: the request may still be running, so it is never sent again.
+          if (limit.expired()) throw new ApiError(`Timed out after ${timeoutMs} ms`, 0, "TIMEOUT", { cause: error });
+          // No connection: the one failure here that a resend can help.
+          lastError = new ApiError(error instanceof Error ? error.message : String(error), 0, "NETWORK_ERROR", { cause: error });
           if (attempt + 1 < attempts) await delay(150 * (attempt + 1));
           continue;
         }
@@ -245,7 +242,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           }
           break;
         }
-        if (retriable(response.status) && attempt + 1 < attempts) {
+        if (resendable(lastError) && attempt + 1 < attempts) {
           const wait = retryDelay(response, attempt);
           if (wait === null) break;
           await delay(wait);

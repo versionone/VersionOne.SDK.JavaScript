@@ -20,13 +20,36 @@ const noTypes = (t: Transport): Transport => ({ request: (o) => (o.path.startsWi
 const q = { from: "Story", select: ["Name"], page: { size: 1, start: 0 } };
 
 describe("the resend rule above a custom Transport", () => {
-  it("a read is sent once more after a 5xx, a lost connection or a timeout, by default", async () => {
-    for (const failure of [new ApiError("Bad Gateway", 502), new ApiError("fetch failed", 0, "NETWORK_ERROR"), new ApiError("Timed out", 0, "TIMEOUT"), new ApiError("Too Many Requests", 429)]) {
+  it("a read is sent once more after a 5xx, a lost connection or a 429, by default", async () => {
+    for (const failure of [new ApiError("Bad Gateway", 502), new ApiError("fetch failed", 0, "NETWORK_ERROR"), new ApiError("Too Many Requests", 429)]) {
       const t = custom(failure, [[{ _oid: "Story:1", Name: "n" }]]);
       const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: noTypes(t) });
       expect(await client.query(q)).toEqual([{ _oid: "Story:1", Name: "n" }]);
       expect(t.calls).toHaveLength(2);
     }
+  });
+
+  it("a read that timed out is NOT sent again, whoever gave up: the transport, the server (408) or a gateway (504). The request may still be running", async () => {
+    for (const failure of [new ApiError("timeout of 30000ms exceeded", 0, "TIMEOUT"), new ApiError("Request Timeout", 408), new ApiError("Gateway Timeout", 504)]) {
+      const t = custom(failure, [[{ _oid: "Story:1", Name: "n" }]]);
+      const client = new AgilityApiClient({ baseUrl: "https://x", retries: 3 }, { transport: noTypes(t) });
+      // Still a transient failure (the same request may work later), and it says what was asked.
+      await expect(client.query(q)).rejects.toMatchObject({ kind: "transient", status: failure.status, request: { method: "POST", path: "/query.v1", idempotent: true } });
+      expect(t.calls).toHaveLength(1);
+    }
+    // The built-in transport alike: a 504 once, a 502 twice.
+    for (const [status, sends] of [[504, 1], [408, 1], [502, 2]] as const) {
+      const fetchImpl = vi.fn(async () => new Response("down", { status }));
+      await expect(createFetchTransport({ baseUrl: "https://x", fetchImpl: fetchImpl as unknown as typeof fetch }).request({ method: "GET", path: "/meta.v1/Story" })).rejects.toMatchObject({ status });
+      expect(fetchImpl).toHaveBeenCalledTimes(sends);
+    }
+  });
+
+  it("pages and all stop at the first timeout rather than pressing on", async () => {
+    const t = custom([[{ _oid: "Story:1", Name: "a" }, { _oid: "Story:2", Name: "b" }]], new ApiError("Timed out after 60000 ms", 0, "TIMEOUT"), [[{ _oid: "Story:9", Name: "never read" }]]);
+    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: noTypes(t) });
+    await expect(client.all({ from: "Story", select: ["Name"], page: { size: 2, start: 0 } })).rejects.toMatchObject({ code: "TIMEOUT" });
+    expect(t.calls).toHaveLength(2);
   });
 
   it("once, not forever; `retries` says how many times, and 0 turns it off", async () => {
