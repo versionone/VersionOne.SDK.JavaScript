@@ -94,6 +94,24 @@ describeInstance("client reads (live)", () => {
     expect(await client.get(conversation)).toBeNull();
   });
 
+  it("explain says real failures in a sentence with the instance's labels, in one loc-2 request; nothing is created", async () => {
+    const outcome = await client.send([
+      { AssetType: "Story", Name: fixtureName("explain") },                                      // no Scope
+      { AssetType: "Story", Name: fixtureName("explain"), Scope: "Scope:0", Status: "NoSuchStatus" }, // nothing by that name
+      { AssetType: "Story", Name: fixtureName("explain"), Scope: "Scope:0", Estimate: "abc" }      // not a number
+    ]);
+    expect(outcome.created).toEqual([]); // the control: all three were refused
+    const explained = await client.explain(outcome);
+    expect(explained.map((e) => [e.index, e.rule, e.attribute])).toEqual([[0, "Required", "Story.Scope"], [1, "Unresolved", "Story.Status"], [2, null, null]]);
+    // The instance's own words for Story.Scope and for Story (they are configurable, so only their presence is asserted).
+    expect(explained[0]!.attributeLabel).toEqual(expect.any(String));
+    expect(explained[0]!.sentence).toBe(`${explained[0]!.attributeLabel} is required.`);
+    expect(explained[0]!.localized).toMatch(/required/i);
+    expect(explained[0]!.typeLabel).not.toBe("AssetType'Story");
+    expect(explained[1]!.sentence).toMatch(/: no .+ matches the value given\.$/);
+    expect(explained[2]!.sentence).toBe(outcome.failures[2]!.message);
+  });
+
   it("the asset page URL answers for a real asset (assetdetail.v1 redirects to the type's detail page)", async () => {
     const me = await client.me();
     const response = await fetch(client.urls.asset(me._oid), { headers: { authorization: `Bearer ${process.env.V1_ACCESS_TOKEN ?? ""}` }, redirect: "manual" });

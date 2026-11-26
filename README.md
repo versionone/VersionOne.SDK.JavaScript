@@ -59,6 +59,7 @@ npm test
 | What a form needs | `client.fields.describe(type, scope)` | Required, visible and important attributes. |
 | Files | `client.attachments.*`, `client.embeddedImages.*` | |
 | A link for a person | `client.urls.asset(oidOrNumber)` | |
+| An error, said to a person | `client.explain(error)` | "Project is required.", with the instance's labels. |
 | Labels in the instance's words | `client.localize(tags)` | |
 
 Every row follows one rule, whichever call read it: **a relation you select is a Ref (`{ _oid }`); a path you select by name is at `row[path]` (`row["Status.Name"]`); nothing arrives that you did not select.** Select both `Owners` and `Owners.Name` and you get the Refs and, beside them, a parallel array at `"Owners.Name"`. To get attributes on the related rows themselves, use a sub-select: `{ from: "Owners", select: ["Name"] }` gives `row.Owners[i].Name`. (rest-1 also puts the display attributes it sends unasked on the Refs of a relation you selected.)

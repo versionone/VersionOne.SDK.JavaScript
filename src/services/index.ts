@@ -8,6 +8,7 @@
  */
 export * as attachments from "./attachments";
 export * as batch from "./batch";
+export * as explain from "./explain";
 export * as fields from "./fields";
 export * as guard from "./guard";
 export * as resolve from "./resolve";

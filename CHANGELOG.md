@@ -140,6 +140,15 @@ Each entry has the line a consumer follows to migrate.
 
 ### Added
 
+- **`client.explain(error)`**: an error said to a person. One
+  `Explanation` per failed command (from a `CommandFailureError`, an
+  `Outcome` or its `failures`), or one for any other error: a short
+  `sentence` ("Project is required.") with the instance's own labels for
+  the attribute and the asset type, the parts it was made from (`rule`,
+  `attribute`, `attributeLabel`, `typeLabel`), and the server's own
+  `localized` sentence where it has one. `Resolution'…` failures are read
+  too. One loc-2 request at most. Migration: a consumer's own failure
+  patterns and three-tag loc-2 lookups can go.
 - **`client.resolve.refs(specs)`**: numbers and OID tokens mixed, each
   one read, in two requests at most; what names nothing is `missing`.
 - **`Outcome.unmatched`**: the indexes of updates and operations

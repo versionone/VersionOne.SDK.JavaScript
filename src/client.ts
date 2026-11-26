@@ -4,6 +4,7 @@ import { createFetchTransport } from "./core/fetchTransport";
 import type { Transport } from "./core/transport";
 import * as attachments from "./services/attachments";
 import * as batch from "./services/batch";
+import * as explainService from "./services/explain";
 import * as fieldsService from "./services/fields";
 import * as guard from "./services/guard";
 import * as resolve from "./services/resolve";
@@ -247,6 +248,20 @@ export class AgilityApiClient {
    */
   localize(tags: readonly string[], options?: loc2.LocalizeOptions): Promise<loc2.Localizations> {
     return loc2.localize(this.transport, tags, options);
+  }
+
+  /**
+   * An error, said to a person: one Explanation per failed command (from a
+   * CommandFailureError, an Outcome or its `failures`), or one for any
+   * other error. Each has a short `sentence` — "Project is required.",
+   * with the instance's own label for the attribute — and the parts it was
+   * made from (`rule`, `attribute`, `attributeLabel`, `typeLabel`, the
+   * server's own `localized` sentence where it has one). One loc-2 request
+   * at most; a label it cannot get is replaced by the attribute's name,
+   * never an error.
+   */
+  explain(error: unknown, options?: loc2.LocalizeOptions): Promise<explainService.Explanation[]> {
+    return explainService.explain(this.transport, error, options);
   }
 
   /**
