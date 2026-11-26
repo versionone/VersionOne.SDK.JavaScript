@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { AgilityApiClient } from "../../src/client";
 import { assetApi } from "../../src/wire";
-import { deleteFixtures, describeInstance, fixtureName, instance } from "./instance";
+import { deleteFixtures, describeInstance, fixtureName, instance, sendFixtures } from "./instance";
 
 /**
  * resolve against a real instance. Brings its own data: a Story (resolved
@@ -15,12 +15,12 @@ describeInstance("resolve (live)", () => {
   let story = { oid: "", number: "" }, issue = { oid: "", number: "" };
 
   beforeAll(async () => {
-    const res = await assetApi.send(t, [
+    const res = await sendFixtures(t, [
       { "@s": { AssetType: "Story", Name: fixtureName("resolve story"), Scope: { _oid: "Scope:0" } } },
       { "@i": { AssetType: "Issue", Name: fixtureName("resolve issue"), Scope: { _oid: "Scope:0" } } },
       { from: "@s", select: ["Number"] },
       { from: "@i", select: ["Number"] }
-    ], { throwOnFailure: true });
+    ]);
     created.push(...res.assetsCreated.oidTokens.map(assetApi.momentless));
     const [srows, irows] = res.queryResult.results as unknown as { _oid: string; Number: string }[][];
     const s = srows![0], i = irows![0];

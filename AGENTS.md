@@ -88,8 +88,13 @@ change, by design: `layers.test.ts` (imports point down the layer table),
   instance, or a hosted instance set aside for API testing and named in
   `SDK_TEST_ALLOWED_INSTANCES`. Fixtures are named `sdk-integration …` and
   deleted by exact OID by the test that made them, with `deleteFixtures`
-  (test/integration/instance.ts), which fails the suite if one is left.
-  Every query is paged.
+  (test/integration/instance.ts), which fails the suite if one is left;
+  a setup batch is sent with `sendFixtures`, which removes what a partly
+  failed batch created. Every query is paged. The member the tier runs as
+  (in CI, the one behind the `SDK_TEST_ACCESS_TOKEN` secret) must belong
+  to the system project (`Scope:0`) with a role that can create and delete
+  work items; an admin role alone is not enough. A preflight
+  (test/integration/preflight.ts) says so in one message when it does not.
 - **Nothing private in the tree.** See `CONTRIBUTING.md`. A URL in an
   example uses `agility.example.com`.
 - **A failure never reads as an empty result**, and no read is unbounded

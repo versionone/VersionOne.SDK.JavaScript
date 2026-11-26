@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { AgilityApiClient } from "../../src/client";
 import { assetApi } from "../../src/wire";
-import { deleteFixtures, describeInstance, fixtureName, instance } from "./instance";
+import { deleteFixtures, describeInstance, fixtureName, instance, sendFixtures } from "./instance";
 
 /**
  * batch against a real instance, round trip: a batch that updates two
@@ -19,10 +19,10 @@ describeInstance("batch (live)", () => {
 
   beforeAll(async () => {
     me = (await assetApi.query(t, { from: "Member", select: ["Name"], where: { IsSelf: "true" }, page: { size: 1, start: 0 } }))[0]!._oid;
-    const res = await assetApi.send(t, [
+    const res = await sendFixtures(t, [
       { AssetType: "Story", Name: fixtureName("batch a"), Scope: { _oid: "Scope:0" }, Estimate: 1 },
       { AssetType: "Story", Name: fixtureName("batch b"), Scope: { _oid: "Scope:0" } }
-    ], { throwOnFailure: true });
+    ]);
     [a, b] = res.assetsCreated.oidTokens.map(assetApi.momentless) as [string, string];
     created.push(a, b);
   });
@@ -110,10 +110,10 @@ describeInstance("batch (live)", () => {
       const res = await assetApi.send(t, [{ AssetType: "Story", Name: fixtureName(`cascade ${op}`), Scope: { _oid: "Scope:0" } }], { throwOnFailure: true });
       const story = assetApi.momentless(res.assetsCreated.oidTokens[0]!);
       created.push(story);
-      const tasks = await assetApi.send(t, [
+      const tasks = await sendFixtures(t, [
         { AssetType: "Task", Name: fixtureName("cascade open"), Parent: { _oid: story } },
         { AssetType: "Task", Name: fixtureName("cascade closed before"), Parent: { _oid: story } }
-      ], { throwOnFailure: true });
+      ]);
       const [open, closedBefore] = tasks.assetsCreated.oidTokens.map(assetApi.momentless) as [string, string];
       created.push(open, closedBefore);
       await assetApi.send(t, [{ from: closedBefore, execute: "QuickClose" }], { throwOnFailure: true });
