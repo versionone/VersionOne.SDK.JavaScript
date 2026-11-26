@@ -65,7 +65,12 @@ export interface Explanation {
    * not repeated. Null when the question does not arise (the server answered and
    * said why) or cannot be told (the error does not say what was asked,
    * as one from a `/wire` function on a bare transport does not). Decide
-   * on this field, not on the wording of `sentence`.
+   * on this field, not on the wording of `sentence`. False means "do not
+   * send it again as it is" and nothing more: it does not say whether
+   * the outcome is unknown. For that, read the error's
+   * `request.idempotent`: false is a write whose outcome nobody knows
+   * (look before acting); true with `code: "SERVER_TIMEOUT"` is a read
+   * that failed and will fail the same way (re-reading is no remedy).
    */
   retrySafe: boolean | null;
   /** The failed command's index in the batch, when this explains one; null otherwise. */

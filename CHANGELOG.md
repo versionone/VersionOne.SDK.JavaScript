@@ -68,8 +68,10 @@
   safe (a read, a guarded batch, anything refused with a 429), `false`
   for a write that got no answer or a server failure and for a read the
   server gave up on (the same request would cost and fail the same),
-  `null` when the
-  server answered and said why, or when it cannot be told.
+  `null` when the server answered and said why, or when it cannot be
+  told. `false` means "do not send it again as it is" and nothing more:
+  whether the outcome is unknown is `error.request.idempotent === false`
+  (a write), not `retrySafe`.
 - `ApiError.request`: `{ method, path, idempotent }`, stamped by the
   client on every error it lets out, with any transport. Never the body
   or headers. Absent on an error from a `/wire` or `/services` function
