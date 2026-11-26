@@ -2,7 +2,28 @@
 
 ## 1.0.0-alpha.12
 
+### Fixed
+
+- **A built-in transport handed to a client was wrapped in the resend
+  and timeout rules a second time**, so a read that failed with a 5xx,
+  a 429 or a lost connection was sent four times instead of two
+  (`new AgilityApiClient(config, { transport: createFetchTransport(…)
+  })`, the way to give the client a `fetch` of your own until now; a
+  CLI consumer finding, present since alpha.5). The transport
+  `createFetchTransport` returns now says that it applies both rules
+  itself, and the client adds neither. Its own `retries` and `timeoutMs`
+  are then the ones that count: set them on `createFetchTransport`, not
+  on the client. Migration: nothing, unless you counted on four sends.
+  A wrapper of your own around the built-in transport is a custom
+  transport and gets the client's rules around it; make the inner one
+  with `retries: 0, timeoutMs: 0` to have each rule once.
+
 ### Added
+
+- `fetchImpl` in the client's config: the `fetch` the built-in transport
+  calls (a proxy-aware one, a recording one in a test), so a caller no
+  longer has to build the transport to supply it. It was accepted and
+  silently ignored by a JavaScript caller before.
 
 - **`client.lists`: the values a list-typed attribute may take, and the
   one a name means.** For Status, Priority, Source, Category and any

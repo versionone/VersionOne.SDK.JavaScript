@@ -1,5 +1,5 @@
 import { ApiError, apiErrorFromResponse } from "./errors";
-import { DEFAULT_TIMEOUT_MS, deadline, resendable } from "./retry";
+import { DEFAULT_TIMEOUT_MS, deadline, declareSelfGoverned, resendable } from "./retry";
 import type { RequestBody, RequestOptions, ResponseType, Transport } from "./transport";
 
 /**
@@ -177,7 +177,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
   const authorization = config.authorization ?? (config.accessToken ? `Bearer ${config.accessToken}` : undefined);
   const unauthorizedStatuses = config.unauthorizedStatuses ?? [401];
 
-  return {
+  return declareSelfGoverned({
     async request<T>(options: RequestOptions): Promise<T> {
       const url = buildUrl(config.baseUrl, options.path, options.query);
       const { body, contentType } = encodeBody(options.body, options.contentType);
@@ -263,5 +263,5 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
       }
       throw lastError instanceof ApiError ? lastError : new ApiError("Unknown transport error", 0, "UNKNOWN_ERROR", { cause: lastError });
     }
-  };
+  });
 }

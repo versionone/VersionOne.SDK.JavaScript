@@ -1,7 +1,7 @@
 import type { ClientConfig } from "./core/clientConfig";
 import { ApiError, UsageError } from "./core/errors";
 import { createFetchTransport } from "./core/fetchTransport";
-import { DEFAULT_TIMEOUT_MS, withErrorHook, withRequestStamp, withRetry, withTimeout } from "./core/retry";
+import { DEFAULT_TIMEOUT_MS, withErrorHook, withRequestStamp, withRetry, withTimeout, governsItself } from "./core/retry";
 import type { Transport } from "./core/transport";
 import * as attachments from "./services/attachments";
 import * as batch from "./services/batch";
@@ -119,11 +119,14 @@ export class AgilityApiClient {
       defaultHeaders: config.defaultHeaders,
       credentials: config.credentials,
       onUnauthorized: config.onUnauthorized,
-      unauthorizedStatuses: config.unauthorizedStatuses
+      unauthorizedStatuses: config.unauthorizedStatuses,
+      fetchImpl: config.fetchImpl
     });
     if (!dressed.has(transport)) {
-      // A custom transport: each attempt under the client's deadline, and the resend rule around that.
-      if (opts.transport) transport = withRetry(withTimeout(transport, config.timeoutMs ?? DEFAULT_TIMEOUT_MS), config.retries ?? 1);
+      // A custom transport: each attempt under the client's deadline, and the resend rule around that. The built-in
+      // transport applies both itself, also when it was made by the caller and handed in: wrapping it again would
+      // send a failed read four times instead of two.
+      if (!governsItself(transport)) transport = withRetry(withTimeout(transport, config.timeoutMs ?? DEFAULT_TIMEOUT_MS), config.retries ?? 1);
       // Every error says what was asked (so an explanation can tell a failed read from a write whose fate is unknown).
       transport = withRequestStamp(transport);
       if (config.onError) transport = withErrorHook(transport, config.onError);

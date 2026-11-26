@@ -18,8 +18,16 @@ export interface ClientConfig extends Pick<FetchTransportConfig, "credentials" |
   /** An access token, sent as "Bearer <token>". */
   accessToken?: string;
   /**
+   * The `fetch` the built-in transport calls, when it should not be the
+   * global one (a proxy-aware fetch, a recording one in a test). Not used
+   * when the client is given a transport of its own.
+   */
+  fetchImpl?: typeof fetch;
+  /**
    * How long one attempt may take, in milliseconds, whichever Transport
-   * the client has. Default 60000. When it has passed, the request
+   * the client has (one exception: a transport you made yourself with
+   * `createFetchTransport` and handed in keeps its own `timeoutMs` and
+   * `retries`, since it applies both rules itself). Default 60000. When it has passed, the request
    * rejects with an ApiError coded TIMEOUT. It is NOT sent again, a read
    * included: a timeout (like an abort) ends the client's wait and does
    * not stop the work on the server, so a query that timed out may still

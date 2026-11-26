@@ -91,6 +91,28 @@ describe("the resend rule above a custom Transport", () => {
     expect(t.calls).toHaveLength(2);
   });
 
+  it("the built-in transport handed to a client is not wrapped again: a failed read is sent twice, not four times (a CLI consumer finding); a wrapper around it is a custom transport", async () => {
+    const counting = () => { const sent: string[] = []; const fetchImpl = (async (url: string | URL) => { sent.push(new URL(String(url)).pathname); return new Response("down", { status: 503 }); }) as typeof fetch; return { sent, fetchImpl }; };
+    // Handed in, as the README shows for a fetch of the caller's own.
+    const handed = counting();
+    await expect(new AgilityApiClient({ baseUrl: "https://x" }, { transport: createFetchTransport({ baseUrl: "https://x", fetchImpl: handed.fetchImpl }) }).query(q)).rejects.toMatchObject({ status: 503, request: { method: "GET", path: "/meta.v1/Story", idempotent: true } });
+    expect(handed.sent).toEqual(["/meta.v1/Story", "/meta.v1/Story"]);
+    // The transport's own `retries` is the one that counts then; the client's config does not add to it.
+    const off = counting();
+    await expect(new AgilityApiClient({ baseUrl: "https://x", retries: 3 }, { transport: createFetchTransport({ baseUrl: "https://x", retries: 0, fetchImpl: off.fetchImpl }) }).query(q)).rejects.toMatchObject({ status: 503 });
+    expect(off.sent).toHaveLength(1);
+    // Made by the client from its config, with a fetch of the caller's: the same two sends, and the fetch is the one given.
+    const made = counting();
+    await expect(new AgilityApiClient({ baseUrl: "https://x", fetchImpl: made.fetchImpl }).query(q)).rejects.toMatchObject({ status: 503 });
+    expect(made.sent).toEqual(["/meta.v1/Story", "/meta.v1/Story"]);
+    // A wrapper of the caller's around the built-in transport is a custom transport: the client's rule goes around it.
+    // To have one rule only, the wrapped transport is made with retries: 0 and timeoutMs: 0.
+    const wrapped = counting();
+    const inner = createFetchTransport({ baseUrl: "https://x", retries: 0, timeoutMs: 0, fetchImpl: wrapped.fetchImpl });
+    await expect(new AgilityApiClient({ baseUrl: "https://x" }, { transport: { request: (o) => inner.request(o) } }).query(q)).rejects.toMatchObject({ status: 503 });
+    expect(wrapped.sent).toHaveLength(2);
+  });
+
   it("once, not forever; `retries` says how many times, and 0 turns it off", async () => {
     const down = () => new ApiError("Service Unavailable", 503);
     const once = custom(down(), down(), [[]]);
