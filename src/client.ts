@@ -299,6 +299,12 @@ export class AgilityApiClient {
    * everyday read.)
    */
   readonly data = {
+    /**
+     * @deprecated Use `client.search` for text search across types,
+     * `client.deleted` for deleted assets, and `client.query` /
+     * `client.queryPage` for everything else. rest-1's list itself stays
+     * at `@versionone/agility-sdk/wire` (`rest1.list`).
+     */
     list: <Row extends Asset = Asset>(type: string, params: rest1.ReadParams): Promise<rest1.ReadResult<Row>> => {
       try { searchable(type, params.find); } catch (error) { return Promise.reject(error); }
       return rest1.list<Row>(this.transport, type, params);

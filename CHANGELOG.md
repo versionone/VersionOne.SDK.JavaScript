@@ -30,6 +30,15 @@
   Migration: when the search box is empty, leave `find` out of the query
   (or do not send the read).
 
+### Deprecated
+
+- **`client.data.list`**: its everyday uses now have named calls.
+  Migration: a text search across types → `client.search`; deleted assets
+  → `client.deleted(type, params)`; any other list → `client.query` or
+  `client.queryPage`. A caller that wants rest-1's list itself imports
+  `rest1` from `@versionone/agility-sdk/wire` (`rest1.list(client.transport,
+  type, params)`).
+
 ### Documented
 
 - README, "Searching": a search within one type or family is
