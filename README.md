@@ -115,7 +115,7 @@ const { rows, total, more } = await client.search("warehouse ship*", {
 - **You name an attribute once, plainly, and each row has that key**: its value if the row's type defines it, `null` if not (`Owners` is null on a Request, `Owner` null on a Story; the SDK does not merge differently named attributes). A name none of the types defines is a usage error that lists the types.
 - `select` defaults to `Name`, `Number`, `AssetType`, `AssetState`; `findin` defaults to `Name` and `Number`.
 - A relation is a bare `{ _oid }`; ask for a display value as a path (`"Scope.Name"`, `"Owners.Name"`).
-- `filter` and `sort` are sent as written. A filter term on an attribute only some types have is type-qualified by you: `"(Workitem.Owners.IsSelf='true'|Request.Owner.IsSelf='true')"`.
+- **Selects are plain; filters are sent as written and may be type-qualified.** A select names a value, and the SDK can ask each type for it. A filter is an expression: a condition across types, such as "owned by me" when work items have `Owners` and requests have `Owner`, has no plain spelling, so you write it: `"(Workitem.Owners.IsSelf='true'|Request.Owner.IsSelf='true')"`. A term on an attribute every searched type shares (`AssetState`, `Scope.Name`) needs no qualifying. `sort` is sent as written too.
 - Deleted assets are never found; `client.deleted(type, params)` reads those.
 - To find one asset by its exact number, do not search: `client.resolve.numbers(["S-01042"])` is exact and does not wait for the text index.
 
@@ -137,7 +137,7 @@ Changes between alphas are in `CHANGELOG.md`, each with its migration line.
   - `fields.describe(type, scope)` - what a form needs: required attributes (meta), the ones the product shows there (`api/visibleFields`, custom fields included), the scheme's important fields and whether they are enforced at close
   - `urls.asset(oidOrNumber)` / `attachment` / `embeddedImage` - where a browser opens each
   - `search(text, { types, … })` - text search across asset types, `{ rows, total, more }`; `deleted(type, params)` - deleted assets (see "Searching")
-  - `history` / `template` - an asset's past versions, and a new asset's template for a context; `data.list` is deprecated (use `search`, `deleted`, `query`)
+  - `history` / `template` - an asset's past versions, and a new asset's template for a context
   - `template` reads (`New/<Type>?ctx=`); `meta.*` - meta.v1 raw, with conditional reads (`read` / `readType` with `ifNoneMatch`, `etag()`: meta.v1 sends one ETag for the whole schema); `schema` - the translated, cached view, `schema.revalidate()` drops it only when that tag moves; `localize` - loc-2 labels for tags (a violation's `tag` is one)
 - `normalizeQuery(q)` - a query written with rest-1's spellings (`sel`, a textual `where`, comma-joined lists, a `"size,start"` page) as the `QueryBody` every read takes
 - Errors: everything thrown is an `ApiError` with a `kind` (`auth`, `forbidden`, `notFound`, `invalid`, `transient`, `aborted`, `commandFailure`, `conflict`, `protocol`, `usage`, `unknown`). A mistake caught before any request is a `UsageError`: `kind: "usage"` means nothing was sent (`status` is 0), so the fix is in the call, not on the server
@@ -169,7 +169,7 @@ expect(fake.sent[0]).toEqual([{ from: "Story:1", execute: "QuickClose" }]);     
 - `onSearch(rows)` answers `client.search`: the fake pages the rows, reports the total, and cuts each row to the selected keys; `fake.searched` is what was asked. It sends no request.
 - `sendGuarded` and `batch.run` work on assets addressed by OID that you scripted a row for: `fake.touch(oid)` is someone else changing the asset (the next write stamped earlier is a conflict), `fake.remove(oid)` is it being deleted.
 - `resolve.numbers` finds a number among the scripted rows; `localize` answers `onLocalize` labels and echoes any other tag; `fake.transport` can be the transport of a client your code builds itself.
-- `onList(type, rows)` answers `client.data.list` the same way. `onRequest(path, answer)` answers any other endpoint in its own shape; with `new FakeAgilityClient({ metamodel })` (a meta.v1 document) a response captured from a server reads translated, as it would live. An `Error` as an answer is thrown.
+- `onList(type, rows)` answers rest-1's list read the same way (`client.deleted`, and `rest1.list` from `/wire`). `onRequest(path, answer)` answers any other endpoint in its own shape; with `new FakeAgilityClient({ metamodel })` (a meta.v1 document) a response captured from a server reads translated, as it would live. An `Error` as an answer is thrown.
 - A custom `Transport` has its own suite: `transportConformance(make)` answers the SDK's expectations of a transport as named checks (`for (const c of transportConformance(make)) it(c.name, c.run)`), and the SDK's fetch transport runs the same ones.
 - The fake evaluates no filter or sort and applies no write. It proves what your code asks and what it does with the answer; what the server answers is for a test against an instance.
 

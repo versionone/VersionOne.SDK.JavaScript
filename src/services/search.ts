@@ -44,7 +44,12 @@ export interface SearchOptions {
   select?: readonly string[];
   /** Attributes to search in, by plain name. Default: Name and Number. Always sent: the server's own default differs by type. */
   findin?: readonly string[];
-  /** Filter terms, sent as written. A term on an attribute only some types have is type-qualified by the caller (`"Workitem.Owners.IsSelf='true'"`). */
+  /**
+   * Filter terms, sent as written. Unlike a select, a filter is an
+   * expression, and a condition across types has no plain spelling: a term
+   * on an attribute only some types have is type-qualified by the caller
+   * (`"(Workitem.Owners.IsSelf='true'|Request.Owner.IsSelf='true')"`).
+   */
   filter?: readonly string[];
   /** Equality terms: attribute → value, the value carried as a variable. */
   where?: Readonly<Record<string, string>>;

@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { AgilityApiClient } from "../../src/client";
 import type { Story } from "../../src/types/assets/Story";
 import { assetStateKind } from "../../src/types/asset";
+import * as rest1 from "../../src/wire/rest1";
 import { normalizeQuery } from "../../src/wire/rest1";
 import { describeInstance, fixtureName, instance } from "./instance";
 
@@ -48,7 +49,7 @@ describeInstance("client reads (live)", () => {
       const keys = ["Name", "Owners", "Owners.Name", "Scope.Name", "_oid"];
       const viaQuery = (await client.query({ from: "Story", select, filter: ["ID=$id"], with: { $id: story }, page: { size: 1, start: 0 } }))[0]! as Record<string, unknown>;
       const viaPage = (await client.queryPage({ from: "Story", select, filter: ["ID=$id"], with: { $id: story }, page: { size: 1, start: 0 } })).rows[0]! as Record<string, unknown>;
-      const viaRest = (await client.data.list("Story", { select, filter: [`ID='${story}'`], page: { size: 1, start: 0 } })).rows[0]! as unknown as Record<string, unknown>;
+      const viaRest = (await rest1.list(client.transport, "Story", { select, filter: [`ID='${story}'`], page: { size: 1, start: 0 } })).rows[0]! as unknown as Record<string, unknown>;
       for (const row of [viaQuery, viaPage, viaRest]) {
         expect(Object.keys(row).sort()).toEqual(keys);
         expect(row["Owners.Name"]).toEqual([me.Name]); // a parallel array beside the Refs
@@ -60,10 +61,10 @@ describeInstance("client reads (live)", () => {
       expect(viaPage.Owners).toEqual([{ _oid: me._oid }]);
       expect((viaRest.Owners as { Name: string }[])[0]!.Name).toBe(me.Name);
       // rest-1 without the dotted path selected: its uninvited columns are on the Ref, not on the row.
-      const bare = (await client.data.list("Story", { select: ["Name", "Owners"], filter: [`ID='${story}'`], page: { size: 1, start: 0 } })).rows[0]! as unknown as Record<string, unknown>;
+      const bare = (await rest1.list(client.transport, "Story", { select: ["Name", "Owners"], filter: [`ID='${story}'`], page: { size: 1, start: 0 } })).rows[0]! as unknown as Record<string, unknown>;
       expect(Object.keys(bare).sort()).toEqual(["Name", "Owners", "_oid"]);
       // And a refused rest-1 read is a QUERY_REJECTED with sentences, like query.v1's.
-      await expect(client.data.list("Story", { filter: ["Nope=1"], page: { size: 1, start: 0 } })).rejects.toMatchObject({ kind: "invalid", code: "QUERY_REJECTED", message: expect.stringMatching(/^Invalid WHERE parameter; /) });
+      await expect(rest1.list(client.transport, "Story", { filter: ["Nope=1"], page: { size: 1, start: 0 } })).rejects.toMatchObject({ kind: "invalid", code: "QUERY_REJECTED", message: expect.stringMatching(/^Invalid WHERE parameter; /) });
       await expect(client.query({ from: "Story", filter: ["Nope=1"], page: { size: 1, start: 0 } })).rejects.toMatchObject({ kind: "invalid", code: "QUERY_REJECTED" });
     } finally {
       await client.send([{ from: story, execute: "Delete" }]);
@@ -131,7 +132,7 @@ describeInstance("client reads (live)", () => {
     }
     // Gone from an ordinary read; rest-1's deleted read still shows it, and says Deleted.
     expect(await client.get(story)).toBeNull();
-    const [deleted] = (await client.data.list<{ _oid: string; AssetState: string }>("Story", { select: ["AssetState"], filter: [`ID='${story}'`], deleted: true, page: { size: 1, start: 0 } })).rows;
+    const [deleted] = (await rest1.list<{ _oid: string; AssetState: string }>(client.transport, "Story", { select: ["AssetState"], filter: [`ID='${story}'`], deleted: true, page: { size: 1, start: 0 } })).rows;
     expect([deleted?.AssetState, assetStateKind(deleted?.AssetState)]).toEqual(["Deleted", "deleted"]);
     // A template is state 200, which query.v1 sends as "200" and the model names Template. (None on an empty instance: then nothing is asserted.)
     const [template] = await client.query<{ _oid: string; AssetState: string }>({ from: "Story", select: ["AssetState"], filter: ["AssetState='200'"], page: { size: 1, start: 0 } });

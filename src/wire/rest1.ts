@@ -257,7 +257,7 @@ const listOf = (value: string | string[]): string[] => (typeof value === "string
  * typed as a read takes it (`Query`). Nothing is sent. Saying one
  * thing twice (`sel` and `select`, a textual `where` and `filter`) is a
  * UsageError rather than a guess at which was meant, and so is `deleted`:
- * a QueryBody cannot ask for deleted assets (`client.data.list` can).
+ * a QueryBody cannot ask for deleted assets (`client.deleted` reads those).
  */
 export function normalizeQuery(query: LooseQuery & { page: NonNullable<LooseQuery["page"]> }): Query;
 export function normalizeQuery(query: LooseQuery): QueryBody;
@@ -265,7 +265,7 @@ export function normalizeQuery(query: LooseQuery): QueryBody {
   if (!query || typeof query !== "object" || typeof query.from !== "string" || !query.from) throw new UsageError("a query needs a `from`: an asset type token or an OID token");
   const { sel, select, where, filter, sort, findin, page, ...rest } = query;
   if (sel !== undefined && select !== undefined) throw new UsageError(`query of ${query.from} has both \`sel\` and \`select\`: write one (\`select\`)`);
-  if ("deleted" in rest) throw new UsageError(`query of ${query.from} asks for \`deleted\`: only rest-1 reads deleted assets — use client.data.list(type, { deleted: true, … })`);
+  if ("deleted" in rest) throw new UsageError(`query of ${query.from} asks for \`deleted\`: only rest-1 reads deleted assets — use client.deleted(type, params)`);
   const out: Record<string, unknown> = { ...rest };
   const chosen = select ?? sel;
   if (chosen !== undefined) out.select = listOf(chosen as string | string[]).map((entry: string | LooseQuery) => (typeof entry === "string" ? entry : normalizeQuery(entry)));

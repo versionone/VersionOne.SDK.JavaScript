@@ -126,7 +126,7 @@ describe("client: reads", () => {
     const client = new AgilityApiClient({ baseUrl: "https://agility.example.com/I" }, { transport: t });
     const page = { size: 5, start: 0 };
     const empty = { from: "Story", select: ["Name"], find: "  ", findin: ["Name"], page };
-    for (const read of [() => client.query(empty), () => client.queries([{ from: "Story", page }, empty]), () => client.queryPage(empty), () => client.all(empty), () => client.data.list("Story", { find: "", page })]) {
+    for (const read of [() => client.query(empty), () => client.queries([{ from: "Story", page }, empty]), () => client.queryPage(empty), () => client.all(empty), () => client.deleted("Story", { find: "", page })]) {
       await expect(read()).rejects.toMatchObject({ kind: "usage", status: 0, message: expect.stringContaining("empty `find`") });
     }
     expect(t.calls).toEqual([]);
@@ -141,12 +141,13 @@ describe("client: reads", () => {
     await expect(new AgilityApiClient({ baseUrl: "https://x" }, { transport: fake(() => [[]]), types: schema().cache }).me()).rejects.toMatchObject({ kind: "notFound" });
   });
 
-  it("data.list takes a query's spelling (select, filter) and sends rest-1's (sel, where)", async () => {
+  it("deleted takes a query's spelling (select, filter), sends rest-1's (sel, where), and asks for deleted assets only, with the total", async () => {
     const t = fake(() => ({ _type: "Assets", pageSize: 2, pageStart: 0, Assets: [] }));
     const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t });
-    await client.data.list("Story", { select: ["Name"], filter: ["AssetState='Closed'"], deleted: true, page: { size: 2, start: 0 } });
-    for (const call of t.calls) expect(call).toMatchObject({ method: "GET", path: "/rest-1.v1/Data/Story", query: expect.objectContaining({ sel: "Name", where: "AssetState='Closed'", page: "2,0" }) });
-    expect(t.calls[0]!.query).toMatchObject({ deleted: "true" });
+    expect(await client.deleted("Story", { select: ["Name"], filter: ["Scope='Scope:0'"], page: { size: 2, start: 0 } })).toEqual({ rows: [], total: null, more: false });
+    expect(t.calls).toHaveLength(1);
+    expect(t.calls[0]).toMatchObject({ method: "GET", path: "/rest-1.v1/Data/Story", query: expect.objectContaining({ sel: "Name", where: "Scope='Scope:0';IsDeleted='true'", page: "2,0", deleted: "true", needTotal: "true" }) });
+    expect((client as unknown as { data?: unknown }).data).toBeUndefined();
   });
 });
 

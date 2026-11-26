@@ -97,8 +97,8 @@ const ME_SELECT = ["Name", "Username", "Nickname", "Email"];
  * construction, so a request can be resent like a GET — but its shape has
  * nowhere to put a total; api/asset reports one (`needTotal`) beside the
  * rows, which is why `queryPage` goes there and `query` does not. rest-1
- * serves what neither does: `data.list` (text search across types,
- * deleted assets), `history`, `template`, `operate`. Writes: `send`,
+ * serves what neither does: `search` (text search across types),
+ * `deleted`, `history`, `template`, `operate`. Writes: `send`,
  * `sendGuarded`, `batch.run`, `copy`. Services: `resolve`,
  * `fields`, `attachments`, `embeddedImages`, `schema`, `localize`, `urls`.
  */
@@ -284,32 +284,6 @@ export class AgilityApiClient {
   explain(error: unknown, options?: loc2.LocalizeOptions): Promise<explainService.Explanation[]> {
     return explainService.explain(this.transport, error, options);
   }
-
-  /**
-   * rest-1's list read, for what the other reads cannot do: full-text
-   * `find` / `findin` across types with one order and a total, a
-   * type-qualified select from a base type (`Story.Number` on BaseAsset),
-   * and deleted assets (`deleted: true`). Parameters are spelled as a
-   * query's (`select`, `filter`), and rows follow the rule every read
-   * follows: a relation you select is a Ref, a path you select by name is
-   * at `row[path]`, and nothing arrives that you did not select. For
-   * everything else use `query` / `queryPage`. (`data` has this one member
-   * on purpose: it is the cross-type text search until a `client.search`
-   * exists, and stays here so that nobody needs the wire modules for an
-   * everyday read.)
-   */
-  readonly data = {
-    /**
-     * @deprecated Use `client.search` for text search across types,
-     * `client.deleted` for deleted assets, and `client.query` /
-     * `client.queryPage` for everything else. rest-1's list itself stays
-     * at `@versionone/agility-sdk/wire` (`rest1.list`).
-     */
-    list: <Row extends Asset = Asset>(type: string, params: rest1.ReadParams): Promise<rest1.ReadResult<Row>> => {
-      try { searchable(type, params.find); } catch (error) { return Promise.reject(error); }
-      return rest1.list<Row>(this.transport, type, params);
-    }
-  };
 
   /**
    * Text search across asset types: one page of mixed rows in one order,

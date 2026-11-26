@@ -155,7 +155,7 @@ describe("normalizeQuery: a query written with rest-1's spellings", () => {
   it("saying one thing twice, asking for deleted assets, a bad page or no from is a UsageError: nothing is guessed", () => {
     expect(() => normalizeQuery({ from: "Story", sel: "Name", select: ["Name"] })).toThrow(/both `sel` and `select`/);
     expect(() => normalizeQuery({ from: "Story", where: "A='1'", filter: ["B='2'"] })).toThrow(/both a textual `where` and `filter`/);
-    expect(() => normalizeQuery({ from: "Story", deleted: true })).toThrow(/client\.data\.list/);
+    expect(() => normalizeQuery({ from: "Story", deleted: true })).toThrow(/client\.deleted/);
     expect(() => normalizeQuery({ from: "Story", page: "ten" })).toThrow(UsageError);
     expect(() => normalizeQuery({ sel: "Name" } as never)).toThrow(UsageError);
   });

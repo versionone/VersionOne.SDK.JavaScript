@@ -7,6 +7,7 @@ import { FakeAgilityClient } from "../../src/testing";
 import { ConflictError } from "../../src/services/guard";
 import { CommandFailureError } from "../../src/wire/assetApi";
 import type { MetamodelDocument } from "../../src/wire/meta";
+import * as rest1 from "../../src/wire/rest1";
 
 /**
  * The consumer-facing fake: a real client over a transport that answers
@@ -98,7 +99,7 @@ describe("FakeAgilityClient", () => {
     expect(await fake.localize(["Plural'Story"])).toEqual({ "Plural'Story": "Backlog Items" });
     fake.onQuery("Attachment", [{ _oid: "Attachment:5", Name: "n", Filename: "f.txt", ContentType: "text/plain" }]);
     expect((await fake.attachments.get(5)).bytes).toEqual(new Uint8Array([1, 2]));
-    await expect(fake.data.list("Story", { page: { size: 1, start: 0 } })).rejects.toThrow(/no answer scripted for GET \/rest-1\.v1\/Data\/Story/);
+    await expect(rest1.list(fake.transport, "Story", { page: { size: 1, start: 0 } })).rejects.toThrow(/no answer scripted for GET \/rest-1\.v1\/Data\/Story/);
   });
 
   it("a batch that creates and reads back through an alias answers the scripted row of that type under the created OID", async () => {
@@ -138,26 +139,26 @@ describe("FakeAgilityClient", () => {
     expect(fake.requests.map((r) => r.path)).toEqual(["/query.v1"]); // the type load is the client's plumbing, not the test's subject
   });
 
-  it("onList answers client.data.list from rows in the model's shape: Refs, dotted paths, paging, the total and `more`, and the rows rule", async () => {
+  it("onList answers rest-1's list read (client.deleted, rest1.list) from rows in the model's shape: Refs, dotted paths, paging, the total and `more`, and the rows rule", async () => {
     const found = [
       { _oid: "Story:1", Name: "Logon", Number: "S-01001", AssetState: "Active", Owners: [{ _oid: "Member:20" }], "Owners.Name": ["Dana"], Status: null },
       { _oid: "Defect:9", Name: "Crash on logon", Number: "D-00009", AssetState: "Closed", Owners: [], Status: { _oid: "StoryStatus:5" } },
       { _oid: "Story:3", Name: "Logon help", Number: "S-01003", AssetState: "Active", Owners: [], Status: null }
     ];
     const fake = new FakeAgilityClient().onList("BaseAsset", found);
-    const page = await fake.data.list("BaseAsset", { find: "logon", findin: ["Name"], select: ["Name", "Number", "AssetState", "Owners", "Owners.Name", "Status"], page: { size: 2, start: 0 }, needTotal: true });
+    const page = await rest1.list(fake.transport, "BaseAsset", { find: "logon", findin: ["Name"], select: ["Name", "Number", "AssetState", "Owners", "Owners.Name", "Status"], page: { size: 2, start: 0 }, needTotal: true });
     // As scripted, read back through the client's own rest-1 translation: so, as live, a selected dotted path is also on its Refs.
     expect(page.rows).toEqual([{ ...found[0], Owners: [{ _oid: "Member:20", Name: "Dana" }] }, found[1]]);
     expect(page).toMatchObject({ total: 3, more: true });
-    expect((await fake.data.list("BaseAsset", { page: { size: 2, start: 2 }, needTotal: true })).rows).toEqual([found[2]]);
+    expect((await rest1.list(fake.transport, "BaseAsset", { page: { size: 2, start: 2 }, needTotal: true })).rows).toEqual([found[2]]);
     // What a scripted Ref carries stays on it, as rest-1's display columns do live, whether or not the dotted path was selected.
     fake.onList("Story", [{ _oid: "Story:1", Status: { _oid: "StoryStatus:1", Name: "Dev" }, Owners: [{ _oid: "Member:1", Name: "a", Nickname: "A" }, { _oid: "Member:2", Name: "b", Nickname: "B" }] }]);
-    expect((await fake.data.list("Story", { select: ["Status", "Owners"], page: { size: 1, start: 0 } })).rows).toEqual([{ _oid: "Story:1", Status: { _oid: "StoryStatus:1", Name: "Dev" }, Owners: [{ _oid: "Member:1", Name: "a", Nickname: "A" }, { _oid: "Member:2", Name: "b", Nickname: "B" }] }]);
+    expect((await rest1.list(fake.transport, "Story", { select: ["Status", "Owners"], page: { size: 1, start: 0 } })).rows).toEqual([{ _oid: "Story:1", Status: { _oid: "StoryStatus:1", Name: "Dev" }, Owners: [{ _oid: "Member:1", Name: "a", Nickname: "A" }, { _oid: "Member:2", Name: "b", Nickname: "B" }] }]);
     expect(fake.requests[0]).toMatchObject({ method: "GET", path: "/rest-1.v1/Data/BaseAsset", query: { find: "logon", findin: "Name", page: "2,0" } });
     // A function sees the type and rest-1's own query string, and answers one page.
     fake.onList((type, q) => type === "Story" && q.deleted === "true", () => ({ rows: [{ _oid: "Story:7", Name: "gone" }], total: 12 }));
-    expect(await fake.data.list("Story", { deleted: true, page: { size: 1, start: 0 }, needTotal: true })).toMatchObject({ rows: [{ _oid: "Story:7", Name: "gone" }], total: 12, more: true });
-    await expect(fake.data.list("Epic", { page: { size: 1, start: 0 } })).rejects.toThrow(/no answer scripted for GET \/rest-1\.v1\/Data\/Epic/);
+    expect(await rest1.list(fake.transport, "Story", { deleted: true, page: { size: 1, start: 0 }, needTotal: true })).toMatchObject({ rows: [{ _oid: "Story:7", Name: "gone" }], total: 12, more: true });
+    await expect(rest1.list(fake.transport, "Epic", { page: { size: 1, start: 0 } })).rejects.toThrow(/no answer scripted for GET \/rest-1\.v1\/Data\/Epic/);
   });
 
   it("with a metamodel the fake's instance has those types: a response captured from a server reads translated, for the fake and for a client built on its transport", async () => {

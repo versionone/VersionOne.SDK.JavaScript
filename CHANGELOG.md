@@ -2,6 +2,26 @@
 
 ## 1.0.0-alpha.9
 
+### Breaking
+
+- **`client.data.list` is removed, and `client.data` with it.** Its uses
+  have named calls. Migration:
+  - a text search across asset types → `client.search(text, { types, … })`
+    (below);
+  - a search within one type or family, or any other list →
+    `client.query` / `client.queryPage` (with `find` and `findin` for a
+    search);
+  - deleted assets → `client.deleted(type, params)`;
+  - rest-1's list itself, for a caller that wants the endpoint:
+    `import { rest1 } from "@versionone/agility-sdk/wire"` and
+    `rest1.list(client.transport, type, params)`, unchanged.
+- **A read with an empty `find` throws a `UsageError`** (`kind: "usage"`,
+  nothing is sent), on `query`, `queries`, `queryPage`, `pages`, `all` and
+  `deleted`. It used to answer no rows, because that is what the server
+  answers to a search for nothing, and no rows read as "nothing matches".
+  Migration: when the search box is empty, leave `find` out of the query
+  (or do not send the read).
+
 ### Added
 
 - **`client.search(text, { types, select?, findin?, filter?, where?,
@@ -10,7 +30,9 @@
   order. `types` is required. `select` and `findin` take plain attribute
   names, and each row has every selected key under that name: its value
   if the row's type defines the attribute, `null` if not, so a Story and a
-  Request both have `Number`. Nothing type-qualified is written or read.
+  Request both have `Number`. Nothing type-qualified is written or read
+  in a select; `filter` is sent as written and may be type-qualified,
+  since a condition across types has no plain spelling.
   A consumer that built this from `client.data.list("BaseAsset", …)` with
   one `<Type>.Number` select per type replaces it with one call.
   (a CLI consumer and a chat-bot consumer.)
@@ -21,32 +43,13 @@
 - `@versionone/agility-sdk/services` has `search`. The root exports the
   types `SearchOptions`, `SearchResult`, `SearchRow`.
 
-### Changed
-
-- **A read with an empty `find` throws a `UsageError`** (`kind: "usage"`,
-  nothing is sent), on `query`, `queries`, `queryPage`, `pages`, `all` and
-  `data.list`. It used to answer no rows, because that is what the server
-  answers to a search for nothing, and no rows read as "nothing matches".
-  Migration: when the search box is empty, leave `find` out of the query
-  (or do not send the read).
-
-### Deprecated
-
-- **`client.data.list`**: its everyday uses now have named calls.
-  Migration: a text search across types → `client.search`; deleted assets
-  → `client.deleted(type, params)`; any other list → `client.query` or
-  `client.queryPage`. A caller that wants rest-1's list itself imports
-  `rest1` from `@versionone/agility-sdk/wire` (`rest1.list(client.transport,
-  type, params)`).
-
 ### Documented
 
 - README, "Searching": a search within one type or family is
   `client.query` with `find` and `findin`; across types it is
   `client.search`. The server's matching rules are stated (every word,
   whole words, stemming, `*`, the few seconds the text index trails a
-  write), each proved by a live test. The README's table no longer sends
-  a search to `client.data.list`.
+  write), each proved by a live test.
 
 ### Repository
 

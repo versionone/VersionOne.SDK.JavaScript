@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { AgilityApiClient } from "../../src/client";
-import { queryV1 } from "../../src/wire";
+import { queryV1, rest1 } from "../../src/wire";
 import { deleteFixtures, describeInstance, instance } from "./instance";
 
 /**
@@ -117,12 +117,12 @@ describeInstance("search (live)", () => {
   });
 
   it("what only rest-1's list answers: deleted assets, and one page across every type with each type's Number", async () => {
-    const deleted = await client.data.list("Story", { find: `${word} deleted`, findin: ["Name"], select: ["Name"], deleted: true, page });
+    const deleted = await rest1.list(client.transport, "Story", { find: `${word} deleted`, findin: ["Name"], select: ["Name"], deleted: true, page });
     expect(deleted.rows.map((r) => r._oid.split(":").slice(0, 2).join(":"))).toEqual([gone]);
     // query.v1 refuses a type-qualified select on a base type; rest-1 answers it, as `Number`.
     const mixed = { from: "BaseAsset", select: ["Name", "Story.Number", "Issue.Number"], find: word, findin: ["Name"], sort: ["ID"], page };
     await expect(client.query<{ _oid: string }>(mixed)).rejects.toMatchObject({ status: 400, code: "QUERY_REJECTED" });
-    const numbered = await client.data.list<{ _oid: string; Number?: string }>("BaseAsset", { find: word, findin: ["Name"], select: ["Name", "Story.Number", "Issue.Number"], filter: ["AssetType='Story','Defect','Issue'"], sort: ["ID"], page });
+    const numbered = await rest1.list<{ _oid: string; Number?: string }>(client.transport, "BaseAsset", { find: word, findin: ["Name"], select: ["Name", "Story.Number", "Issue.Number"], filter: ["AssetType='Story','Defect','Issue'"], sort: ["ID"], page });
     expect(numbered.rows.map((r) => r._oid)).toEqual([story, defect, issue]);
     expect(JSON.stringify(numbered.rows)).toContain(storyNumber);
     expect(JSON.stringify(numbered.rows)).toContain(issueNumber);

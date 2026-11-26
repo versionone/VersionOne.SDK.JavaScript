@@ -346,7 +346,8 @@ function toAssetDocument(row: FakeRow): Record<string, unknown> {
  *   with `onRequest`.
  * - `onSearch(rows)` answers `client.search`: rows in the model's shape,
  *   paged by the fake, with the total; what was searched is in `searched`.
- * - `onList(type, rows)` answers `client.data.list` the same way: rows in
+ * - `onList(type, rows)` answers rest-1's list read the same way
+ *   (`client.deleted`, and `rest1.list` from `/wire`): rows in
  *   the model's shape, a list paged by the fake.
  * - `onRequest(match, answer)` answers any other request by path, in the
  *   endpoint's own shape (attachment bytes, a captured response), and wins
@@ -404,8 +405,8 @@ export class FakeAgilityClient extends AgilityApiClient {
   }
 
   /**
-   * Script `client.data.list` (rest-1's list read: text search, deleted
-   * assets) for an asset type or a predicate over the type and the query
+   * Script rest-1's list read (what `client.deleted` asks, and
+   * `rest1.list` from `/wire`) for an asset type or a predicate over the type and the query
    * string rest-1 is sent (`find`, `where`, `sel`, `deleted`). Rows are in
    * the model's shape, as for `onQuery`: a list is the whole result (the
    * fake pages it and reports its length as the total when asked), a
