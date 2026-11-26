@@ -6,7 +6,9 @@
 
 - **A config object with a key its factory does not know is refused.**
   `new AgilityApiClient(config, options)`, `createFetchTransport(config)`
-  and `new FakeAgilityClient(config)` each throw a `UsageError` at
+  and `new FakeAgilityClient(config)` (the fake this package exports
+  from `/testing`, not a test double of your own that happens to share
+  the name) each throw a `UsageError` at
   construction when the object has a key that is not one of theirs. The
   message names the key or keys, suggests the nearest known key when one
   looks like a typo (`"retrys" (did you mean "retries"?)`), lists the
