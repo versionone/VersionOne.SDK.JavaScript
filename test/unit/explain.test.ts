@@ -42,7 +42,7 @@ describe("explain", () => {
       "Agility Warning: Attempting to delete a closed item.  This change was not saved."
     ]);
     expect(explained[0]).toEqual({
-      sentence: "Project is required.", audience: "user", echoed: false, retrySafe: null, index: 0, rule: "Required", attribute: "Story.Scope", attributeLabel: "Project", typeLabel: "Backlog Item", relatedType: null, relatedTypeLabel: null,
+      sentence: "Project is required.", audience: "user", echoed: false, retrySafe: null, outcome: "notApplied", index: 0, rule: "Required", attribute: "Story.Scope", attributeLabel: "Project", typeLabel: "Backlog Item", relatedType: null, relatedTypeLabel: null,
       localized: LOC2["Violation'Required'AttributeDefinition'Scope'Story"], message: "Violation'Required'AttributeDefinition'Scope'Story"
     });
     // A Resolution failure names the attribute as a token and then the related type; loc-2 has no label for these here, so their own names stand in.

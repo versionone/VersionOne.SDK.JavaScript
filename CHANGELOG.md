@@ -69,9 +69,22 @@
   for a write that got no answer or a server failure and for a read the
   server gave up on (the same request would cost and fail the same),
   `null` when the server answered and said why, or when it cannot be
-  told. `false` means "do not send it again as it is" and nothing more:
-  whether the outcome is unknown is `error.request.idempotent === false`
-  (a write), not `retrySafe`.
+  told. It answers "may the same request be sent again as it is?" and
+  nothing more.
+- `Explanation.outcome`: is it known whether the change was made?
+  `"unknown"` for a write that got no confirmation (no answer, a
+  timeout of the client's or the server's, a cancelled wait, a 5xx, an
+  unreadable answer): look before acting. `"notApplied"` where the
+  server answered a refusal before doing the work: a 4xx (a 429
+  included) in answer to a write, a guarded write that met a conflict,
+  and each failed command when a batch's failures are explained (that
+  command alone: the others are in the Outcome). `null` for a read, for
+  a guarded batch with no creates (safe to send again, and the guard
+  settles it) and for an error that does not say what was asked. With
+  `retrySafe` these are the two questions a consumer has after a
+  failure, as two fields: `retrySafe: false` covers both a write whose
+  fate is unknown (`outcome: "unknown"`) and a read that will fail the
+  same way again (`outcome: null`), which call for opposite actions.
 - `ApiError.request`: `{ method, path, idempotent }`, stamped by the
   client on every error it lets out, with any transport. Never the body
   or headers. Absent on an error from a `/wire` or `/services` function

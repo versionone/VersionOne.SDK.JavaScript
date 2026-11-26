@@ -148,7 +148,7 @@ describe("what to tell a person when a request got no answer", () => {
     const client = new AgilityApiClient({ baseUrl: "https://agility.example.com/I", retries: 0 }, { transport: failing(failure()) });
     const error = await client.transport.request(request).catch((e: unknown) => e);
     const [said] = await client.explain(error);
-    return { stamp: (error as ApiError).request, sentence: said!.sentence, retrySafe: said!.retrySafe, audience: said!.audience };
+    return { stamp: (error as ApiError).request, sentence: said!.sentence, retrySafe: said!.retrySafe, outcome: said!.outcome, audience: said!.audience };
   };
   const guarded: RequestOptions = { ...write, idempotent: true };
   const timeout = () => new ApiError("Timed out after 60000 ms", 0, "TIMEOUT");
@@ -156,8 +156,36 @@ describe("what to tell a person when a request got no answer", () => {
 
   it("a write that got no answer, or a server failure for one, is never 'try again': the change may or may not have been made, and retrySafe is false", async () => {
     for (const failure of [timeout, dropped, () => new ApiError("Bad Gateway", 502), () => new ApiError("Internal Server Error", 500), () => new ApiError("Gateway Timeout", 504)]) {
-      expect(await say(failure, write)).toEqual({ stamp: { method: "POST", path: "/api/asset", idempotent: false }, audience: "user", retrySafe: false, sentence: "Agility did not confirm the change. It may or may not have been made: check before trying again." });
+      expect(await say(failure, write)).toEqual({ stamp: { method: "POST", path: "/api/asset", idempotent: false }, audience: "user", retrySafe: false, outcome: "unknown", sentence: "Agility did not confirm the change. It may or may not have been made: check before trying again." });
     }
+  });
+
+  it("outcome says whether it is known that the change was made, so nobody derives it from a status and a method", async () => {
+    const outcome = async (failure: () => ApiError, request: RequestOptions) => { const said = await say(failure, request); return [said.outcome, said.retrySafe]; };
+    const sqlTimeout = () => apiErrorFromResponse(500, { error: "Server Error", exceptions: [{ type: "SqlException", message: "Execution Timeout Expired.  The timeout period elapsed prior to completion of the operation or the server is not responding." }, { type: "Win32Exception", message: "The wait operation timed out" }] });
+    // A write with no confirmation: unknown. Not to be resent.
+    for (const failure of [timeout, dropped, sqlTimeout, () => new ApiError("Request Timeout", 408), () => new ApiError("Bad Gateway", 502), () => new ApiError("Request aborted", 0, "ABORTED"), () => new ApiError("Response is not JSON", 200, "BAD_JSON")]) {
+      expect((await outcome(failure, write))[0]).toBe("unknown");
+    }
+    expect(await outcome(timeout, write)).toEqual(["unknown", false]);
+    // A write the server answered and refused: not applied. A 429 may be sent again; the others say why.
+    for (const status of [400, 401, 403, 404, 413]) expect(await outcome(() => new ApiError("refused", status), write)).toEqual(["notApplied", null]);
+    expect(await outcome(() => new ApiError("Too Many Requests", 429), write)).toEqual(["notApplied", true]);
+    // A read has nothing to apply, whatever happened to it; the two meanings of retrySafe false are told apart here.
+    for (const failure of [timeout, dropped, sqlTimeout, () => new ApiError("Bad Request", 400), () => new ApiError("Too Many Requests", 429)]) {
+      expect((await outcome(failure, read))[0]).toBeNull();
+    }
+    expect(await outcome(sqlTimeout, read)).toEqual([null, false]);
+    // A guarded batch is marked safe to repeat and cannot be told from a read by its error: null, and retrySafe true.
+    expect(await outcome(timeout, guarded)).toEqual([null, true]);
+    // A conflict applied nothing, stamped or not; an error that does not say what was asked says nothing.
+    const bare = new AgilityApiClient({ baseUrl: "https://agility.example.com/I" }, { transport: failing(timeout()) });
+    expect((await bare.explain(new ApiError("changed since it was read", 200, "CONFLICT")))[0]!.outcome).toBe("notApplied");
+    expect((await bare.explain(timeout()))[0]!.outcome).toBeNull();
+    expect((await bare.explain(new Error("boom")))[0]!.outcome).toBeNull();
+    // One failed command of a batch: that command was not applied. The others are in the Outcome, not here.
+    const [one] = await bare.explain([{ index: 1, message: "Violation'Required'AttributeDefinition'Scope'Story" }]);
+    expect(one).toMatchObject({ index: 1, outcome: "notApplied", retrySafe: null });
   });
 
   it("a read, or a guarded batch, that timed out is safe to repeat but may still be running; one that never got through may work in a moment", async () => {

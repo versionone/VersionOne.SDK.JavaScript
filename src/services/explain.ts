@@ -65,14 +65,32 @@ export interface Explanation {
    * not repeated. Null when the question does not arise (the server answered and
    * said why) or cannot be told (the error does not say what was asked,
    * as one from a `/wire` function on a bare transport does not). Decide
-   * on this field, not on the wording of `sentence`. False means "do not
-   * send it again as it is" and nothing more: it does not say whether
-   * the outcome is unknown. For that, read the error's
-   * `request.idempotent`: false is a write whose outcome nobody knows
-   * (look before acting); true with `code: "SERVER_TIMEOUT"` is a read
-   * that failed and will fail the same way (re-reading is no remedy).
+   * on this field, not on the wording of `sentence`. It answers one
+   * question, "may the same request be sent again as it is?", and not
+   * "did it happen?", which is `outcome`.
    */
   retrySafe: boolean | null;
+  /**
+   * Is it known whether the change was made? The second question after
+   * a failed write, beside `retrySafe`, so nobody derives it from a
+   * status and a method.
+   *   - "unknown": a write (a request not safe to repeat) that got no
+   *     confirmation: no answer, a timeout of the client's or the
+   *     server's, a cancelled wait, a 5xx, an answer that could not be
+   *     read. It may or may not have been applied: look before acting.
+   *   - "notApplied": the server answered and refused before doing the
+   *     work: a 4xx (a 429 included) in answer to a write, a guarded
+   *     write that met a conflict, or, in the explanation of one failed
+   *     command, that command. For a batch this speaks of that command
+   *     alone: what became of the others is in the Outcome (`created`,
+   *     `modified`, `failures`), not here.
+   *   - null: a read, where there is nothing to apply; a request the
+   *     SDK marks safe to repeat (a guarded batch with no creates,
+   *     which cannot be told from a read by its error: send it again
+   *     and the guard settles it); and an error that does not say what
+   *     was asked.
+   */
+  outcome: "unknown" | "notApplied" | null;
   /** The failed command's index in the batch, when this explains one; null otherwise. */
   index: number | null;
   /** What was violated: Required, Invalid, Unresolved, Ambiguous, AssetCannotDeleteClosed, …; null when the message is not such a token. */
@@ -110,6 +128,16 @@ const typeTag = (type: string): string => `AssetType'${type}`;
 const isTag = (message: string): boolean => /^[A-Za-z]\w*'[^\s]+$/.test(message.trim());
 
 type Said = Pick<Explanation, "sentence" | "audience" | "echoed" | "retrySafe">;
+
+/** What is known of the change an error's request asked for. See `Explanation.outcome`. */
+function outcomeOf(error: unknown): Explanation["outcome"] {
+  if (!(error instanceof ApiError)) return null;
+  // The guard compared and found a difference: it sent nothing, or the server applied nothing.
+  if (error.kind === "conflict") return "notApplied";
+  if (!error.request || error.request.idempotent) return null;
+  // A write. The server answered a refusal (4xx; a 408 is a timeout, not a refusal), or nobody knows.
+  return error.status >= 400 && error.status < 500 && error.status !== 408 && error.code !== "SERVER_TIMEOUT" ? "notApplied" : "unknown";
+}
 const forUser = (sentence: string, retrySafe: boolean | null = null): Said => ({ sentence, audience: "user", echoed: false, retrySafe });
 const forDeveloper = (sentence: string, echoed: boolean): Said => ({ sentence, audience: "developer", echoed, retrySafe: null });
 
@@ -196,7 +224,7 @@ function sentenceForError(error: unknown): Said {
  */
 export async function explain(transport: Transport, input: unknown, options: loc2.LocalizeOptions = {}): Promise<Explanation[]> {
   const failures = failuresOf(input);
-  if (!failures) return [{ ...sentenceForError(input), index: null, rule: null, attribute: null, attributeLabel: null, typeLabel: null, relatedType: null, relatedTypeLabel: null, localized: null, message: input instanceof Error ? input.message : String(input) }];
+  if (!failures) return [{ ...sentenceForError(input), outcome: outcomeOf(input), index: null, rule: null, attribute: null, attributeLabel: null, typeLabel: null, relatedType: null, relatedTypeLabel: null, localized: null, message: input instanceof Error ? input.message : String(input) }];
   const problems = failures.map((f) => problemOf(f.message));
   const tags = new Set<string>();
   failures.forEach((f, i) => {
@@ -218,6 +246,7 @@ export async function explain(transport: Transport, input: unknown, options: loc
     const typeLabel = type ? label(typeTag(type)) ?? type : null;
     const related = p.related ? label(typeTag(p.related)) ?? p.related : null;
     const localized = isTag(f.message) ? label(f.message.trim()) : null;
-    return { ...sentenceOf(p, attributeLabel, related, localized, f.message), index: f.index, rule: p.rule, attribute: p.attribute, attributeLabel, typeLabel, relatedType: p.related, relatedTypeLabel: related, localized, message: f.message };
+    // The server reported this command as failed: it was not applied. Nothing is said here of the batch's other commands.
+    return { ...sentenceOf(p, attributeLabel, related, localized, f.message), outcome: "notApplied", index: f.index, rule: p.rule, attribute: p.attribute, attributeLabel, typeLabel, relatedType: p.related, relatedTypeLabel: related, localized, message: f.message };
   });
 }
