@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { AgilityApiClient } from "../../src/client";
 import type { RequestOptions, Transport } from "../../src/core/transport";
 import { Schema, TypeCache } from "../../src/services/schema";
+import { dateString } from "../../src/types/asset";
 import type { Story } from "../../src/types/assets/Story";
 import { fromWireRow, send, type AssetApiResponse } from "../../src/wire/assetApi";
 import { toMetamodel, type MetamodelDocument } from "../../src/wire/meta";
@@ -52,7 +53,7 @@ describe("translate: a row into the model, by schema", () => {
     expect((fromWireRow({ _oid: "Story:1", Owners: [{ _oid: "NULL" }, { _oid: "Member:20" }] }, { lookup: schema, type: "Story" }) as unknown as Record<string, unknown>).Owners).toEqual([{ _oid: "Member:20" }]);
   });
 
-  it("numbers become numbers, booleans booleans, a sub-selected single relation one Ref, a bare one stays a Ref, aggregates numbers, dates and states as sent", () => {
+  it("numbers become numbers, booleans booleans, a sub-selected single relation one Ref, a bare one stays a Ref, aggregates numbers, a date in the model's one spelling, states as sent", () => {
     const row = fromWireRow<Story>(liveRow, { lookup: schema, type: "Story" });
     expect(row._oid).toBe("Story:1226");
     expect(row.Name).toBe("Ship Order");
@@ -61,7 +62,7 @@ describe("translate: a row into the model, by schema", () => {
     expect(row.IsDeleted).toBe(false);
     expect(row.IsClosed).toBe(true);
     expect(row.AssetState).toBe("Closed");
-    expect(row.CreateDate).toBe("2026-06-27T12:28:29.137");
+    expect(row.CreateDate).toBe("2026-06-27T12:28:29.137"); // three decimals on every read, whatever the endpoint sent
     expect(row.Order).toBe(-1989738965); // Rank: a 32-bit integer sent as a string, a number in the model
     expect(row.Status).toEqual({ _oid: "StoryStatus:2191", Name: "Accepted", Order: 3 }); // [x] -> x; the nested row is translated by StoryStatus (Order is Rank there too)
     expect(row.Super).toEqual({ _oid: "Epic:1185", Name: "Order Entry" });
@@ -139,5 +140,20 @@ describe("translate: through send and the client", () => {
     const seeded = new AgilityApiClient({ baseUrl: "http://x" }, { transport: fakeTransport(envelope([[liveRow]])), types: TypeCache.fromMetamodel(metamodel) });
     const { rows: [again] } = await seeded.queryPage<Story>({ from: "Story", select: ["Estimate"], page: { size: 1, start: 0 } });
     expect(again!.IsClosed).toBe(true);
+  });
+
+  it("dateString is the model's one spelling of what each endpoint writes: the standard's three decimals, which any Date parser reads", () => {
+    // query.v1, api/asset, rest-1: one value each way.
+    for (const sent of ["2026-07-13T22:06:14.6000000Z", "2026-07-13T22:06:14.6Z", "2026-07-13T22:06:14.600Z"]) {
+      expect(dateString(sent)).toBe("2026-07-13T22:06:14.600Z");
+      expect(new Date(dateString(sent)).toISOString()).toBe("2026-07-13T22:06:14.600Z");
+    }
+    // No fraction, and rest-1's midnight written as the date alone.
+    expect(dateString("2011-09-20T00:00:00")).toBe("2011-09-20T00:00:00.000");
+    expect(dateString("2011-09-20")).toBe("2011-09-20T00:00:00.000");
+    // Cut to the millisecond, by design: finer digits, were a server to send them, are dropped.
+    expect(dateString("2026-07-13T22:06:14.6001234Z")).toBe("2026-07-13T22:06:14.600Z");
+    // Not a date: answered as given.
+    expect([dateString("soon"), dateString(null), dateString(7), dateString("2011-09-20 or so")]).toEqual(["soon", null, 7, "2011-09-20 or so"]);
   });
 });

@@ -10,8 +10,32 @@
 /** An OID token, momentless: "Story:1234". */
 export type Oid = string;
 
-/** An ISO-8601 date-time as the API renders it, e.g. "2026-09-06T13:52:51.903". */
+/**
+ * A date-time as the model carries it: `"2026-09-06T13:52:51.903"`, with a
+ * `Z` when the attribute is a UTC one (`ChangeDateUTC`). This is the
+ * standard's date-time format, three decimals of a second, so
+ * `new Date(value)` reads it in any engine. One spelling on every read: the
+ * endpoints differ (query.v1 sends seven decimals, api/asset drops trailing
+ * zeros, rest-1 sends three and writes a midnight as the date alone), so
+ * each read spells the value this way.
+ *
+ * The SDK cuts to the millisecond, by design. The server's stored
+ * resolution is about three milliseconds (in a live sample of 400
+ * timestamps every digit past the third was zero), so nothing observed is
+ * lost; were an instance ever to carry finer digits, they are dropped.
+ *
+ * A value without a `Z` is the server's wall-clock time with no zone; a
+ * parser reads it as local time. For a day, take `value.slice(0, 10)`.
+ */
 export type DateString = string;
+
+const DATE = /^(\d{4}-\d\d-\d\d)(?:T(\d\d:\d\d:\d\d)(?:\.(\d+))?)?(Z)?$/;
+
+/** A date as any endpoint spells it, in the model's one spelling (see DateString). Anything else is answered as given. */
+export function dateString<T>(value: T): T | DateString {
+  const m = typeof value === "string" ? DATE.exec(value) : null;
+  return m ? `${m[1]}T${m[2] ?? "00:00:00"}.${(m[3] ?? "").padEnd(3, "0").slice(0, 3)}${m[4] ?? ""}` : value;
+}
 
 /**
  * An AssetState as the model carries it: the names of the server's AssetState

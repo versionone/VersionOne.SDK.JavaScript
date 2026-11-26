@@ -52,8 +52,10 @@ describe("explain", () => {
     expect(explained[4]).toMatchObject({ rule: "AssetCannotDeleteClosed", attribute: null });
     // Who each sentence is for: the ones made for a person, and the server's raw text, which is echoed for a developer.
     expect(explained.map((e) => [e.audience, e.echoed])).toEqual([["user", false], ["user", false], ["developer", true], ["user", false], ["user", false]]);
-    // A rule the instance has no words for (seen live: closing a closed story) is never answered as its bare token.
-    expect((await explain(loc2(), [failure(0, "Violation'AssetCannotInactivateClosed")]))[0]).toMatchObject({ sentence: "Refused (asset cannot inactivate closed).", audience: "user", echoed: false, rule: "AssetCannotInactivateClosed", localized: null, message: "Violation'AssetCannotInactivateClosed" });
+    // A rule the instance has no words for (seen live: closing a closed story; deleting a sent message) is never answered as its
+    // bare token, and never as a sentence for a user either: its name in words can read as the opposite of what happened.
+    expect((await explain(loc2(), [failure(0, "Violation'MessageMustNotBeSent")]))[0]).toMatchObject({ sentence: "Refused (message must not be sent).", audience: "developer", echoed: false, rule: "MessageMustNotBeSent", attribute: null, localized: null, message: "Violation'MessageMustNotBeSent" });
+    expect((await explain(loc2(), [failure(0, "Violation'AssetCannotInactivateClosed")]))[0]).toMatchObject({ sentence: "Refused (asset cannot inactivate closed).", audience: "developer", echoed: false, rule: "AssetCannotInactivateClosed", localized: null, message: "Violation'AssetCannotInactivateClosed" });
     // A Resolution failure names the related type, labelled when the instance has a label for it.
     const labelled = loc2();
     LOC2["AssetType'Member"] = "Member";

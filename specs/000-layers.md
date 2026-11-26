@@ -41,12 +41,20 @@ imports `core` for one reason: a string that is not an OID token is a
 ## 2. One shape
 
 The objects the SDK passes around have **one shape**, wherever they came
-from or are going. A relation is a `Ref` (`{ _oid }` plus whatever a select
-pulled through) in a create, in an update, and in a query result alike.
+from or are going. A relation is a `Ref` (`{ _oid }`, plus what a sub-select asked for) in a create, in an update, and in a query result alike.
 `AssetState` has one set of values. Whatever an endpoint spells differently
 — api/asset writing a relation as an OID token, rest-1 wrapping every value
 in `Attributes` and rendering `AssetState` as a number — is translated in
 that endpoint's wire module, once, on the way in and on the way out.
+
+A date is one of those spellings. query.v1 writes seven decimals,
+api/asset drops trailing zeros, rest-1 writes three and a midnight as the
+date alone; the model's `DateString` is `2026-09-06T13:52:51.903` (with
+`Z` on a UTC attribute), the standard's date-time format, and every read
+answers it. That cuts to the millisecond, by design: finer than the
+server stores (about three milliseconds), so nothing observed is lost.
+The schema says which attribute is a date: text that looks like one is
+never touched.
 
 A row's identity is `_oid`: the key the server sends for it, underscored
 so that it can never collide with an attribute (an asset's own identity
@@ -58,12 +66,29 @@ described update, a drifted entry — says plain `oid`.
 One rule for a row, on every read path (query.v1, api/asset, rest-1):
 **a relation you select is a Ref; a path you select by name is at
 `row[path]`; nothing arrives that you did not select.** A sub-select is
-how to ask for attributes on the related rows. rest-1 sends display
-columns beside a selected relation unasked; its wire module folds them
-onto the Refs and drops their keys from the row unless the path was
-selected, and keeps a dotted key that has no Ref to fold onto. An
-integration test reads one asset through all three paths and compares
-the keys.
+how to ask for attributes on the related rows. A Ref is `{ _oid }` and
+nothing more unless a sub-select put attributes on it. rest-1 sends
+display columns beside a selected relation unasked (`Owners.Name`); its
+wire module drops them unless that path was selected, in which case the
+value is at `row[path]` like any path. They are never put on the Ref: a
+row must not differ by which endpoint answered it. Where a read has no
+select at all (a template), the server chose the attributes and every
+column it sent stays under its own key. An integration test reads one
+asset through all three paths and compares the rows.
+
+One addition, for the one read whose page mixes unrelated types
+(`client.search`): **you name an attribute once, plainly, and each row has
+that key — its value if the row's type defines the attribute, null if it
+does not** (so null on every row when none of the searched types has it;
+only a name that is no attribute of any type is refused). This is the only place a row carries a key its own type lacks.
+The caller never writes or reads a type-qualified name (`Story.Number`):
+the schema says which of the searched types define `Number`, the service
+asks each, and the key is `Number`. A relation on such a row is a bare
+`{ _oid }`; a display value is asked for as a path (`"Scope.Name"`). None
+of this depends on which endpoint answers the search: rest-1 does today,
+because it alone takes a subtype's attribute from a base type on
+instances before the release that lets api/asset do it, and the route may
+move without the call or its rows changing.
 
 Corollaries:
 

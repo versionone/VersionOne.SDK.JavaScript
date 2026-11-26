@@ -10,6 +10,7 @@ import * as fieldsService from "./services/fields";
 import * as guard from "./services/guard";
 import * as resolve from "./services/resolve";
 import { Schema, type TypeCache } from "./services/schema";
+import * as searchService from "./services/search";
 import type { Asset, Oid } from "./types/asset";
 import type { Attachment } from "./types/assets/Attachment";
 import type { Member } from "./types/assets/Member";
@@ -73,7 +74,14 @@ const dressed = new WeakSet<Transport>();
 
 /** Every read is bounded: the type says so, and for a caller the type did not reach this says so before any request (not even a schema load) is sent. */
 function bounded(qs: readonly assetApi.QueryBody[]): void {
-  for (const q of qs) if (!q.page) throw new UsageError(`query of ${q.from} without a page: every read must be bounded`);
+  for (const q of qs) {
+    if (!q.page) throw new UsageError(`query of ${q.from} without a page: every read must be bounded`);
+    searchable(String(q.from), q.find);
+  }
+}
+/** A text search for nothing: the server answers it with zero rows, which would read as "nothing matches". */
+function searchable(from: string, find: string | undefined): void {
+  if (find !== undefined && !String(find).trim()) throw new UsageError(`query of ${from} with an empty \`find\`: the server answers a search for nothing with no rows, not all rows; leave \`find\` out to read without searching`);
 }
 const ME_SELECT = ["Name", "Username", "Nickname", "Email"];
 
@@ -89,8 +97,8 @@ const ME_SELECT = ["Name", "Username", "Nickname", "Email"];
  * construction, so a request can be resent like a GET — but its shape has
  * nowhere to put a total; api/asset reports one (`needTotal`) beside the
  * rows, which is why `queryPage` goes there and `query` does not. rest-1
- * serves what neither does: `data.list` (text search across types,
- * deleted assets), `history`, `template`, `operate`. Writes: `send`,
+ * serves what neither does: `search` (text search across types),
+ * `deleted`, `history`, `template`, `operate`. Writes: `send`,
  * `sendGuarded`, `batch.run`, `copy`. Services: `resolve`,
  * `fields`, `attachments`, `embeddedImages`, `schema`, `localize`, `urls`.
  */
@@ -278,29 +286,41 @@ export class AgilityApiClient {
   }
 
   /**
-   * rest-1's list read, for what the other reads cannot do: full-text
-   * `find` / `findin` across types with one order and a total, a
-   * type-qualified select from a base type (`Story.Number` on BaseAsset),
-   * and deleted assets (`deleted: true`). Parameters are spelled as a
-   * query's (`select`, `filter`), and rows follow the rule every read
-   * follows: a relation you select is a Ref, a path you select by name is
-   * at `row[path]`, and nothing arrives that you did not select. For
-   * everything else use `query` / `queryPage`. (`data` has this one member
-   * on purpose: it is the cross-type text search until a `client.search`
-   * exists, and stays here so that nobody needs the wire modules for an
-   * everyday read.)
+   * Text search across asset types: one page of mixed rows in one order,
+   * with the total. `types` is required (there is no default set of
+   * types). `select` and `findin` take plain attribute names: a row has
+   * each selected key under that name, null where its type has no such
+   * attribute, so `Number` is simply `row.Number` for a Story and a
+   * Request alike. To search within one type or one family of types, an
+   * ordinary read with `find` does it: `client.query({ from, find, … })`.
+   *
+   * The text index trails a write by a few seconds: an asset created a
+   * moment ago is found by its Number at once and by its words shortly
+   * after.
    */
-  readonly data = {
-    list: <Row extends Asset = Asset>(type: string, params: rest1.ReadParams) => rest1.list<Row>(this.transport, type, params)
-  };
+  async search<Row extends { _oid: Oid } = searchService.SearchRow>(text: string, options: searchService.SearchOptions): Promise<searchService.SearchResult<Row>> {
+    return searchService.search<Row>(this.transport, this.schema, text, options);
+  }
+
+  /**
+   * Deleted assets of a type: one page, each row's `AssetState` saying
+   * `"Deleted"`. No other read returns a deleted asset.
+   */
+  async deleted<Row extends { _oid: Oid } = searchService.SearchRow>(type: string, params: Omit<rest1.ReadParams, "deleted">): Promise<searchService.SearchResult<Row>> {
+    searchable(type, params.find);
+    await this.schema.ensureFor([{ from: type, select: params.select }]);
+    const { rows, total, more } = await rest1.list<Row & Asset>(this.transport, type, { ...params, filter: [...(params.filter ?? []), "IsDeleted='true'"], deleted: true, needTotal: params.needTotal ?? true }, { lookup: this.schema });
+    return { rows, total, more };
+  }
 
   /**
    * An asset's history: one row per version, newest paging as asked, each
    * row's `_oid` carrying its moment (`Story:1234:5678`). `target` is an
    * OID token, or an asset type for the history of every asset of it.
    */
-  history<Row extends Asset = Asset>(target: string, params: rest1.ReadParams): Promise<rest1.ReadResult<Row>> {
-    return rest1.history<Row>(this.transport, target, params);
+  async history<Row extends Asset = Asset>(target: string, params: rest1.ReadParams): Promise<rest1.ReadResult<Row>> {
+    await this.schema.ensureFor([{ from: target.split(":")[0]!, select: params.select }]);
+    return rest1.history<Row>(this.transport, target, params, { lookup: this.schema });
   }
 
   /**
@@ -308,8 +328,9 @@ export class AgilityApiClient {
    * a context (a Timebox's next name and dates in a schedule's scope, a
    * Story's carry-over from a Request). Nothing is created.
    */
-  template<F extends From>(type: F, options?: { ctx?: Oid }): Promise<rest1.Template<TypeOf<F>>> {
-    return rest1.template<TypeOf<F>>(this.transport, type, options);
+  async template<F extends From>(type: F, options?: { ctx?: Oid }): Promise<rest1.Template<TypeOf<F>>> {
+    await this.schema.load(type);
+    return rest1.template<TypeOf<F>>(this.transport, type, { ...options, lookup: this.schema });
   }
 
   /**

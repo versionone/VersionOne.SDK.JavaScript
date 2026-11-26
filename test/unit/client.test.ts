@@ -121,6 +121,17 @@ describe("client: reads", () => {
     await expect(client.all({ from: "Story", select: ["Name"] } as never)).rejects.toBeInstanceOf(UsageError);
   });
 
+  it("a search for nothing is a usage error on every read, before any request: the server would answer it with no rows", async () => {
+    const t = fake(() => { throw new Error("nothing may be sent"); });
+    const client = new AgilityApiClient({ baseUrl: "https://agility.example.com/I" }, { transport: t });
+    const page = { size: 5, start: 0 };
+    const empty = { from: "Story", select: ["Name"], find: "  ", findin: ["Name"], page };
+    for (const read of [() => client.query(empty), () => client.queries([{ from: "Story", page }, empty]), () => client.queryPage(empty), () => client.all(empty), () => client.deleted("Story", { find: "", page })]) {
+      await expect(read()).rejects.toMatchObject({ kind: "usage", status: 0, message: expect.stringContaining("empty `find`") });
+    }
+    expect(t.calls).toEqual([]);
+  });
+
   it("me asks for the member whose IsSelf is true", async () => {
     const t = fake(() => [[{ _oid: "Member:1000", Name: "SDK Test Account", Username: "sdk-test-account", Nickname: "SDK", Email: "" }]]);
     const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, types: schema().cache });
@@ -130,12 +141,18 @@ describe("client: reads", () => {
     await expect(new AgilityApiClient({ baseUrl: "https://x" }, { transport: fake(() => [[]]), types: schema().cache }).me()).rejects.toMatchObject({ kind: "notFound" });
   });
 
-  it("data.list takes a query's spelling (select, filter) and sends rest-1's (sel, where)", async () => {
-    const t = fake(() => ({ _type: "Assets", pageSize: 2, pageStart: 0, Assets: [] }));
-    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t });
-    await client.data.list("Story", { select: ["Name"], filter: ["AssetState='Closed'"], deleted: true, page: { size: 2, start: 0 } });
-    for (const call of t.calls) expect(call).toMatchObject({ method: "GET", path: "/rest-1.v1/Data/Story", query: expect.objectContaining({ sel: "Name", where: "AssetState='Closed'", page: "2,0" }) });
-    expect(t.calls[0]!.query).toMatchObject({ deleted: "true" });
+  it("deleted takes a query's spelling (select, filter), sends rest-1's (sel, where), and asks for deleted assets only, with the total", async () => {
+    // rest-1 writes a date its own way (three decimals; a midnight as the date alone): the client answers the model's spelling.
+    const gone = { _type: "Asset", href: "", id: "Story:7", Attributes: { Name: { _type: "Attribute", name: "Name", value: "2011-09-20" }, ChangeDate: { _type: "Attribute", name: "ChangeDate", value: "2026-07-13T18:06:14.600" }, CreateDate: { _type: "Attribute", name: "CreateDate", value: "2011-09-20" } } };
+    const t = fake(() => ({ _type: "Assets", pageSize: 2, pageStart: 0, Assets: [gone] }));
+    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, types: schema().cache });
+    expect(await client.deleted("Story", { select: ["Name", "ChangeDate", "CreateDate"], filter: ["Scope='Scope:0'"], page: { size: 2, start: 0 } })).toEqual({
+      // The Name is text that happens to look like a date: it is left alone, because the schema says what is a date.
+      rows: [{ _oid: "Story:7", Name: "2011-09-20", ChangeDate: "2026-07-13T18:06:14.600", CreateDate: "2011-09-20T00:00:00.000" }], total: null, more: false
+    });
+    expect(t.calls).toHaveLength(1);
+    expect(t.calls[0]).toMatchObject({ method: "GET", path: "/rest-1.v1/Data/Story", query: expect.objectContaining({ sel: "Name,ChangeDate,CreateDate", where: "Scope='Scope:0';IsDeleted='true'", page: "2,0", deleted: "true", needTotal: "true" }) });
+    expect((client as unknown as { data?: unknown }).data).toBeUndefined();
   });
 });
 

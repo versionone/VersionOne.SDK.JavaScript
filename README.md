@@ -49,7 +49,9 @@ npm test
 | One asset | `client.get(oid, select)` | Null when nothing has that OID. |
 | Rows and how many there are | `client.queryPage(q)` | `{ rows, total, more }`. |
 | Everything, page by page | `client.pages(q, { limit })` / `client.all(q, { limit })` | Bounded: default limit 1000. |
-| Text search across types, a total, deleted assets | `client.data.list(type, params)` | rest-1: `find` / `findin`, `Story.Number` from `BaseAsset`, `deleted: true`. |
+| Text search across asset types | `client.search(text, { types, page })` | One page of mixed rows, one order, `{ rows, total, more }`; `Number` on every row whose type has one. See "Searching". |
+| Text search within one type or family | `client.query({ from, find, findin, … })` | An ordinary read with two more keys. `queryPage` adds the total. |
+| Deleted assets | `client.deleted(type, params)` | No other read returns one. |
 | An asset's past versions | `client.history(oid, params)` | One row per version; `_oid` carries the moment. |
 | Who am I | `client.me()` | The member the credentials belong to. |
 | Numbers and OIDs a person typed | `client.resolve.numbers([...])` / `client.resolve.refs([...])` | Answered as rows. One request for numbers of any mix of types. |
@@ -64,9 +66,61 @@ npm test
 | An error, said to a person | `client.explain(error)` | "Project is required.", with the instance's labels. |
 | Labels in the instance's words | `client.localize(tags)` | |
 
-Every row follows one rule, whichever call read it: **a relation you select is a Ref (`{ _oid }`); a path you select by name is at `row[path]` (`row["Status.Name"]`); nothing arrives that you did not select.** Select both `Owners` and `Owners.Name` and you get the Refs and, beside them, a parallel array at `"Owners.Name"`. To get attributes on the related rows themselves, use a sub-select: `{ from: "Owners", select: ["Name"] }` gives `row.Owners[i].Name`. (rest-1 also puts the display attributes it sends unasked on the Refs of a relation you selected.)
+Every row follows one rule, whichever call read it: **a relation you select is a Ref (`{ _oid }`); a path you select by name is at `row[path]` (`row["Status.Name"]`); nothing arrives that you did not select.** Select both `Owners` and `Owners.Name` and you get the Refs and, beside them, a parallel array at `"Owners.Name"`. To get attributes on the related rows themselves, use a sub-select: `{ from: "Owners", select: ["Name"] }` gives `row.Owners[i].Name`.
 
 A row's identity is `_oid`: it is the key the server sends, underscored so it cannot collide with an attribute (the identity attribute is `ID`). Rows, Refs, resolved assets, attachments and the assets on a receipt all carry it; a record that only mentions an asset (a receipt's `described` entries, a `drifted` entry) says `oid`.
+
+### Searching
+
+A text search is a read with `find` (the text) and `findin` (the attributes to look in). It composes with `filter`, `sort` and `page`, and `queryPage` answers its total.
+
+```ts
+const hits = await client.query({
+  from: "Workitem",                       // stories, defects, epics, themes, tasks, tests, test sets
+  select: ["Name", "Number", "AssetType"],
+  find: "warehouse ship*",
+  findin: ["Name", "Number"],
+  page: { size: 25, start: 0 }
+});
+```
+
+What the server does with the text (each of these is a live test in `test/integration/search.test.ts`):
+
+- **Every word must match**, in any order, in any letter case. Punctuation separates words.
+- **Whole words**, with the server's stemming ("shipping" finds "ship"). Part of a word finds nothing unless it ends in `*`: `integrat*` finds "integration". A leading `*` does not work.
+- **A number is text too**: `find: "S-01001", findin: ["Number"]` finds that story, in either case.
+- **Always send `findin`.** Without it the attributes searched depend on the type.
+- **The text index trails a write by a few seconds.** An asset created a moment ago is found by its Number at once and by its words shortly after; do not search by name for what you just created.
+- Closed assets are found; deleted ones are not.
+- An attribute `findin` does not know is a refused query (`QUERY_REJECTED`), not an empty result.
+- **An empty `find` is a usage error.** The server answers a search for nothing with no rows, which would read as "nothing matches"; leave `find` out to read without searching.
+
+`from` decides how wide that read is: one type, or a family (`Workitem` is the backlog types, and has `Number`). It cannot give one page of unrelated types with their own attributes: `BaseAsset` is every asset but has no `Number`, and the query endpoints refuse a subtype's attribute there. That is what `client.search` is for.
+
+#### Across types: `client.search`
+
+```ts
+const { rows, total, more } = await client.search("warehouse ship*", {
+  types: ["Story", "Defect", "Epic", "Request", "Issue", "Goal"],   // required: there is no default
+  select: ["Name", "Number", "AssetState", "Scope.Name", "Owners", "Owner"],
+  filter: ["AssetState!='Closed'"],
+  sort: ["-ChangeDateUTC"],
+  page: { size: 25, start: 0 }
+});
+// rows[0].Number is "S-01042" for a Story and "R-01011" for a Request
+```
+
+- **One request, one order across every type, and the total.** The matching rules above apply.
+- **`types` is required**, at least one: concrete types, or a family by its abstract type (`"Workitem"` is stories, defects, epics, themes, tasks, tests and test sets; requests, issues and goals are not work items, so name them). A default would silently leave types out.
+- **You name an attribute once, plainly, and each row has that key**: its value if the row's type defines it, `null` if not (`Owners` is null on a Request, `Owner` null on a Story; the SDK does not merge differently named attributes). That holds when none of the searched types has it too: every row has `null`, so one list of columns serves whatever types a user picks. Only a name that is no attribute of any asset type is a usage error (a misspelling). A `findin` name none of the searched types has is left out; if none is left, the search is refused.
+- `select` defaults to `Name`, `Number`, `AssetType`, `AssetState`; `findin` defaults to `Name` and `Number`.
+- A relation is a bare `{ _oid }`; ask for a display value as a path (`"Scope.Name"`, `"Owners.Name"`).
+- **Selects are plain; filters are sent as written and may be type-qualified.** A select names a value, and the SDK can ask each type for it. A filter is an expression: a condition across types, such as "owned by me" when work items have `Owners` and requests have `Owner`, has no plain spelling, so you write it: `"(Workitem.Owners.IsSelf='true'|Request.Owner.IsSelf='true')"`. A term on an attribute every searched type shares (`AssetState`, `Scope.Name`) needs no qualifying. Qualify a term on any other attribute whatever `types` is: unqualified, it happens to be accepted when one type is searched and is refused when several are. `sort` is sent as written too.
+- Deleted assets are never found; `client.deleted(type, params)` reads those.
+- The first search loads the schema of each type searched (one request per type, then cached for the client, or shared through a `TypeCache`). A short-lived process that searches once pays that every time: seed the cache (`TypeCache.fromMetamodel`) or keep the client.
+- To find one asset by its exact number, do not search: `client.resolve.numbers(["S-01042"])` is exact and does not wait for the text index.
+
+A date is spelled one way on every read: `"2026-09-06T13:52:51.903"`, three decimals, with a `Z` on a UTC attribute (`ChangeDateUTC`). That is the standard's date-time format, so `new Date(value)` reads it in any engine. The endpoints each write dates differently, and the SDK answers this one spelling whichever of them was asked; it cuts to the millisecond, which is finer than the server stores. A value without a `Z` is the server's wall-clock time with no zone; for a day (a sprint's `BeginDate`) take `value.slice(0, 10)`.
 
 Rows are typed from what you select, against the product's metamodel: a selected key is its value or `null`, never `undefined`. For an attribute your instance has and the generated model does not (a custom field's relation, a product module's attribute), name your own row type at the call: `client.query<MyRow>(q)` needs only `_oid` on `MyRow`.
 
@@ -85,7 +139,9 @@ Changes between alphas are in `CHANGELOG.md`, each with its migration line.
   - `copy(oid)` - the Copy operation, answering the copy's OID (api/asset performs it but never says what it made); `operate(oid, op)` is the general form
   - `fields.describe(type, scope)` - what a form needs: required attributes (meta), the ones the product shows there (`api/visibleFields`, custom fields included), the scheme's important fields and whether they are enforced at close
   - `urls.asset(oidOrNumber)` / `attachment` / `embeddedImage` - where a browser opens each
-  - `data.list` / `history` / `template` - rest-1 reads: text search and deleted assets, history, and a new asset's template for a context (`New/<Type>?ctx=`); `meta.*` - meta.v1 raw, with conditional reads (`read` / `readType` with `ifNoneMatch`, `etag()`: meta.v1 sends one ETag for the whole schema); `schema` - the translated, cached view, `schema.revalidate()` drops it only when that tag moves; `localize` - loc-2 labels for tags (a violation's `tag` is one)
+  - `search(text, { types, … })` - text search across asset types, `{ rows, total, more }`; `deleted(type, params)` - deleted assets (see "Searching")
+  - `history` / `template` - an asset's past versions, and a new asset's template for a context
+  - `template` reads (`New/<Type>?ctx=`); `meta.*` - meta.v1 raw, with conditional reads (`read` / `readType` with `ifNoneMatch`, `etag()`: meta.v1 sends one ETag for the whole schema); `schema` - the translated, cached view, `schema.revalidate()` drops it only when that tag moves; `localize` - loc-2 labels for tags (a violation's `tag` is one)
 - `normalizeQuery(q)` - a query written with rest-1's spellings (`sel`, a textual `where`, comma-joined lists, a `"size,start"` page) as the `QueryBody` every read takes
 - Errors: everything thrown is an `ApiError` with a `kind` (`auth`, `forbidden`, `notFound`, `invalid`, `transient`, `aborted`, `commandFailure`, `conflict`, `protocol`, `usage`, `unknown`). A mistake caught before any request is a `UsageError`: `kind: "usage"` means nothing was sent (`status` is 0), so the fix is in the call, not on the server
 - `TypeCache` - one instance's loaded type definitions, shared by many clients (`new AgilityApiClient(config, { types })`); `TypeCache.fromMetamodel(metamodel)` seeds one so nothing is loaded
@@ -113,9 +169,10 @@ expect(fake.sent[0]).toEqual([{ from: "Story:1", execute: "QuickClose" }]);     
 
 - `onQuery(match, rows)` answers every read (`query`, `get`, `queryPage`, `pages`, …). A list is the whole result: the fake pages it and answers a read by OID with that row. A function gets the query and answers one page. A read nothing was scripted for throws; it never looks like an empty result.
 - Writes need no script: a create answers a new OID, an update or operation by OID answers that OID. `onSend` scripts anything else, failures included.
+- `onSearch(rows)` answers a search, whether your code calls `fake.search` or builds its own client on `fake.transport`: the fake pages the rows and reports the total, each row comes back with exactly the selected keys, and `fake.searched` is what was asked. Script it before the first search.
 - `sendGuarded` and `batch.run` work on assets addressed by OID that you scripted a row for: `fake.touch(oid)` is someone else changing the asset (the next write stamped earlier is a conflict), `fake.remove(oid)` is it being deleted.
 - `resolve.numbers` finds a number among the scripted rows; `localize` answers `onLocalize` labels and echoes any other tag; `fake.transport` can be the transport of a client your code builds itself.
-- `onList(type, rows)` answers `client.data.list` the same way. `onRequest(path, answer)` answers any other endpoint in its own shape; with `new FakeAgilityClient({ metamodel })` (a meta.v1 document) a response captured from a server reads translated, as it would live. An `Error` as an answer is thrown.
+- `onList(type, rows)` answers rest-1's list read the same way (`client.deleted`, and `rest1.list` from `/wire`). `onRequest(path, answer)` answers any other endpoint in its own shape; with `new FakeAgilityClient({ metamodel })` (a meta.v1 document) a response captured from a server reads translated, as it would live. An `Error` as an answer is thrown.
 - A custom `Transport` has its own suite: `transportConformance(make)` answers the SDK's expectations of a transport as named checks (`for (const c of transportConformance(make)) it(c.name, c.run)`), and the SDK's fetch transport runs the same ones.
 - The fake evaluates no filter or sort and applies no write. It proves what your code asks and what it does with the answer; what the server answers is for a test against an instance.
 

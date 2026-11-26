@@ -27,30 +27,25 @@ const storyDoc: AssetDocument = {
 };
 
 describe("rest1: translation", () => {
-  it("turns a rest-1 asset into the model shape: Refs for relations (null when unset), display columns folded onto the Refs, AssetState by name, plain values otherwise", () => {
-    const row = fromAssetDocument<Story>(storyDoc);
-    expect(row._oid).toBe("Story:2104");
-    expect(row.Name).toBe("Legal Check");
-    expect(row.Estimate).toBe(2);
-    expect(row.AssetState).toBe("Closed");
-    expect(row.Number).toBe("S-01530");
-    expect(row.Super).toBeNull();
-    expect(row.Status).toEqual({ _oid: "StoryStatus:137", Name: "Accepted" });
-    expect(row.Owners).toEqual([{ _oid: "Member:1035", Name: "Alfred Smith", Nickname: "alfred" }, { _oid: "Member:20", Name: "Betty Builder", Nickname: "betty" }]);
-    // rest-1 sent those display columns uninvited: they are on the Refs, and the row has no key nobody selected.
-    expect(Object.keys(row).filter((k) => k.includes("."))).toEqual([]);
+  it("turns a rest-1 asset into the model shape: bare Refs for relations (null when unset), AssetState by name, plain values otherwise", () => {
+    const row = fromAssetDocument<Story>(storyDoc, { select: ["Name", "Status", "AssetState", "Estimate", "Super", "Owners", "Number"] });
+    expect(row).toEqual({
+      _oid: "Story:2104", Name: "Legal Check", Estimate: 2, AssetState: "Closed", Number: "S-01530", Super: null,
+      // A Ref is { _oid } and nothing else: the display columns rest-1 sent beside each relation, unasked, are not on it,
+      Status: { _oid: "StoryStatus:137" },
+      Owners: [{ _oid: "Member:1035" }, { _oid: "Member:20" }]
+      // and they are not keys of the row either: nothing arrives that was not selected.
+    });
   });
 
-  it("the rows rule on rest-1: a path selected by name keeps its key (a parallel array beside bare-looking Refs for a multi-value relation); one with no Ref to fold onto is kept as sent", () => {
-    const selected = fromAssetDocument<Story>(storyDoc, { select: ["Name", "Owners", "Owners.Name", "Status.Name"] }) as unknown as Record<string, unknown>;
-    expect(selected["Owners.Name"]).toEqual(["Alfred Smith", "Betty Builder"]);
-    expect(selected["Status.Name"]).toBe("Accepted");
-    expect(selected["Owners.Nickname"]).toBeUndefined(); // uninvited: on the Refs only
-    expect((selected.Owners as { Nickname: string }[]).map((o) => o.Nickname)).toEqual(["alfred", "betty"]);
-    // A dotted or type-qualified key whose relation is not in the row has nothing to fold onto: it is all there is of the value, so it stays.
-    const lone: AssetDocument = { _type: "Asset", href: "", id: "Story:1", Attributes: { "Scope.Name": { _type: "Attribute", name: "Scope.Name", value: "Release 1" }, "Story.Number": { _type: "Attribute", name: "Story.Number", value: "S-1" } } };
-    expect(fromAssetDocument(lone)).toEqual({ _oid: "Story:1", "Scope.Name": "Release 1", "Story.Number": "S-1" });
-    expect(fromAssetDocument(lone, { select: ["Name"] })).toEqual({ _oid: "Story:1", "Scope.Name": "Release 1", "Story.Number": "S-1" });
+  it("the rows rule on rest-1: a path selected by name is at row[path] (a parallel array for a multi-value relation), plain or type-qualified; with no select, every column the server chose stays under its own key", () => {
+    const selected = fromAssetDocument<Story>(storyDoc, { select: ["Name", "Owners", "Owners.Name", "PrimaryWorkitem.Status.Name"] }) as unknown as Record<string, unknown>;
+    expect(selected).toEqual({ _oid: "Story:2104", Name: "Legal Check", Owners: [{ _oid: "Member:1035" }, { _oid: "Member:20" }], "Owners.Name": ["Alfred Smith", "Betty Builder"], "Status.Name": "Accepted", Status: { _oid: "StoryStatus:137" }, AssetState: "Closed", Estimate: 2, Super: null, Number: "S-01530" });
+    expect(selected["Owners.Nickname"]).toBeUndefined(); // unasked, so absent: not on the row, not on the Refs
+    // No select (a template, a bare read): the server chose the attributes, so what it sent is the row; Refs are still bare.
+    const unselected = fromAssetDocument<Story>(storyDoc) as unknown as Record<string, unknown>;
+    expect(unselected.Status).toEqual({ _oid: "StoryStatus:137" });
+    expect([unselected["Status.Name"], unselected["Owners.Name"], unselected["Owners.Nickname"]]).toEqual(["Accepted", ["Alfred Smith", "Betty Builder"], ["alfred", "betty"]]);
   });
 
   it("a read rest-1 refuses is a QUERY_REJECTED with the server's sentences, like one query.v1 refuses; a page has `more`", async () => {
@@ -155,7 +150,7 @@ describe("normalizeQuery: a query written with rest-1's spellings", () => {
   it("saying one thing twice, asking for deleted assets, a bad page or no from is a UsageError: nothing is guessed", () => {
     expect(() => normalizeQuery({ from: "Story", sel: "Name", select: ["Name"] })).toThrow(/both `sel` and `select`/);
     expect(() => normalizeQuery({ from: "Story", where: "A='1'", filter: ["B='2'"] })).toThrow(/both a textual `where` and `filter`/);
-    expect(() => normalizeQuery({ from: "Story", deleted: true })).toThrow(/client\.data\.list/);
+    expect(() => normalizeQuery({ from: "Story", deleted: true })).toThrow(/client\.deleted/);
     expect(() => normalizeQuery({ from: "Story", page: "ten" })).toThrow(UsageError);
     expect(() => normalizeQuery({ sel: "Name" } as never)).toThrow(UsageError);
   });

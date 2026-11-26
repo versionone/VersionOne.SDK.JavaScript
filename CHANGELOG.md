@@ -1,8 +1,111 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-alpha.9
 
-Nothing in the package changes.
+### Breaking
+
+- **`client.data.list` is removed, and `client.data` with it.** Its uses
+  have named calls. Migration:
+  - a text search across asset types → `client.search(text, { types, … })`
+    (below);
+  - a search within one type or family, or any other list →
+    `client.query` / `client.queryPage` (with `find` and `findin` for a
+    search);
+  - deleted assets → `client.deleted(type, params)`;
+  - rest-1's list itself, for a caller that wants the endpoint:
+    `import { rest1 } from "@versionone/agility-sdk/wire"` and
+    `rest1.list(client.transport, type, params)`, unchanged.
+- **A Ref is `{ _oid }` on every read; rest-1's unasked display columns
+  are dropped, no longer put on the Ref.** `client.history`,
+  `client.template`, `client.deleted`, `client.search` and `rest1.list` /
+  `rest1.get` from `/wire` used to answer `Owners: [{ _oid, Name,
+  Nickname }]` for a selected relation, because rest-1 sends those columns
+  beside it; the query endpoints never did, so the same select gave two
+  rows. Migration: select the path you read (`"Owners.Name"`,
+  `"Status.Name"`, `"Scope.Name"`) and read it at `row["Owners.Name"]` (an
+  array parallel to `row.Owners` for a multi-value relation). Nothing
+  errors if you do not: `ref.Name` is simply undefined, so search your
+  code for a name read off a relation. A read with no select at all (a
+  template) keeps every column the server sent, each under its own key
+  (`template["Scope.Name"]`), and its Refs are bare too. (a CLI consumer.)
+- **A date has one spelling on every read**: `"2026-09-06T13:52:51.903"`,
+  three decimals, with a `Z` on a UTC attribute: the standard's date-time
+  format, which `new Date(value)` reads in any engine. The endpoints
+  differ, and rows used to carry whichever spelling the endpoint behind
+  the call used: `query` and `get` answered seven decimals
+  (`"…51.9030000"`), `queryPage` dropped trailing zeros (`"…51.903"`,
+  `"…14.6"`), and `history`, `template` and the rest-1 reads answered
+  three decimals and a midnight as the date alone (`"2011-09-20"`). So
+  this changes the default read path too. The SDK cuts to the
+  millisecond, by design: the server's stored resolution is about three
+  milliseconds (in a live sample of 400 timestamps, every digit past the
+  third was zero and the third was only ever 0, 3 or 7), so nothing
+  observed is lost; if an instance ever carries finer digits they are
+  dropped. Migration: code that compares date strings against stored
+  ones, or slices them by position, should parse them (`new Date(value)`,
+  now portable), take the day with `value.slice(0, 10)`, or expect the
+  one spelling; a consumer's own normalising of fractions can go.
+  `rest1.list` / `get` / `history` / `template` from `/wire` spell dates
+  this way when given `{ lookup: client.schema }`, and as rest-1 sent
+  them without. (a CLI consumer and a browser-app consumer.)
+- **A read with an empty `find` throws a `UsageError`** (`kind: "usage"`,
+  nothing is sent), on `query`, `queries`, `queryPage`, `pages`, `all` and
+  `deleted`. It used to answer no rows, because that is what the server
+  answers to a search for nothing, and no rows read as "nothing matches".
+  Migration: when the search box is empty, leave `find` out of the query
+  (or do not send the read).
+
+### Changed
+
+- **`client.explain`: a rule the instance has no sentence for is for a
+  developer, not a user.** Its explanation is the rule's name spelled out
+  ("Refused (asset cannot inactivate closed)."), which is a name and not a
+  sentence written for a person, and can read as the opposite of what
+  happened ("Refused (message must not be sent)." is said of a message
+  that was). `audience` is now `"developer"` for these; the sentence,
+  `rule` and `echoed: false` are unchanged. Migration: none if you show
+  only `audience: "user"` sentences; such a failure now gets your own
+  wording.
+
+### Added
+
+- **`client.search(text, { types, select?, findin?, filter?, where?,
+  with?, sort?, page })`**: text search across asset types, answered as
+  `{ rows, total, more }`: one page of mixed rows in one server-side
+  order. `types` is required: concrete types, or a family by its
+  abstract type (`"Workitem"`). `select` and `findin` take plain attribute
+  names, and each row has every selected key under that name: its value
+  if the row's type defines the attribute, `null` if not, so a Story and a
+  Request both have `Number`, and a name none of the searched types has
+  is `null` on every row (only a name that is no attribute of anything is
+  refused). Nothing type-qualified is written or read
+  in a select; `filter` is sent as written and may be type-qualified,
+  since a condition across types has no plain spelling.
+  A consumer that built this from `client.data.list("BaseAsset", …)` with
+  one `<Type>.Number` select per type replaces it with one call.
+  (a CLI consumer and a chat-bot consumer.)
+- **`client.deleted(type, params)`**: deleted assets of a type, as
+  `{ rows, total, more }`.
+- `FakeAgilityClient.onSearch(rows)` and `fake.searched`, to test code
+  that searches, through the fake or through a client built on
+  `fake.transport`.
+- The subpaths' types resolve under TypeScript's `moduleResolution:
+  "node"` (node10), which ignores `exports`: `package.json` has a
+  `typesVersions` entry for `/wire`, `/services` and `/testing`. A
+  consumer's ambient `declare module` bridge for them can go.
+  (a browser-app consumer.)
+- `@versionone/agility-sdk/services` has `search`. The root exports the
+  types `SearchOptions`, `SearchResult`, `SearchRow`.
+
+### Documented
+
+- README, "Searching": a search within one type or family is
+  `client.query` with `find` and `findin`; across types it is
+  `client.search`. The server's matching rules are stated (every word,
+  whole words, stemming, `*`, the few seconds the text index trails a
+  write), each proved by a live test.
+
+### Repository
 
 - The repository has runnable examples, one per task, in `examples/`
   (they are not in the published package). They are compiled by

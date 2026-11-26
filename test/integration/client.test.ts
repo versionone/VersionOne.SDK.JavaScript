@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { AgilityApiClient } from "../../src/client";
 import type { Story } from "../../src/types/assets/Story";
 import { assetStateKind } from "../../src/types/asset";
+import * as rest1 from "../../src/wire/rest1";
 import { normalizeQuery } from "../../src/wire/rest1";
 import { describeInstance, fixtureName, instance } from "./instance";
 
@@ -44,26 +45,39 @@ describeInstance("client reads (live)", () => {
     const made = await client.send([{ AssetType: "Story", Name: fixtureName("rows rule"), Scope: { _oid: "Scope:0" }, Owners: [{ _oid: me._oid }] }], { throwOnFailure: true });
     const story = made.created[0]!;
     try {
-      const select = ["Name", "Owners", "Owners.Name", "Scope.Name"];
-      const keys = ["Name", "Owners", "Owners.Name", "Scope.Name", "_oid"];
+      const select = ["Name", "Owners", "Owners.Name", "Scope.Name", "ChangeDateUTC", "CreateDate"];
+      const keys = ["ChangeDateUTC", "CreateDate", "Name", "Owners", "Owners.Name", "Scope.Name", "_oid"];
       const viaQuery = (await client.query({ from: "Story", select, filter: ["ID=$id"], with: { $id: story }, page: { size: 1, start: 0 } }))[0]! as Record<string, unknown>;
       const viaPage = (await client.queryPage({ from: "Story", select, filter: ["ID=$id"], with: { $id: story }, page: { size: 1, start: 0 } })).rows[0]! as Record<string, unknown>;
-      const viaRest = (await client.data.list("Story", { select, filter: [`ID='${story}'`], page: { size: 1, start: 0 } })).rows[0]! as unknown as Record<string, unknown>;
+      const viaRest = (await rest1.list(client.transport, "Story", { select, filter: [`ID='${story}'`], page: { size: 1, start: 0 } }, { lookup: client.schema })).rows[0]! as unknown as Record<string, unknown>;
+      // A day with no time of day (a sprint's begin date), which rest-1 writes as the date alone: the same value through each.
+      const sprint = { from: "Timebox", select: ["BeginDate"], sort: ["ID"], page: { size: 1, start: 0 } };
+      const [byQuery] = await client.query<{ _oid: string; BeginDate: string }>(sprint);
+      if (byQuery) {
+        const byPage = (await client.queryPage<{ _oid: string; BeginDate: string }>(sprint)).rows[0]!;
+        const byRest = (await rest1.list<{ _oid: string; BeginDate: string }>(client.transport, "Timebox", { select: ["BeginDate"], sort: ["ID"], page: { size: 1, start: 0 } }, { lookup: client.schema })).rows[0]!;
+        expect(byQuery.BeginDate).toMatch(/^\d{4}-\d\d-\d\dT00:00:00\.000$/);
+        expect([byPage, byRest]).toEqual([byQuery, byQuery]);
+      }
       for (const row of [viaQuery, viaPage, viaRest]) {
         expect(Object.keys(row).sort()).toEqual(keys);
         expect(row["Owners.Name"]).toEqual([me.Name]); // a parallel array beside the Refs
         expect(typeof row["Scope.Name"]).toBe("string"); // its relation was not selected: the path is still there
         expect((row.Owners as { _oid: string }[]).map((o) => o._oid)).toEqual([me._oid]);
+        // The three endpoints write a date three ways (seven decimals, trailing zeros dropped, three decimals): the model has one, the standard's, which any engine's Date reads.
+        expect(row.ChangeDateUTC).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
+        expect(new Date(row.ChangeDateUTC as string).toISOString()).toBe(row.ChangeDateUTC);
+        expect(row.CreateDate).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}$/);
       }
-      // query.v1 and api/asset Refs are bare; rest-1 puts the display attributes it sends on the Ref as well.
-      expect(viaQuery.Owners).toEqual([{ _oid: me._oid }]);
-      expect(viaPage.Owners).toEqual([{ _oid: me._oid }]);
-      expect((viaRest.Owners as { Name: string }[])[0]!.Name).toBe(me.Name);
-      // rest-1 without the dotted path selected: its uninvited columns are on the Ref, not on the row.
-      const bare = (await client.data.list("Story", { select: ["Name", "Owners"], filter: [`ID='${story}'`], page: { size: 1, start: 0 } })).rows[0]! as unknown as Record<string, unknown>;
-      expect(Object.keys(bare).sort()).toEqual(["Name", "Owners", "_oid"]);
+      // A Ref is bare on all three: the three rows are the same row.
+      expect(viaPage).toEqual(viaQuery);
+      expect(viaRest).toEqual(viaQuery);
+      expect(viaRest.Owners).toEqual([{ _oid: me._oid }]);
+      // rest-1 without the dotted path selected: the display columns it sends unasked are nowhere, not on the row and not on the Ref.
+      const bare = (await rest1.list(client.transport, "Story", { select: ["Name", "Owners"], filter: [`ID='${story}'`], page: { size: 1, start: 0 } })).rows[0]! as unknown as Record<string, unknown>;
+      expect(bare).toEqual({ _oid: story, Name: viaQuery.Name, Owners: [{ _oid: me._oid }] });
       // And a refused rest-1 read is a QUERY_REJECTED with sentences, like query.v1's.
-      await expect(client.data.list("Story", { filter: ["Nope=1"], page: { size: 1, start: 0 } })).rejects.toMatchObject({ kind: "invalid", code: "QUERY_REJECTED", message: expect.stringMatching(/^Invalid WHERE parameter; /) });
+      await expect(rest1.list(client.transport, "Story", { filter: ["Nope=1"], page: { size: 1, start: 0 } })).rejects.toMatchObject({ kind: "invalid", code: "QUERY_REJECTED", message: expect.stringMatching(/^Invalid WHERE parameter; /) });
       await expect(client.query({ from: "Story", filter: ["Nope=1"], page: { size: 1, start: 0 } })).rejects.toMatchObject({ kind: "invalid", code: "QUERY_REJECTED" });
     } finally {
       await client.send([{ from: story, execute: "Delete" }]);
@@ -131,7 +145,7 @@ describeInstance("client reads (live)", () => {
     }
     // Gone from an ordinary read; rest-1's deleted read still shows it, and says Deleted.
     expect(await client.get(story)).toBeNull();
-    const [deleted] = (await client.data.list<{ _oid: string; AssetState: string }>("Story", { select: ["AssetState"], filter: [`ID='${story}'`], deleted: true, page: { size: 1, start: 0 } })).rows;
+    const [deleted] = (await rest1.list<{ _oid: string; AssetState: string }>(client.transport, "Story", { select: ["AssetState"], filter: [`ID='${story}'`], deleted: true, page: { size: 1, start: 0 } })).rows;
     expect([deleted?.AssetState, assetStateKind(deleted?.AssetState)]).toEqual(["Deleted", "deleted"]);
     // A template is state 200, which query.v1 sends as "200" and the model names Template. (None on an empty instance: then nothing is asserted.)
     const [template] = await client.query<{ _oid: string; AssetState: string }>({ from: "Story", select: ["AssetState"], filter: ["AssetState='200'"], page: { size: 1, start: 0 } });
