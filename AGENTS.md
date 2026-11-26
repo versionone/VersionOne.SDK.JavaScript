@@ -29,17 +29,36 @@ ESM and CommonJS. It is published to npm and this repository is public.
 ## Where things are
 
 ```
-src/core       HTTP transport, errors. Knows nothing about assets.
-src/types      The model. src/types/assets is GENERATED: never edit by hand.
+src/core       HTTP transport, the resend rule, errors. Knows nothing about assets.
+src/types      The model: assets, queries, commands, outcomes. src/types/assets is GENERATED: never edit by hand.
 src/wire       One module per endpoint: its envelope and the translation to the model.
-src/services   What to do with assets: schema, resolve, guard, batch, attachments, fields.
+src/services   What to do with assets: schema, resolve, guard, batch, attachments, fields, explain.
 src/client.ts  The client: binds the layers.
-src/index.ts   The package's public exports.
+src/testing    What a consumer's tests import: a fake client and the Transport conformance checks.
+src/index.ts   The root's public exports.
 test/unit          Runs with nothing. A fake Transport answering what the server answers.
 test/integration   The same modules against a real instance. Writes fixtures.
 scripts        Metamodel download, type generation, the integration launcher.
 metamodel.json The product's metamodel for one release; the generated types come from it.
 ```
+
+## What a consumer imports
+
+Four paths, and `package.json`'s `exports` lists no others (spec 000 §5a):
+
+| Path | Holds |
+|---|---|
+| `@versionone/agility-sdk` | The client, the model, every error class, a few pure helpers. What nearly every consumer needs. |
+| `@versionone/agility-sdk/services` | The services as free functions over a `Transport`, for a caller without a client. |
+| `@versionone/agility-sdk/wire` | The endpoint modules and their envelopes, for a caller who needs the raw API. |
+| `@versionone/agility-sdk/testing` | `FakeAgilityClient` and `transportConformance`. Never imported by `src` outside `src/testing`. |
+
+A new export goes on the lowest of these that serves it; the root grows
+only for something a client user writes or reads. On the client, reads are
+`client.query` / `queryPage` / `get`, and writes are `client.send`,
+`client.preview` and `client.sendGuarded` (a guarded write compares each
+asset's `Moment`; what matched nothing is a conflict, never a success:
+spec 000 §6).
 
 ## Commands
 
@@ -50,10 +69,11 @@ npm run test:integration  # the live tier; skips with a message when no instance
 npm run generate:types    # after metamodel.json changes
 ```
 
-`npm run verify` includes three structural tests that will fail a careless
+`npm run verify` includes structural tests that will fail a careless
 change, by design: `layers.test.ts` (imports point down the layer table),
-`publicTree.test.ts` (nothing private in the tree) and
-`generate-types.test.ts` (the generated types match the metamodel).
+`publicTree.test.ts` (nothing private in the tree),
+`generate-types.test.ts` (the generated types match the metamodel) and
+`cjs.test.ts` (every import path loads by `require` and by `import`).
 
 ## Rules that are easy to break
 
@@ -72,6 +92,9 @@ change, by design: `layers.test.ts` (imports point down the layer table),
   (spec 000 §6).
 - **Everything thrown is an `ApiError` with a `kind`** (spec 000 §7).
 - **Names are meta.v1's names** (spec 000 §3): no renaming, no aliases.
+- **One shape for a row** on every read path (spec 000 §2): a selected
+  relation is a Ref, a path selected by name is at `row[path]`, nothing
+  unselected arrives, and a row's identity is `_oid`.
 - **A change a consumer can see gets a changelog entry with its migration
   line.** Until 1.0.0, breaking changes are allowed between alphas and are
   listed under "Breaking".
