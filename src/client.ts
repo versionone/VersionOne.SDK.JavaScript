@@ -73,7 +73,14 @@ const dressed = new WeakSet<Transport>();
 
 /** Every read is bounded: the type says so, and for a caller the type did not reach this says so before any request (not even a schema load) is sent. */
 function bounded(qs: readonly assetApi.QueryBody[]): void {
-  for (const q of qs) if (!q.page) throw new UsageError(`query of ${q.from} without a page: every read must be bounded`);
+  for (const q of qs) {
+    if (!q.page) throw new UsageError(`query of ${q.from} without a page: every read must be bounded`);
+    searchable(String(q.from), q.find);
+  }
+}
+/** A text search for nothing: the server answers it with zero rows, which would read as "nothing matches". */
+function searchable(from: string, find: string | undefined): void {
+  if (find !== undefined && !String(find).trim()) throw new UsageError(`query of ${from} with an empty \`find\`: the server answers a search for nothing with no rows, not all rows; leave \`find\` out to read without searching`);
 }
 const ME_SELECT = ["Name", "Username", "Nickname", "Email"];
 
@@ -291,7 +298,10 @@ export class AgilityApiClient {
    * everyday read.)
    */
   readonly data = {
-    list: <Row extends Asset = Asset>(type: string, params: rest1.ReadParams) => rest1.list<Row>(this.transport, type, params)
+    list: <Row extends Asset = Asset>(type: string, params: rest1.ReadParams): Promise<rest1.ReadResult<Row>> => {
+      try { searchable(type, params.find); } catch (error) { return Promise.reject(error); }
+      return rest1.list<Row>(this.transport, type, params);
+    }
   };
 
   /**

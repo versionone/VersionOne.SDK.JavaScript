@@ -2,7 +2,22 @@
 
 ## Unreleased
 
-Nothing in the package changes.
+### Changed
+
+- **A read with an empty `find` throws a `UsageError`** (`kind: "usage"`,
+  nothing is sent), on `query`, `queries`, `queryPage`, `pages`, `all` and
+  `data.list`. It used to answer no rows, because that is what the server
+  answers to a search for nothing, and no rows read as "nothing matches".
+  Migration: when the search box is empty, leave `find` out of the query
+  (or do not send the read).
+
+### Documented
+
+- Text search is `client.query` with `find` and `findin`: README,
+  "Searching", with the server's matching rules, each proved by a live
+  test. The README's table no longer sends a search to `client.data.list`.
+
+### Repository
 
 - The repository has runnable examples, one per task, in `examples/`
   (they are not in the published package). They are compiled by

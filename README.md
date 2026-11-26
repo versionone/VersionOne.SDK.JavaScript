@@ -49,7 +49,8 @@ npm test
 | One asset | `client.get(oid, select)` | Null when nothing has that OID. |
 | Rows and how many there are | `client.queryPage(q)` | `{ rows, total, more }`. |
 | Everything, page by page | `client.pages(q, { limit })` / `client.all(q, { limit })` | Bounded: default limit 1000. |
-| Text search across types, a total, deleted assets | `client.data.list(type, params)` | rest-1: `find` / `findin`, `Story.Number` from `BaseAsset`, `deleted: true`. |
+| Text search, one type or many | `client.query({ from, find, findin, … })` | An ordinary read with two more keys; see "Searching" below. `queryPage` adds the total. |
+| Deleted assets; one page across unrelated types with each type's Number | `client.data.list(type, params)` | rest-1: `deleted: true`; `Story.Number` selected from `BaseAsset`. |
 | An asset's past versions | `client.history(oid, params)` | One row per version; `_oid` carries the moment. |
 | Who am I | `client.me()` | The member the credentials belong to. |
 | Numbers and OIDs a person typed | `client.resolve.numbers([...])` / `client.resolve.refs([...])` | Answered as rows. One request for numbers of any mix of types. |
@@ -67,6 +68,33 @@ npm test
 Every row follows one rule, whichever call read it: **a relation you select is a Ref (`{ _oid }`); a path you select by name is at `row[path]` (`row["Status.Name"]`); nothing arrives that you did not select.** Select both `Owners` and `Owners.Name` and you get the Refs and, beside them, a parallel array at `"Owners.Name"`. To get attributes on the related rows themselves, use a sub-select: `{ from: "Owners", select: ["Name"] }` gives `row.Owners[i].Name`. (rest-1 also puts the display attributes it sends unasked on the Refs of a relation you selected.)
 
 A row's identity is `_oid`: it is the key the server sends, underscored so it cannot collide with an attribute (the identity attribute is `ID`). Rows, Refs, resolved assets, attachments and the assets on a receipt all carry it; a record that only mentions an asset (a receipt's `described` entries, a `drifted` entry) says `oid`.
+
+### Searching
+
+A text search is a read with `find` (the text) and `findin` (the attributes to look in). It composes with `filter`, `sort` and `page`, and `queryPage` answers its total.
+
+```ts
+const hits = await client.query({
+  from: "Workitem",                       // stories, defects, epics, themes, tasks, tests, test sets
+  select: ["Name", "Number", "AssetType"],
+  find: "warehouse ship*",
+  findin: ["Name", "Number"],
+  page: { size: 25, start: 0 }
+});
+```
+
+What the server does with the text (each of these is a live test in `test/integration/search.test.ts`):
+
+- **Every word must match**, in any order, in any letter case. Punctuation separates words.
+- **Whole words**, with the server's stemming ("shipping" finds "ship"). Part of a word finds nothing unless it ends in `*`: `integrat*` finds "integration". A leading `*` does not work.
+- **A number is text too**: `find: "S-01001", findin: ["Number"]` finds that story, in either case.
+- **Always send `findin`.** Without it the attributes searched depend on the type.
+- **The text index trails a write by a few seconds.** An asset created a moment ago is found by its Number at once and by its words shortly after; do not search by name for what you just created.
+- Closed assets are found; deleted ones are not.
+- An attribute `findin` does not know is a refused query (`QUERY_REJECTED`), not an empty result.
+- **An empty `find` is a usage error.** The server answers a search for nothing with no rows, which would read as "nothing matches"; leave `find` out to read without searching.
+
+`from` decides how wide the search is. `Workitem` covers the backlog types and has `Number`. `BaseAsset` is every asset (members, issues, requests, and anything else that carries the words, a notification included), so narrow it with a filter on `AssetType`; it has no `Number` of its own, and query.v1 refuses a type-qualified select such as `Story.Number` there. For one page across unrelated types with their Numbers, either send one typed query per type in a single request with `client.queries([...])`, or use `client.data.list("BaseAsset", { select: ["Name", "Story.Number", "Issue.Number"], … })`, which rest-1 answers with the value under `Number`.
 
 Rows are typed from what you select, against the product's metamodel: a selected key is its value or `null`, never `undefined`. For an attribute your instance has and the generated model does not (a custom field's relation, a product module's attribute), name your own row type at the call: `client.query<MyRow>(q)` needs only `_oid` on `MyRow`.
 

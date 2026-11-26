@@ -121,6 +121,17 @@ describe("client: reads", () => {
     await expect(client.all({ from: "Story", select: ["Name"] } as never)).rejects.toBeInstanceOf(UsageError);
   });
 
+  it("a search for nothing is a usage error on every read, before any request: the server would answer it with no rows", async () => {
+    const t = fake(() => { throw new Error("nothing may be sent"); });
+    const client = new AgilityApiClient({ baseUrl: "https://agility.example.com/I" }, { transport: t });
+    const page = { size: 5, start: 0 };
+    const empty = { from: "Story", select: ["Name"], find: "  ", findin: ["Name"], page };
+    for (const read of [() => client.query(empty), () => client.queries([{ from: "Story", page }, empty]), () => client.queryPage(empty), () => client.all(empty), () => client.data.list("Story", { find: "", page })]) {
+      await expect(read()).rejects.toMatchObject({ kind: "usage", status: 0, message: expect.stringContaining("empty `find`") });
+    }
+    expect(t.calls).toEqual([]);
+  });
+
   it("me asks for the member whose IsSelf is true", async () => {
     const t = fake(() => [[{ _oid: "Member:1000", Name: "SDK Test Account", Username: "sdk-test-account", Nickname: "SDK", Email: "" }]]);
     const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, types: schema().cache });
