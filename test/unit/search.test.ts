@@ -81,7 +81,15 @@ describe("search", () => {
     expect(one.calls[0]).toMatchObject({ path: "/rest-1.v1/Data/Request", query: { sel: "Name,Number,Owner", findin: "Name,Number", where: undefined } });
   });
 
-  it("a mistake in the call is a usage error and nothing is sent: no text, no page, no types, an abstract or unknown type, a name no searched type defines (naming the types checked)", async () => {
+  it("a family named by its abstract type stands for its concrete subtypes, beside any other type, each once", async () => {
+    const t = recording();
+    await search(t, schema(), "printer", { types: ["Workitem", "Story", "Request"], select: ["Name"], page });
+    expect(t.calls[0]!.query).toMatchObject({ where: "AssetType='Defect','Epic','Story','Task','Test','TestSet','Theme','Request'" });
+    await search(t, schema(), "printer", { types: ["PrimaryWorkitem"], select: ["Number"], findin: ["Name"], page });
+    expect(t.calls[1]).toMatchObject({ path: "/rest-1.v1/Data/BaseAsset", query: { where: "AssetType='Defect','Story','TestSet'", sel: "Defect.Number,Story.Number,TestSet.Number" } });
+  });
+
+  it("a mistake in the call is a usage error and nothing is sent: no text, no page, no types, an unknown type or a root that is no family, a name no searched type defines (naming the types checked)", async () => {
     const t = recording();
     const s = schema();
     const refused = async (run: () => Promise<unknown>, message: RegExp) => {
@@ -92,7 +100,7 @@ describe("search", () => {
     await refused(() => search(t, s, "  ", { types: ["Story"], page }), /needs text/);
     await refused(() => search(t, s, "x", { types: ["Story"] } as never), /without a page/);
     await refused(() => search(t, s, "x", { types: [], page }), /needs `types`/);
-    await refused(() => search(t, s, "x", { types: ["Workitem"], page }), /"Workitem" is an abstract type/);
+    await refused(() => search(t, s, "x", { types: ["BaseAsset"], page }), /"BaseAsset" is an abstract type whose concrete subtypes the SDK does not know/);
     await refused(() => search(t, s, "x", { types: ["Sotry"], page }), /no asset type "Sotry"/);
     await refused(() => search(t, s, "x", { types: ["Story", "Issue"], select: ["Nmae"], page }), /select "Nmae" is not an attribute of any type searched \(Story, Issue\)/);
     await refused(() => search(t, s, "x", { types: ["Story", "Issue"], findin: ["Nmae"], page }), /findin "Nmae"/);

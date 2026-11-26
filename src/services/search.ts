@@ -21,6 +21,7 @@
 import { UsageError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import type { Asset, Oid } from "../types/asset";
+import { CONCRETE_SUBTYPES } from "../types/assets/subtypes";
 import * as rest1 from "../wire/rest1";
 import type { Schema } from "./schema";
 
@@ -31,9 +32,10 @@ export const DEFAULT_FINDIN = ["Name", "Number"] as const;
 
 export interface SearchOptions {
   /**
-   * The asset types to search: concrete types (`"Story"`, `"Request"`),
-   * at least one. There is no default: a default of "work items" would
-   * silently leave out requests, issues, goals and topics.
+   * The asset types to search, at least one: concrete types (`"Story"`,
+   * `"Request"`), or a family by its abstract type (`"Workitem"` is
+   * stories, defects, epics, themes, tasks, tests and test sets). There is
+   * no default: one would silently leave types out.
    */
   types: readonly string[];
   /**
@@ -69,20 +71,33 @@ export interface SearchResult<Row extends { _oid: Oid } = SearchRow> { rows: Row
 
 const quoted = (value: string): string => `'${value.replace(/'/g, "''")}'`;
 
-/** The types as a set, each loaded and checked: known, concrete, and a descendant of the root. */
+/**
+ * The types as a set of concrete types, each loaded and checked. A family
+ * named by its abstract type (`"Workitem"`) stands for its concrete
+ * subtypes as the product ships them; one of those this instance does not
+ * have is left out, since the caller did not name it.
+ */
 async function checked(schema: Schema, types: readonly string[]): Promise<string[]> {
   if (!Array.isArray(types) || !types.length) throw new UsageError("search needs `types`: the asset types to search, such as [\"Story\", \"Defect\", \"Request\"]; there is no default");
-  const unique = [...new Set(types)];
-  await Promise.all([ROOT, ...unique].map((t) => schema.load(t)));
-  for (const token of unique) {
+  const named = [...new Set(types)];
+  await Promise.all([ROOT, ...named].map((t) => schema.load(t)));
+  const concrete = new Set<string>();
+  for (const token of named) {
     const type = schema.assetType(token);
     if (!type) throw new UsageError(`search: there is no asset type "${token}"`);
-    if (type.Abstract) throw new UsageError(`search: "${token}" is an abstract type; list the concrete types to search, or use client.query with \`find\` to search one family (from: "${token}")`);
-    let base = type.Base;
+    if (!type.Abstract) { concrete.add(token); continue; }
+    const family = CONCRETE_SUBTYPES[token];
+    if (!family) throw new UsageError(`search: "${token}" is an abstract type whose concrete subtypes the SDK does not know; list the concrete types to search`);
+    const loaded = await Promise.all(family.map((t) => schema.load(t)));
+    family.forEach((t, i) => { if (loaded[i]) concrete.add(t); });
+  }
+  for (const token of concrete) {
+    let base = schema.assetType(token)!.Base;
     while (base && base !== ROOT) base = (await schema.load(base))?.Base;
     if (base !== ROOT) throw new UsageError(`search: "${token}" does not descend from ${ROOT} and cannot be searched with other types; use client.query with \`find\` (from: "${token}")`);
   }
-  return unique;
+  if (!concrete.size) throw new UsageError(`search: none of the types named (${named.join(", ")}) has a concrete type on this instance`);
+  return [...concrete];
 }
 
 /**
@@ -105,22 +120,10 @@ function spelled(schema: Schema, types: readonly string[], names: readonly strin
   });
 }
 
-/** A row with exactly the selected keys: null where its type has no such attribute, a relation as bare Refs, nothing unselected. */
+/** A row with exactly the selected keys: null where its type has no such attribute, nothing unselected. */
 function shaped<Row extends { _oid: Oid }>(row: Asset, select: readonly string[]): Row {
-  const out: Record<string, unknown> = { _oid: row._oid };
-  const bare = (value: unknown): unknown =>
-    Array.isArray(value) ? value.map(bare) : value && typeof value === "object" && typeof (value as { _oid?: unknown })._oid === "string" ? { _oid: (value as { _oid: string })._oid } : value;
   const sent = row as unknown as Record<string, unknown>;
-  // A selected path's values arrive beside the relation and were folded onto its Refs: read them back from there.
-  const along = (name: string): unknown => {
-    const dot = name.indexOf(".");
-    const target = dot < 0 ? undefined : sent[name.slice(0, dot)];
-    const attribute = name.slice(dot + 1);
-    const of = (ref: unknown): unknown => (ref && typeof ref === "object" ? (ref as Record<string, unknown>)[attribute] ?? null : null);
-    return Array.isArray(target) ? target.map(of) : of(target);
-  };
-  for (const name of select) out[name] = name in sent ? bare(sent[name] ?? null) : along(name);
-  return out as Row;
+  return Object.fromEntries([["_oid", row._oid], ...select.map((name) => [name, sent[name] ?? null])]) as Row;
 }
 
 /** One page of the assets of `types` whose text matches, as `{ rows, total, more }`. */

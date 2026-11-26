@@ -16,7 +16,7 @@ const text = process.argv[2] ?? "sample";
 // `select` is written once, plainly, and every row has that key: its value
 // if the row's type has the attribute, null if not.
 const { rows, total, more } = await client.search(text, {
-  types: ["Story", "Defect", "Epic", "Request", "Issue", "Goal"],
+  types: ["Workitem", "Request", "Issue", "Goal"],   // a family by its abstract type, and three types outside it
   select: ["Name", "Number", "AssetType", "Scope.Name", "Estimate"],
   filter: ["AssetState!='Closed'"],
   sort: ["-ChangeDateUTC"],

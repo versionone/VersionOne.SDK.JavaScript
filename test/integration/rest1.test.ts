@@ -43,11 +43,12 @@ describeInstance("rest1 (live)", () => {
   it("get reads one asset with its relations as Refs, and history reads the same asset one moment per row", async () => {
     const { rows: [any] } = await rest1.list<Story>(t, "Story", { select: ["Name"], page: { size: 1, start: 0 } });
     expect(any).toBeDefined();
-    const one = await rest1.get<Story>(t, any!._oid, ["Name", "Scope", "Owners", "Super"]);
+    const one = await rest1.get<Story & { "Scope.Name": string }>(t, any!._oid, ["Name", "Scope", "Scope.Name", "Owners", "Super"]);
     expect(one._oid).toBe(any!._oid);
     expect(one.Name).toBe(any!.Name);
     expect(one.Scope).toMatchObject({ _oid: expect.stringMatching(/^Scope:\d+$/) });
-    expect(typeof one.Scope?.Name).toBe("string"); // rest-1 adds Scope.Name beside a selected Scope; folded onto the Ref
+    expect(one.Scope).toEqual({ _oid: one.Scope!._oid }); // a Ref is bare: the columns rest-1 adds beside it are not on it
+    expect(typeof one["Scope.Name"]).toBe("string"); // the path, selected, is at row[path]
     const moments = await rest1.history<Story>(t, any!._oid, { select: ["Name", "ChangeDate"], page: { size: 3, start: 0 } });
     expect(moments.rows.length).toBeGreaterThan(0);
     for (const m of moments.rows) expect(m._oid).toMatch(new RegExp(`^${any!._oid}:\\d+$`));

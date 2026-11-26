@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { AgilityApiClient } from "../../src/client";
+import { CONCRETE_SUBTYPES } from "../../src/types/assets/subtypes";
 import { queryV1, rest1 } from "../../src/wire";
 import { deleteFixtures, describeInstance, instance } from "./instance";
 
@@ -169,7 +170,16 @@ describeInstance("search (live)", () => {
     expect((await client.search(word, { types: SIXTEEN, findin: ["Name"], page })).rows.every((r) => !r._oid.startsWith("Message:"))).toBe(true);
   });
 
-  it("client.search refuses, before any search is sent: no text, no types, an abstract type, an unknown type, a name no type defines", async () => {
+  it("types: [\"Workitem\"] searches the family: the generated list of its concrete subtypes is what this instance's Workitems are", async () => {
+    const hits = await client.search(word, { types: ["Workitem"], sort: ["ID"], page });
+    expect(hits.rows.map((r) => r._oid)).toEqual([story, defect]); // the Issue is not a Workitem
+    // The expansion against the server: no Workitem on the instance has a type outside the list (zero rows), and the control inside it finds rows.
+    const family = CONCRETE_SUBTYPES.Workitem!;
+    expect(await client.query({ from: "Workitem", select: ["AssetType"], filter: [`AssetType!=${family.map((t) => `'${t}'`).join(",")}`], page: { size: 1, start: 0 } })).toEqual([]);
+    expect(await client.query({ from: "Workitem", select: ["AssetType"], filter: [`AssetType=${family.map((t) => `'${t}'`).join(",")}`], page: { size: 1, start: 0 } })).toHaveLength(1);
+  });
+
+  it("client.search refuses, before any search is sent: no text, no types, the root type, an unknown type, a name no type defines", async () => {
     const refused = async (run: () => Promise<unknown>, message: RegExp) => {
       const before = requests.filter((r) => r.path.startsWith("/rest-1.v1")).length;
       await expect(run()).rejects.toMatchObject({ kind: "usage", status: 0, message: expect.stringMatching(message) });
@@ -177,7 +187,7 @@ describeInstance("search (live)", () => {
     };
     await refused(() => client.search(" ", { types: ["Story"], page }), /needs text/);
     await refused(() => client.search(word, { types: [], page }), /needs `types`/);
-    await refused(() => client.search(word, { types: ["Workitem"], page }), /abstract type/);
+    await refused(() => client.search(word, { types: ["BaseAsset"], page }), /abstract type/);
     await refused(() => client.search(word, { types: ["NoSuchType"], page }), /no asset type "NoSuchType"/);
     await refused(() => client.search(word, { types: ["Story", "Issue"], select: ["Name", "Nmae"], page }), /"Nmae" is not an attribute of any type searched \(Story, Issue\)/);
   });

@@ -15,6 +15,19 @@
   - rest-1's list itself, for a caller that wants the endpoint:
     `import { rest1 } from "@versionone/agility-sdk/wire"` and
     `rest1.list(client.transport, type, params)`, unchanged.
+- **A Ref is `{ _oid }` on every read; rest-1's unasked display columns
+  are dropped, no longer put on the Ref.** `client.history`,
+  `client.template`, `client.deleted`, `client.search` and `rest1.list` /
+  `rest1.get` from `/wire` used to answer `Owners: [{ _oid, Name,
+  Nickname }]` for a selected relation, because rest-1 sends those columns
+  beside it; the query endpoints never did, so the same select gave two
+  rows. Migration: select the path you read (`"Owners.Name"`,
+  `"Status.Name"`, `"Scope.Name"`) and read it at `row["Owners.Name"]` (an
+  array parallel to `row.Owners` for a multi-value relation). Nothing
+  errors if you do not: `ref.Name` is simply undefined, so search your
+  code for a name read off a relation. A read with no select at all (a
+  template) keeps every column the server sent, each under its own key
+  (`template["Scope.Name"]`), and its Refs are bare too. (a CLI consumer.)
 - **A read with an empty `find` throws a `UsageError`** (`kind: "usage"`,
   nothing is sent), on `query`, `queries`, `queryPage`, `pages`, `all` and
   `deleted`. It used to answer no rows, because that is what the server
@@ -27,7 +40,8 @@
 - **`client.search(text, { types, select?, findin?, filter?, where?,
   with?, sort?, page })`**: text search across asset types, answered as
   `{ rows, total, more }`: one page of mixed rows in one server-side
-  order. `types` is required. `select` and `findin` take plain attribute
+  order. `types` is required: concrete types, or a family by its
+  abstract type (`"Workitem"`). `select` and `findin` take plain attribute
   names, and each row has every selected key under that name: its value
   if the row's type defines the attribute, `null` if not, so a Story and a
   Request both have `Number`. Nothing type-qualified is written or read

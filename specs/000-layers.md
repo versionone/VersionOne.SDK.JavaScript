@@ -41,8 +41,7 @@ imports `core` for one reason: a string that is not an OID token is a
 ## 2. One shape
 
 The objects the SDK passes around have **one shape**, wherever they came
-from or are going. A relation is a `Ref` (`{ _oid }` plus whatever a select
-pulled through) in a create, in an update, and in a query result alike.
+from or are going. A relation is a `Ref` (`{ _oid }`, plus what a sub-select asked for) in a create, in an update, and in a query result alike.
 `AssetState` has one set of values. Whatever an endpoint spells differently
 — api/asset writing a relation as an OID token, rest-1 wrapping every value
 in `Attributes` and rendering `AssetState` as a number — is translated in
@@ -58,12 +57,15 @@ described update, a drifted entry — says plain `oid`.
 One rule for a row, on every read path (query.v1, api/asset, rest-1):
 **a relation you select is a Ref; a path you select by name is at
 `row[path]`; nothing arrives that you did not select.** A sub-select is
-how to ask for attributes on the related rows. rest-1 sends display
-columns beside a selected relation unasked; its wire module folds them
-onto the Refs and drops their keys from the row unless the path was
-selected, and keeps a dotted key that has no Ref to fold onto. An
-integration test reads one asset through all three paths and compares
-the keys.
+how to ask for attributes on the related rows. A Ref is `{ _oid }` and
+nothing more unless a sub-select put attributes on it. rest-1 sends
+display columns beside a selected relation unasked (`Owners.Name`); its
+wire module drops them unless that path was selected, in which case the
+value is at `row[path]` like any path. They are never put on the Ref: a
+row must not differ by which endpoint answered it. Where a read has no
+select at all (a template), the server chose the attributes and every
+column it sent stays under its own key. An integration test reads one
+asset through all three paths and compares the rows.
 
 One addition, for the one read whose page mixes unrelated types
 (`client.search`): **you name an attribute once, plainly, and each row has

@@ -56,13 +56,13 @@ describeInstance("client reads (live)", () => {
         expect(typeof row["Scope.Name"]).toBe("string"); // its relation was not selected: the path is still there
         expect((row.Owners as { _oid: string }[]).map((o) => o._oid)).toEqual([me._oid]);
       }
-      // query.v1 and api/asset Refs are bare; rest-1 puts the display attributes it sends on the Ref as well.
-      expect(viaQuery.Owners).toEqual([{ _oid: me._oid }]);
-      expect(viaPage.Owners).toEqual([{ _oid: me._oid }]);
-      expect((viaRest.Owners as { Name: string }[])[0]!.Name).toBe(me.Name);
-      // rest-1 without the dotted path selected: its uninvited columns are on the Ref, not on the row.
+      // A Ref is bare on all three: the three rows are the same row.
+      expect(viaPage).toEqual(viaQuery);
+      expect(viaRest).toEqual(viaQuery);
+      expect(viaRest.Owners).toEqual([{ _oid: me._oid }]);
+      // rest-1 without the dotted path selected: the display columns it sends unasked are nowhere, not on the row and not on the Ref.
       const bare = (await rest1.list(client.transport, "Story", { select: ["Name", "Owners"], filter: [`ID='${story}'`], page: { size: 1, start: 0 } })).rows[0]! as unknown as Record<string, unknown>;
-      expect(Object.keys(bare).sort()).toEqual(["Name", "Owners", "_oid"]);
+      expect(bare).toEqual({ _oid: story, Name: viaQuery.Name, Owners: [{ _oid: me._oid }] });
       // And a refused rest-1 read is a QUERY_REJECTED with sentences, like query.v1's.
       await expect(rest1.list(client.transport, "Story", { filter: ["Nope=1"], page: { size: 1, start: 0 } })).rejects.toMatchObject({ kind: "invalid", code: "QUERY_REJECTED", message: expect.stringMatching(/^Invalid WHERE parameter; /) });
       await expect(client.query({ from: "Story", filter: ["Nope=1"], page: { size: 1, start: 0 } })).rejects.toMatchObject({ kind: "invalid", code: "QUERY_REJECTED" });

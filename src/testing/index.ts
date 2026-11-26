@@ -281,7 +281,7 @@ function toAssetDocument(row: FakeRow): Record<string, unknown> {
   const ref = (r: { _oid: string }) => ({ _type: "Asset", href: "", idref: r._oid });
   const Attributes: Record<string, unknown> = {};
   // What a scripted Ref carries beyond its OID goes out as rest-1 sends a relation's display columns (`Owners.Name`, a
-  // parallel array for a multi-value relation), so the client folds it back onto the Ref, as it does live.
+  // parallel array for a multi-value relation), so the client reads it as it does live: at the path, when the path was selected.
   const columns = (name: string, refs: Record<string, unknown>[], many: boolean) => {
     for (const key of new Set(refs.flatMap((r) => Object.keys(r).filter((k) => k !== "_oid")))) {
       const path = `${name}.${key}`;

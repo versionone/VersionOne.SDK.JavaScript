@@ -31,7 +31,7 @@
  *   - AssetState is the NUMBER (the server's AssetState enum); the model wants the name.
  *   - a type-qualified sel (Story.Number on BaseAsset) arrives keyed by its plain name (Number).
  *   - selecting a relation also brings its display columns (Owners.Name,
- *     Owners.Nickname, Status.Name) uninvited; they are folded onto the Refs.
+ *     Owners.Nickname, Status.Name) uninvited; they are dropped unless selected.
  *   - a page is required by this module: no Data read is unbounded.
  */
 import { ApiError, UsageError } from "../core/errors";
@@ -81,38 +81,29 @@ const toRef = (doc: AssetRefDocument): Ref => ({ _oid: momentless(doc.idref) });
  * row's own _oid keeps its moment only on a history read (it is the moment
  * that identifies the row).
  *
- * rest-1 adds display columns beside a selected relation without being
- * asked (Owners.Name, Owners.Nickname). They are folded onto the Refs by
- * position, and the row follows the rule every read follows — it has the
- * keys that were selected and no others: a dotted key stays only when it
- * is in `select` (the caller asked for that path by name), or when it has
- * no Ref to fold onto (it is then all there is of that value).
+ * A Ref is `{ _oid }` and nothing else, as on every read. rest-1 adds
+ * display columns beside a selected relation without being asked
+ * (`Owners.Name`, `Owners.Nickname`): they are dropped, because the row
+ * has the keys that were selected and no others. A path the caller did
+ * select (`"Owners.Name"`, or type-qualified, `"Story.Owners.Name"`) is at
+ * `row["Owners.Name"]`. When nothing was selected (a template, a read
+ * without `select`) the server chose the attributes, and every column it
+ * sent stays, under its own key.
  */
 export function fromAssetDocument<Row extends Asset = Asset>(doc: AssetDocument, { history = false, select }: { history?: boolean; select?: readonly string[] } = {}): Row {
   const out: Record<string, unknown> = { _oid: history ? doc.id : momentless(doc.id) };
-  const attrs = doc.Attributes ?? {};
-  for (const [key, a] of Object.entries(attrs)) {
+  // rest-1 keys a type-qualified select (`Story.Scope.Name`) by its plain path (`Scope.Name`).
+  const selected = (key: string): boolean => !select || select.some((s) => s === key || s.endsWith(`.${key}`));
+  for (const [key, a] of Object.entries(doc.Attributes ?? {})) {
     if (a._type === "Relation") {
       out[key] = Array.isArray(a.value) ? a.value.map(toRef) : a.value ? toRef(a.value) : null;
+    } else if (key.includes(".") && !selected(key)) {
+      continue; // a display column nobody asked for
     } else if (key === "AssetState" && typeof a.value === "number") {
       out[key] = assetStateOf(a.value);
     } else {
       out[key] = a.value;
     }
-  }
-  // Fold "Rel.Attr" columns onto the Ref(s) of a selected relation.
-  for (const [key, a] of Object.entries(attrs)) {
-    const dot = key.indexOf(".");
-    if (dot < 0 || a._type !== "Attribute") continue;
-    const rel = key.slice(0, dot), attr = key.slice(dot + 1);
-    if (attr.includes(".")) continue; // deeper paths stay as columns only
-    const target = out[rel];
-    const values = a.value;
-    let folded = false;
-    if (Array.isArray(target) && Array.isArray(values)) { target.forEach((ref, i) => { if (ref && typeof ref === "object") (ref as Record<string, unknown>)[attr] = values[i]; }); folded = true; }
-    else if (target && typeof target === "object" && !Array.isArray(target) && !Array.isArray(a.value)) { (target as Record<string, unknown>)[attr] = a.value; folded = true; }
-    // On the Ref now. The dotted key goes unless the caller selected that path by name.
-    if (folded && !select?.includes(key)) delete out[key];
   }
   return out as Row;
 }

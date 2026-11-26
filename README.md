@@ -66,7 +66,7 @@ npm test
 | An error, said to a person | `client.explain(error)` | "Project is required.", with the instance's labels. |
 | Labels in the instance's words | `client.localize(tags)` | |
 
-Every row follows one rule, whichever call read it: **a relation you select is a Ref (`{ _oid }`); a path you select by name is at `row[path]` (`row["Status.Name"]`); nothing arrives that you did not select.** Select both `Owners` and `Owners.Name` and you get the Refs and, beside them, a parallel array at `"Owners.Name"`. To get attributes on the related rows themselves, use a sub-select: `{ from: "Owners", select: ["Name"] }` gives `row.Owners[i].Name`. (rest-1 also puts the display attributes it sends unasked on the Refs of a relation you selected.)
+Every row follows one rule, whichever call read it: **a relation you select is a Ref (`{ _oid }`); a path you select by name is at `row[path]` (`row["Status.Name"]`); nothing arrives that you did not select.** Select both `Owners` and `Owners.Name` and you get the Refs and, beside them, a parallel array at `"Owners.Name"`. To get attributes on the related rows themselves, use a sub-select: `{ from: "Owners", select: ["Name"] }` gives `row.Owners[i].Name`.
 
 A row's identity is `_oid`: it is the key the server sends, underscored so it cannot collide with an attribute (the identity attribute is `ID`). Rows, Refs, resolved assets, attachments and the assets on a receipt all carry it; a record that only mentions an asset (a receipt's `described` entries, a `drifted` entry) says `oid`.
 
@@ -111,7 +111,7 @@ const { rows, total, more } = await client.search("warehouse ship*", {
 ```
 
 - **One request, one order across every type, and the total.** The matching rules above apply.
-- **`types` is required**: concrete types, at least one. A default would silently leave types out.
+- **`types` is required**, at least one: concrete types, or a family by its abstract type (`"Workitem"` is stories, defects, epics, themes, tasks, tests and test sets; requests, issues and goals are not work items, so name them). A default would silently leave types out.
 - **You name an attribute once, plainly, and each row has that key**: its value if the row's type defines it, `null` if not (`Owners` is null on a Request, `Owner` null on a Story; the SDK does not merge differently named attributes). A name none of the types defines is a usage error that lists the types.
 - `select` defaults to `Name`, `Number`, `AssetType`, `AssetState`; `findin` defaults to `Name` and `Number`.
 - A relation is a bare `{ _oid }`; ask for a display value as a path (`"Scope.Name"`, `"Owners.Name"`).

@@ -147,13 +147,13 @@ describe("FakeAgilityClient", () => {
     ];
     const fake = new FakeAgilityClient().onList("BaseAsset", found);
     const page = await rest1.list(fake.transport, "BaseAsset", { find: "logon", findin: ["Name"], select: ["Name", "Number", "AssetState", "Owners", "Owners.Name", "Status"], page: { size: 2, start: 0 }, needTotal: true });
-    // As scripted, read back through the client's own rest-1 translation: so, as live, a selected dotted path is also on its Refs.
-    expect(page.rows).toEqual([{ ...found[0], Owners: [{ _oid: "Member:20", Name: "Dana" }] }, found[1]]);
+    // As scripted, read back through the client's own rest-1 translation: a selected path is at row[path], and a Ref is bare.
+    expect(page.rows).toEqual([found[0], found[1]]);
     expect(page).toMatchObject({ total: 3, more: true });
     expect((await rest1.list(fake.transport, "BaseAsset", { page: { size: 2, start: 2 }, needTotal: true })).rows).toEqual([found[2]]);
-    // What a scripted Ref carries stays on it, as rest-1's display columns do live, whether or not the dotted path was selected.
+    // What a scripted Ref carries beyond its OID goes out as rest-1's display columns do, and is read back as live: at the path when it was selected, nowhere when it was not.
     fake.onList("Story", [{ _oid: "Story:1", Status: { _oid: "StoryStatus:1", Name: "Dev" }, Owners: [{ _oid: "Member:1", Name: "a", Nickname: "A" }, { _oid: "Member:2", Name: "b", Nickname: "B" }] }]);
-    expect((await rest1.list(fake.transport, "Story", { select: ["Status", "Owners"], page: { size: 1, start: 0 } })).rows).toEqual([{ _oid: "Story:1", Status: { _oid: "StoryStatus:1", Name: "Dev" }, Owners: [{ _oid: "Member:1", Name: "a", Nickname: "A" }, { _oid: "Member:2", Name: "b", Nickname: "B" }] }]);
+    expect((await rest1.list(fake.transport, "Story", { select: ["Status", "Owners", "Owners.Name"], page: { size: 1, start: 0 } })).rows).toEqual([{ _oid: "Story:1", Status: { _oid: "StoryStatus:1" }, Owners: [{ _oid: "Member:1" }, { _oid: "Member:2" }], "Owners.Name": ["a", "b"] }]);
     expect(fake.requests[0]).toMatchObject({ method: "GET", path: "/rest-1.v1/Data/BaseAsset", query: { find: "logon", findin: "Name", page: "2,0" } });
     // A function sees the type and rest-1's own query string, and answers one page.
     fake.onList((type, q) => type === "Story" && q.deleted === "true", () => ({ rows: [{ _oid: "Story:7", Name: "gone" }], total: 12 }));
