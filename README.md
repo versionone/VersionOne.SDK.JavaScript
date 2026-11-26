@@ -20,6 +20,8 @@ const stories = await client.query({ from: "Story", select: ["Name", "Estimate"]
 // stories[0].Estimate is a number | null; stories[0].Nmae does not compile
 ```
 
+Runnable examples, one per task (a first read, a write, a guarded write, a batch with an undo, errors, attachments, testing your own code), are in [`examples/`](examples/README.md).
+
 ## Working on the SDK
 
 ```bash

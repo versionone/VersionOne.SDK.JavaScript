@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+Nothing in the package changes.
+
+- The repository has runnable examples, one per task, in `examples/`
+  (they are not in the published package). They are compiled by
+  `npm run typecheck` and run by the integration tier.
+
 ## 1.0.0-alpha.8 — the last breaking batch before 1.0
 
 Each entry has the line a consumer follows to migrate.
