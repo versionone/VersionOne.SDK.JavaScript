@@ -169,8 +169,13 @@ Each entry has the line a consumer follows to migrate.
   types of a meta.v1 document, so a response captured from a server and
   scripted with `onRequest` reads translated, for the fake and for any
   client built on `fake.transport`; and `onList(type, rows)` scripts
-  `client.data.list` in the model's shape. (a chat-bot consumer and a CLI
-  consumer, whose tests replay captured responses.)
+  `client.data.list` in the model's shape. `sendGuarded` and `batch.run`
+  work on the fake for assets addressed by OID that a row was scripted
+  for: it keeps a moment per asset, `fake.touch(oid)` is someone else
+  changing it (a conflict for a write stamped earlier, drift for a
+  receipt's reverse) and `fake.remove(oid)` is it being deleted. (a
+  chat-bot consumer and a CLI consumer, whose tests replay captured
+  responses and fake a batch by hand.)
 - **`client.resolve.refs(specs)`**: numbers and OID tokens mixed, each
   one read, in two requests at most; what names nothing is `missing`.
 - **`Outcome.unmatched`**: the indexes of updates and operations
@@ -392,6 +397,10 @@ entry says what a consumer changes, if anything.
   fields with whether they are enforced at close; `visible(types,
   scopes)` and `visibleByAsset(oid)` are the endpoints alone. New wire
   module `fields`.
+- **`client.urls.asset` throws a `UsageError` for anything that is
+  neither an OID token nor an asset Number** (it built a URL from any
+  string before). This was a breaking change and was not listed as one
+  when alpha.4 shipped. Migration: validate, or catch the `UsageError`.
 - **`client.urls.asset` takes an asset Number** as well as an OID
   (`assetdetail.v1?Number=S-01001`): the readable form a CLI prints and a
   chat message shows (a CLI consumer, a chat-bot consumer).

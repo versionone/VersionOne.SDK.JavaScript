@@ -106,6 +106,7 @@ expect(fake.sent[0]).toEqual([{ from: "Story:1", execute: "QuickClose" }]);     
 
 - `onQuery(match, rows)` answers every read (`query`, `get`, `queryPage`, `pages`, …). A list is the whole result: the fake pages it and answers a read by OID with that row. A function gets the query and answers one page. A read nothing was scripted for throws; it never looks like an empty result.
 - Writes need no script: a create answers a new OID, an update or operation by OID answers that OID. `onSend` scripts anything else, failures included.
+- `sendGuarded` and `batch.run` work on assets addressed by OID that you scripted a row for: `fake.touch(oid)` is someone else changing the asset (the next write stamped earlier is a conflict), `fake.remove(oid)` is it being deleted.
 - `resolve.numbers` finds a number among the scripted rows; `localize` answers `onLocalize` labels and echoes any other tag; `fake.transport` can be the transport of a client your code builds itself.
 - `onList(type, rows)` answers `client.data.list` the same way. `onRequest(path, answer)` answers any other endpoint in its own shape; with `new FakeAgilityClient({ metamodel })` (a meta.v1 document) a response captured from a server reads translated, as it would live. An `Error` as an answer is thrown.
 - A custom `Transport` has its own suite: `transportConformance(make)` answers the SDK's expectations of a transport as named checks (`for (const c of transportConformance(make)) it(c.name, c.run)`), and the SDK's fetch transport runs the same ones.

@@ -65,6 +65,42 @@ interface Script {
   labels: Record<string, string>;
   seen: { requests: RequestOptions[]; asked: QueryBody[]; sent: Command[][] };
   nextId: number;
+  /** The fake's versions: each asset's moment (1 until something writes it), and the assets that are gone. */
+  moments: Map<Oid, number>;
+  gone: Set<Oid>;
+  /** Assets the fake itself created or wrote: they exist without a scripted row. */
+  known: Set<Oid>;
+}
+
+const momentOf = (script: Script, oid: Oid): number => script.moments.get(oid) ?? 1;
+const bump = (script: Script, oid: Oid): void => { script.moments.set(oid, momentOf(script, oid) + 1); script.known.add(oid); };
+/** A readable time that moves with the moment, for `ChangeDate`. */
+const changedAt = (moment: number): string => `2026-01-01T00:00:${String(moment % 60).padStart(2, "0")}.${String(moment).padStart(3, "0")}`;
+/** Does the fake's instance have this asset: a row was scripted for it, or the fake created or wrote it, and nobody removed it. */
+const exists = (script: Script, oid: Oid): boolean => !script.gone.has(oid) && (script.known.has(oid) || scriptedRows(script).some((row) => momentless(row._oid) === oid));
+
+/** The SDK's own lookup of assets by OID (stamps, a batch's snapshot, names, states): `filter: ["ID=$oids"]`. */
+const isOidLookup = (q: QueryBody): boolean => q.filter?.length === 1 && q.filter[0] === "ID=$oids" && Array.isArray(q.with?.$oids);
+/** A command the guard wrote: one asset at one moment, while that version is current. */
+const guardedOn = (body: CommandBody): { oid: Oid; moment: string } | null => {
+  const b = body as { where?: Record<string, unknown>; filter?: string[]; with?: Record<string, unknown> };
+  return b.where?.ID === "$oid" && b.where?.Moment === "$moment" && b.filter?.includes("RetireDateUTC=''") ? { oid: momentless(String(b.with?.$oid)), moment: String(b.with?.$moment) } : null;
+};
+
+/** The rows of an OID lookup: each asked asset that exists, with what was selected of its scripted row, its Moment and its ChangeDate. */
+function lookupByOid(script: Script, q: QueryBody): Asset[] {
+  const rows = scriptedRows(script);
+  return (q.with!.$oids as string[]).map(momentless).filter((oid) => exists(script, oid)).map((oid) => {
+    const scripted = rows.find((row) => momentless(row._oid) === oid) ?? { _oid: oid };
+    const out: Record<string, unknown> = { _oid: oid };
+    for (const entry of q.select ?? []) {
+      const key = typeof entry === "string" ? entry : entry.from;
+      if (key === "Moment") out.Moment = String(momentOf(script, oid));
+      else if (key === "ChangeDate") out.ChangeDate = changedAt(momentOf(script, oid));
+      else if (scripted[key] !== undefined) out[key] = scripted[key];
+    }
+    return out as unknown as Asset;
+  });
 }
 
 /** The scripted rows for one query, and the total a paged read would report. */
@@ -84,6 +120,8 @@ function answerQuery(script: Script, q: QueryBody, created?: { type: string; oid
   script.seen.asked.push(q);
   const type = created?.type ?? typeOfFrom(q.from);
   const hit = hitFor(script, q, type);
+  // A lookup by OID is answered from what the fake knows of each asset, unless a function was scripted for it.
+  if (!created && isOidLookup(q) && typeof hit?.answer !== "function" && !(hit?.answer instanceof Error)) { const rows = lookupByOid(script, q); return { rows, total: rows.length }; }
   if (!hit) throw new UsageError(`FakeAgilityClient: no answer scripted for a query of ${q.from}${created ? ` (the ${type} the batch creates)` : ""}; script one with fake.onQuery("${type}", rows)`);
   if (hit.answer instanceof Error) throw hit.answer;
   if (typeof hit.answer === "function") {
@@ -104,7 +142,13 @@ function answerQuery(script: Script, q: QueryBody, created?: { type: string; oid
   }
   const all = isOidToken(q.from) ? scripted.filter((row) => momentless(row._oid) === momentless(q.from)) : [...scripted];
   const page = q.page ?? { size: all.length, start: 0 };
-  return { rows: all.slice(page.start, page.start + page.size), total: all.length };
+  // A row that was not scripted with a Moment or ChangeDate gets the fake's own when the query selects them: what a guard will compare.
+  const wants = (key: string) => (q.select ?? []).includes(key);
+  const versioned = (row: FakeRow): FakeRow => {
+    const moment = momentOf(script, momentless(row._oid));
+    return { ...row, ...(wants("Moment") && row.Moment === undefined ? { Moment: String(moment) } : {}), ...(wants("ChangeDate") && row.ChangeDate === undefined ? { ChangeDate: changedAt(moment) } : {}) };
+  };
+  return { rows: all.slice(page.start, page.start + page.size).filter((row) => !script.gone.has(momentless(row._oid))).map(versioned), total: all.length };
 }
 
 /** What a batch's writes answer: the scripted outcome, or one made up from the commands (a new OID per create, the addressed OID for an update or an operation). */
@@ -115,9 +159,12 @@ function answerSend(script: Script, commands: Command[], writes: { body: Command
   if (answer) return { created: [], modified: [], operated: [], failures: [], ...(typeof answer === "function" ? answer(commands) : answer) };
   const out: Required<FakeOutcome> = { created: [], modified: [], operated: [], failures: [] };
   for (const { body } of writes) {
-    if ("AssetType" in body) out.created.push(`${String(body.AssetType)}:${script.nextId++}`);
-    else if ("update" in body && isOidToken(body.from)) out.modified.push(momentless(body.from));
-    else if ("execute" in body && isOidToken(body.from)) out.operated.push(momentless(body.from));
+    const guarded = guardedOn(body);
+    // A guarded command applies only to an asset that exists, at the moment it was guarded on; anything else matches nothing.
+    const target = guarded ? (exists(script, guarded.oid) && String(momentOf(script, guarded.oid)) === guarded.moment ? guarded.oid : null) : "from" in body && isOidToken(body.from) ? momentless(body.from) : null;
+    if ("AssetType" in body) { const oid = `${String(body.AssetType)}:${script.nextId++}`; out.created.push(oid); script.known.add(oid); }
+    else if (target && "update" in body) { out.modified.push(target); bump(script, target); }
+    else if (target && "execute" in body) { out.operated.push(target); bump(script, target); }
   }
   return out;
 }
@@ -164,8 +211,15 @@ function respond(script: Script, request: RequestOptions): unknown {
   if (request.method === "POST" && request.path === "/query.v1") return (request.body as QueryBody[]).map((q) => answerQuery(script, q).rows);
   if (request.method === "POST" && request.path === "/api/asset" && Array.isArray(request.body)) {
     const commands = request.body as Command[];
-    // A preview answers the projection; the fake's is the batch as written.
-    if (request.query?.previewOnly) return commands;
+    // A preview answers the projection: a write addressed to one asset becomes a per-asset command; creates,
+    // queries and aliased writes are echoed, as the server echoes them.
+    if (request.query?.previewOnly) return commands.map((c, i) => {
+      const body = bodyOf(c) as Record<string, unknown>;
+      const aliased = body !== (c as unknown);
+      if (aliased || !("update" in body || "execute" in body)) return c;
+      if (typeof body.from !== "string" || !isOidToken(body.from)) throw new UsageError(`FakeAgilityClient cannot preview command ${i}: it is scoped by a query (from ${String(body.from)}), and the fake evaluates no filter. Address the assets by OID, or script the preview with fake.onRequest((r) => r.query?.previewOnly === "true", projection)`);
+      return { [`@fake-${i}`]: { oid: momentless(body.from), ...("update" in body ? { update: body.update } : { execute: body.execute }) } } as unknown as Command;
+    });
     const bodies = commands.map((c, index) => ({ body: bodyOf(c), index, alias: Object.keys(c).length === 1 && Object.keys(c)[0]!.startsWith("@") ? Object.keys(c)[0]! : null }));
     const writes = bodies.filter(({ body }) => !isQuery(body));
     const done = writes.length ? answerSend(script, commands, writes) : { created: [], modified: [], operated: [], failures: [] };
@@ -262,15 +316,22 @@ function toAssetDocument(row: FakeRow): Record<string, unknown> {
  * - `fake.transport` can be the Transport of another client (one your code
  *   builds and wraps): it reads rows as scripted too, because the fake
  *   answers every meta.v1 type read with 404, "no such type".
+ * - `sendGuarded` and `batch.run` work on assets addressed by OID that a
+ *   row was scripted for: the fake keeps a moment per asset, applies a
+ *   guarded command only at that moment, and answers a batch's snapshot,
+ *   stamps and read-backs from the scripted rows. `fake.touch(oid)` is
+ *   someone else changing the asset (the next guarded write stamped
+ *   earlier is a conflict; a receipt's reverse finds it drifted);
+ *   `fake.remove(oid)` is it being deleted. `onSend` replaces this
+ *   simulation with its own answer. A write scoped by a query cannot be
+ *   previewed by the fake (it evaluates no filter): script that preview
+ *   with `onRequest`.
  * - `onList(type, rows)` answers `client.data.list` the same way: rows in
  *   the model's shape, a list paged by the fake.
  * - `onRequest(match, answer)` answers any other request by path, in the
  *   endpoint's own shape (attachment bytes, a captured response), and wins
  *   over everything above. With `new FakeAgilityClient({ metamodel })` a
- *   captured query response reads as it would live: translated. Guarded sends and
- *   `batch.run` are not scripted by the fake: their request sequence is
- *   internal to the SDK and changes between alphas, so fake the function
- *   of yours that calls them.
+ *   captured query response reads as it would live: translated.
  * - An `Error` as an answer is thrown: `new ApiError("Unauthorized", 401)`,
  *   or `apiErrorFromResponse(status, body)` for a refusal as the fetch
  *   transport words it.
@@ -285,7 +346,7 @@ export class FakeAgilityClient extends AgilityApiClient {
   private readonly script: Script;
 
   constructor(config: Partial<ClientConfig> & FakeOptions = {}) {
-    const script: Script = { lists: [], metamodel: config.metamodel ?? null, queries: [], sends: [], requests: [], labels: {}, seen: { requests: [], asked: [], sent: [] }, nextId: 1000 };
+    const script: Script = { lists: [], metamodel: config.metamodel ?? null, queries: [], sends: [], requests: [], labels: {}, seen: { requests: [], asked: [], sent: [] }, nextId: 1000, moments: new Map(), gone: new Set(), known: new Set() };
     const transport: Transport = {
       // Answers are computed synchronously and delivered as a real response would be: later, and a throw as a rejection.
       request: async <T>(request: RequestOptions): Promise<T> => {
@@ -334,6 +395,22 @@ export class FakeAgilityClient extends AgilityApiClient {
   /** Script labels for `client.localize`: tag → label. A tag nothing scripted answers itself, as loc-2 answers a tag it does not know. */
   onLocalize(labels: Record<string, string>): this {
     Object.assign(this.script.labels, labels);
+    return this;
+  }
+
+  /**
+   * Someone else changed this asset: its moment moves on, so a guarded
+   * write stamped before now is a conflict, and a receipt's reverse finds
+   * it drifted.
+   */
+  touch(oid: Oid): this {
+    bump(this.script, momentless(oid));
+    return this;
+  }
+
+  /** This asset is gone: reads by OID no longer find it, and a write to it matches nothing. */
+  remove(oid: Oid): this {
+    this.script.gone.add(momentless(oid));
     return this;
   }
 

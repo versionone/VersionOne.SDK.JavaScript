@@ -4,6 +4,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import { AgilityApiClient } from "../../src/client";
 import { ApiError, UsageError, apiErrorFromResponse } from "../../src/core/errors";
 import { FakeAgilityClient } from "../../src/testing";
+import { ConflictError } from "../../src/services/guard";
 import { CommandFailureError } from "../../src/wire/assetApi";
 import type { MetamodelDocument } from "../../src/wire/meta";
 
@@ -172,6 +173,42 @@ describe("FakeAgilityClient", () => {
     expect(scripted.requests.map((r) => r.path)).toEqual(["/query.v1"]);
     expect((await scripted.meta.assetType("Story")).Token).toBe("Story");
     await expect(scripted.meta.assetType("NoSuchType")).rejects.toMatchObject({ kind: "notFound" });
+  });
+
+  it("sendGuarded on the fake: applies at the asset's moment, conflicts after someone else touched it or when it is gone, and honours a moment the caller holds", async () => {
+    const fake = new FakeAgilityClient().onQuery("Story", [{ _oid: "Story:1", Name: "One", Estimate: 3 }, { _oid: "Story:2", Name: "Two", Estimate: 5 }]);
+    const first = await fake.sendGuarded([{ from: "Story:1", update: { Estimate: 8 } }, { from: "Story:2", execute: "QuickClose" }]);
+    expect(first).toMatchObject({ modified: ["Story:1"], operated: ["Story:2"], conflicts: [], touched: ["Story:1", "Story:2"], details: { stamps: { "Story:1": "1", "Story:2": "1" } } });
+    // What the person saw, then someone else's change, then their click.
+    const seen = (await fake.get<{ _oid: string; Moment: string }>("Story:1", ["Moment"]))!.Moment;
+    fake.touch("Story:1");
+    expect(await fake.sendGuarded([{ from: "Story:1", update: { Estimate: 9 } }], { moments: { "Story:1": seen } })).toMatchObject({ modified: [], conflicts: ["Story:1"] });
+    await expect(fake.sendGuarded([{ from: "Story:1", update: { Estimate: 9 } }], { moments: { "Story:1": seen }, throwOnFailure: true })).rejects.toBeInstanceOf(ConflictError);
+    // Read now, it applies; an asset that is gone, or that nothing was scripted for, is a conflict.
+    expect(await fake.sendGuarded([{ from: "Story:1", update: { Estimate: 9 } }])).toMatchObject({ modified: ["Story:1"], conflicts: [] });
+    fake.remove("Story:2");
+    expect(await fake.sendGuarded([{ from: "Story:2", execute: "Reactivate" }, { from: "Story:404", update: { Name: "x" } }])).toMatchObject({ operated: [], modified: [], conflicts: ["Story:2", "Story:404"] });
+    // A write scoped by a query cannot be previewed by a fake that evaluates no filter, and says so.
+    await expect(fake.sendGuarded([{ from: "Story", filter: ["Estimate>'3'"], update: { Estimate: 1 } }])).rejects.toThrow(/cannot preview command 0.*scoped by a query/);
+  });
+
+  it("batch.run on the fake: a receipt with the scripted before values, Moment stamps and a reverse; reversible finds an asset drifted after someone touched it", async () => {
+    const fake = new FakeAgilityClient().onQuery("Story", [{ _oid: "Story:1", Name: "One", Number: "S-1", Estimate: 3 }, { _oid: "Story:2", Name: "Two", Number: "S-2", Estimate: 5 }]);
+    const receipt = await fake.batch.run([{ from: "Story:1", update: { Estimate: 8 } }, { from: "Story:2", update: { Estimate: 8 } }, { "@t": { AssetType: "Task", Name: "new", Parent: "Story:1" } }], { guard: true });
+    expect(receipt).toMatchObject({ receipt: 2, sent: true, guarded: true, stopped: null, conflicts: [], failed: [], stamps: { "Story:1": "1", "Story:2": "1" }, after: { "Story:1": "2", "Story:2": "2", "Task:1000": "1" } });
+    expect(receipt.before["Story:1"]).toMatchObject({ Estimate: 3, Moment: "1" });
+    expect(receipt.created).toMatchObject([{ alias: "@t", type: "Task", oid: "Task:1000" }]);
+    expect(receipt.reverse.commands).toEqual([{ from: "Story:1", update: { Estimate: 3 } }, { from: "Story:2", update: { Estimate: 3 + 2 } }, { from: "Task:1000", execute: "Delete" }]);
+    expect((await fake.batch.reversible(receipt)).drifted).toEqual([]);
+    fake.touch("Story:2");
+    const undo = await fake.batch.reversible(receipt);
+    expect(undo.drifted).toMatchObject([{ oid: "Story:2", was: "2", now: "3" }]);
+    expect(undo.commands).toEqual([{ from: "Story:1", update: { Estimate: 3 } }, { from: "Task:1000", execute: "Delete" }]);
+    // A conflict at send time is on the receipt, and a dry run sends nothing.
+    fake.onQuery("Epic", [{ _oid: "Epic:9", Name: "Nine" }]);
+    const racing = await fake.batch.run([{ from: "Epic:9", update: { Name: "x" } }], { guard: true, confirm: () => { fake.touch("Epic:9"); return true; } });
+    expect(racing).toMatchObject({ sent: true, conflicts: ["Epic:9"], touched: [] });
+    expect(await fake.batch.run([{ from: "Epic:9", update: { Name: "x" } }], { guard: true, dryRun: true })).toMatchObject({ sent: false, stopped: "dryRun" });
   });
 
   it("an aborted signal ends a read as ABORTED, like the fetch transport", async () => {
