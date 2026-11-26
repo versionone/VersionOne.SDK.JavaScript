@@ -239,6 +239,20 @@ custom Transport (`core/retry`), so a consumer's transport does not
 re-implement it and cannot forget it. `retries: 0` turns it off for a
 client. A 401 or 403 is never resent by it.
 
+So is the timeout. Each attempt has `timeoutMs` (60 s unless told; 0 for
+none), and when it has passed the request rejects with `TIMEOUT`, a
+transient failure. The client enforces this above a custom transport: it
+hands the transport a signal that fires at the deadline, and it stops
+waiting at the deadline whether or not the transport lets go. What an
+abandoned request answers later is discarded. A transport therefore owes
+nothing about timing beyond honouring `signal`, which the conformance
+suite checks; one with a shorter timeout of its own simply rejects first.
+A timeout says the client stopped waiting, never that the server did not
+act, which is one more reason a write is not resent. The deadline cannot
+tell the network from a person: a custom transport that waits for someone
+inside `request` turns the client's timeout off (`timeoutMs: 0`), and the
+built-in transport's re-authentication hook runs outside the deadline.
+
 Re-authentication follows the same rule. On a 401 (or a status the caller
 lists) the transport calls `onUnauthorized` once per request; "retry" resends
 an idempotent request one more time, outside the `retries` count. A plain

@@ -17,7 +17,25 @@ export interface ClientConfig extends Pick<FetchTransportConfig, "credentials" |
   authorization?: string;
   /** An access token, sent as "Bearer <token>". */
   accessToken?: string;
-  /** Per-attempt timeout of the built-in fetch transport. A custom Transport does its own timing. */
+  /**
+   * How long one attempt may take, in milliseconds, whichever Transport
+   * the client has. Default 60000. When it has passed, the request
+   * rejects with an ApiError coded TIMEOUT (transient: an idempotent
+   * request is then sent again, see `retries`). The client stops waiting
+   * at the deadline whether or not a custom transport lets go of the
+   * request: the transport is given a `signal` that fires then, and
+   * whatever it answers afterwards is discarded. A timed-out write may
+   * still have been applied. 0 means no timeout of the client's (a custom
+   * transport's own timing then decides; one with a shorter timeout
+   * always wins anyway).
+   *
+   * The deadline cannot tell waiting on the network from waiting on a
+   * person. A custom transport that waits for someone inside `request` (a
+   * sign-in popup, a "log in again" prompt its HTTP client shows before
+   * replaying the request) must set `timeoutMs: 0`, or the person's time
+   * counts and a slow sign-in ends as TIMEOUT. The built-in transport has
+   * no such problem: its `onUnauthorized` hook runs outside the deadline.
+   */
   timeoutMs?: number;
   /**
    * How many times an idempotent request (a GET, a query.v1 read, a

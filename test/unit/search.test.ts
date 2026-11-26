@@ -165,6 +165,13 @@ describe("FakeAgilityClient: search", () => {
     expect(fake.requests[0]!.query).toMatchObject({ find: "printer queue", where: "AssetType='Story','Request','Issue','Test';AssetState!='Closed'" });
   });
 
+  it("a family named by its abstract type is expanded on the fake as on a server: the request names the concrete types, and `searched` keeps what the caller wrote", async () => {
+    const fake = new FakeAgilityClient().onSearch(scripted);
+    await fake.search("printer", { types: ["Workitem", "Request"], page });
+    expect(fake.requests.at(-1)!.query).toMatchObject({ where: "AssetType='Defect','Epic','Story','Task','Test','TestSet','Theme','Request'" });
+    expect(fake.searched.at(-1)!.options.types).toEqual(["Workitem", "Request"]);
+  });
+
   it("an unscripted search throws, and so do the mistakes the client refuses; a function answers a page, an Error is thrown", async () => {
     const fake = new FakeAgilityClient();
     await expect(fake.search("printer", { types: ["Story"], page })).rejects.toThrow(/no answer scripted for search\("printer"\)/);
