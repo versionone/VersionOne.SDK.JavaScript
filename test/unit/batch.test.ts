@@ -279,8 +279,11 @@ group("batch", () => {
     expect(error).toMatchObject({ kind: "usage", code: "RECEIPT_VERSION", status: 0, receiptVersion: 1, targets: ["Story:1"] });
     expect(error.message).toMatch(/before 1\.0\.0-alpha\.8.*Reverse it with force.*or run the batch again/);
     expect(await reversible(t, old, { force: true })).toEqual({ commands: old.reverse.commands, drifted: [], reactivated: [] });
-    // A receipt with no version at all is treated the same.
-    await expect(reversible(t, { after: {}, reverse: old.reverse })).rejects.toBeInstanceOf(ReceiptVersionError);
+    // Fields picked by hand without the version: a compile error; for a caller the types do not reach, a refusal that says what is missing.
+    // @ts-expect-error `receipt` (the format) is required
+    const picked = reversible(t, { after: {}, reverse: old.reverse });
+    await expect(picked).rejects.toThrow(/has no format version.*pass the whole receipt/);
+    await expect(picked).rejects.toMatchObject({ code: "RECEIPT_VERSION", receiptVersion: undefined });
     expect(t.calls).toHaveLength(0);
   });
 });

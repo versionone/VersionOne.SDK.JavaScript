@@ -257,7 +257,10 @@ export class AgilityApiClient {
    * query's (`select`, `filter`), and rows follow the rule every read
    * follows: a relation you select is a Ref, a path you select by name is
    * at `row[path]`, and nothing arrives that you did not select. For
-   * everything else use `query` / `queryPage`.
+   * everything else use `query` / `queryPage`. (`data` has this one member
+   * on purpose: it is the cross-type text search until a `client.search`
+   * exists, and stays here so that nobody needs the wire modules for an
+   * everyday read.)
    */
   readonly data = {
     list: <Row extends Asset = Asset>(type: string, params: rest1.ReadParams) => rest1.list<Row>(this.transport, type, params)
@@ -376,7 +379,7 @@ export class AgilityApiClient {
    */
   readonly batch = {
     run: (commands: assetApi.Command[], options: batch.BatchOptions) => batch.runBatch(this.transport, this.schema, commands, options),
-    reversible: (receipt: Parameters<typeof batch.reversible>[1], options?: { force?: boolean }) => batch.reversible(this.transport, receipt, options)
+    reversible: (receipt: batch.ReversibleReceipt, options?: { force?: boolean }) => batch.reversible(this.transport, receipt, options)
   };
 
   /**

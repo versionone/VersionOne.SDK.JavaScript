@@ -494,7 +494,9 @@ async function versionsOf(transport: Transport, oids: Oid[]): Promise<Record<Oid
  */
 export class ReceiptVersionError extends ApiError {
   constructor(readonly receiptVersion: unknown, readonly targets: Oid[]) {
-    super(`this receipt is in format ${JSON.stringify(receiptVersion)}, from before 1.0.0-alpha.8: it recorded ChangeDates, and assets are now checked by Moment, so it cannot be checked for changes made since. Reverse it with force (no check: later changes are overwritten), or run the batch again and keep the new receipt.`, 0, "RECEIPT_VERSION", { receiptVersion, targets }, "usage");
+    super(receiptVersion === undefined
+      ? "this receipt has no format version (`receipt`): pass the whole receipt to reversible, not only its reverse and after. Without the version its stamps cannot be read, so it cannot be checked for changes made since."
+      : `this receipt is in format ${JSON.stringify(receiptVersion)}, from before 1.0.0-alpha.8: it recorded ChangeDates, and assets are now checked by Moment, so it cannot be checked for changes made since. Reverse it with force (no check: later changes are overwritten), or run the batch again and keep the new receipt.`, 0, "RECEIPT_VERSION", { receiptVersion, targets }, "usage");
     this.name = "ReceiptVersionError";
   }
 }
@@ -504,6 +506,15 @@ export const isReceipt = (value: unknown): value is Receipt => !!value && typeof
 
 /** An asset a reverse leaves alone because someone changed it since the batch: its Moment then and now (null: gone), and the same as readable times when known. */
 export interface Drifted { oid: Oid; was: string; now: string | null; wasChangedAt: string | null; nowChangedAt: string | null }
+
+/**
+ * What `reversible` reads of a receipt: pass the receipt itself. A caller
+ * that picks fields by hand must pick `receipt` (its format) too — it is
+ * required here so that leaving it out is a compile error and not a
+ * refusal at run time; its type is open because a receipt read back from a
+ * file may be of any format.
+ */
+export type ReversibleReceipt = Pick<Receipt, "reverse" | "after"> & { receipt: unknown; changedAt?: Record<Oid, string> };
 
 /**
  * A receipt's reverse batch, minus the assets someone changed since
@@ -519,7 +530,7 @@ export interface Drifted { oid: Oid; was: string; now: string | null; wasChanged
  * it: two commands on one asset, which runBatch sends in two guarded passes
  * (the Delete only if the Reactivate applied). `reactivated` lists them.
  */
-export async function reversible(transport: Transport, receipt: Pick<Receipt, "reverse" | "after"> & { receipt?: unknown; changedAt?: Record<Oid, string> }, options: { force?: boolean } = {}): Promise<{ commands: Command[]; drifted: Drifted[]; reactivated: Oid[] }> {
+export async function reversible(transport: Transport, receipt: ReversibleReceipt, options: { force?: boolean } = {}): Promise<{ commands: Command[]; drifted: Drifted[]; reactivated: Oid[] }> {
   const targets = receipt.reverse.commands.map((c) => momentless(String(bodyOf(c).from)));
   const current = receipt.receipt === 2;
   if (!current && !options.force) throw new ReceiptVersionError(receipt.receipt, targets);

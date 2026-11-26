@@ -84,7 +84,10 @@ Each entry has the line a consumer follows to migrate.
   receipts: reverse one with `{ force: true }`, which sends its reverse
   without checking whether anyone changed the assets since; or run the
   batch again and keep the new receipt. `isReceipt(value)` tells a
-  current receipt from anything else before calling.
+  current receipt from anything else before calling. `batch.reversible`
+  now requires the receipt's `receipt` field in what it is given: pass
+  the whole receipt, or pick `receipt` along with `reverse`, `after` and
+  `changedAt`.
 - **An unguardable reason has a `code`** (`aliasedWrite`,
   `bareAliasFrom`, `inlineCreate`, `noMoment`). Migration: branch on
   `reason.code`, not on the words of `reason.reason`.

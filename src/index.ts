@@ -44,4 +44,4 @@ export type { Resolution, ResolvedAsset } from "./services/resolve";
 export { ConflictError, GuardedPassError, UnguardableError, unguardable } from "./services/guard";
 export type { GuardedOptions, GuardedResult, Unguardable, UnguardableCode } from "./services/guard";
 export { BatchRecordError, BatchSendError, ReceiptVersionError, isReceipt } from "./services/batch";
-export type { BatchOptions, Described, Drifted, NameLookupFailure, Named, Receipt, Reverse } from "./services/batch";
+export type { BatchOptions, Described, Drifted, NameLookupFailure, Named, Receipt, Reverse, ReversibleReceipt } from "./services/batch";
