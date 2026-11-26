@@ -132,6 +132,12 @@ const named = (rows: readonly ListValue[]): string => rows.map((r) => r.Name).jo
  * coded NO_SUCH_VALUE; more than one is AMBIGUOUS_VALUE. Both carry
  * `details: { attribute, name, values }`, the candidates as rows (all the
  * valid values, or the ones that matched), so a caller can offer them.
+ *
+ * This is the check to make before writing a name a person gave. On a
+ * write the server enforces a team's process (a status outside it is the
+ * command failure `Violation'PrimaryWorkitemCannotHaveInvalidStatus`) and
+ * does not enforce a scheme's selection (a status the scope's scheme does
+ * not select is accepted, with no violation).
  */
 export async function value(transport: Transport, schema: Schema, input: ValueInput): Promise<ListValue> {
   await checked(schema, input, [input.attribute], input.select, "lists.value");

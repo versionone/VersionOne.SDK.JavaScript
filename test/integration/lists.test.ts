@@ -17,7 +17,9 @@ import { deleteFixtures, describeInstance, fixtureName, instance, sendFixtures }
  *   - a Story on each team and one on no team.
  * Each "these values" has a control beside it that must not appear. All
  * of it is deleted by exact OID, dependents first, and the suite fails if
- * any of it can still be read.
+ * any of it can still be read. The Scope lives for seconds and no member
+ * is assigned to it, so nothing can come to reference it as a default
+ * project; that is not checked.
  */
 describeInstance("valid values (live)", () => {
   const t = instance!.transport;
