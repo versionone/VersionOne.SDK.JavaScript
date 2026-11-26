@@ -149,6 +149,16 @@ Each entry has the line a consumer follows to migrate.
   `localized` sentence where it has one. `Resolution'…` failures are read
   too. One loc-2 request at most. Migration: a consumer's own failure
   patterns and three-tag loc-2 lookups can go.
+- **`transportConformance(make)`** from `@versionone/agility-sdk/testing`:
+  the SDK's expectations of a `Transport` as a list of named checks,
+  runnable against a custom transport with any test runner (path inside
+  the base URL, body encodings, response types, `onResponse`, a 304 with
+  `acceptNotModified`, errors worded as `apiErrorFromResponse` words
+  them, abort and connection failure, `BAD_JSON`). `fetchFrom(server)`
+  adapts the suite's stand-in network for a transport built on fetch. The
+  SDK's own fetch transport runs it. A new duty of a Transport is from
+  now on a new check here and a "Breaking" line. (a browser app consumer
+  with an axios transport.)
 - **`client.resolve.refs(specs)`**: numbers and OID tokens mixed, each
   one read, in two requests at most; what names nothing is `missing`.
 - **`Outcome.unmatched`**: the indexes of updates and operations

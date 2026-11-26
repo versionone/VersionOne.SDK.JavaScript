@@ -14,6 +14,9 @@
  * integration test against an instance is for.
  */
 import { AgilityApiClient } from "../client";
+
+export { CONFORMANCE_BASE_URL, fetchFrom, transportConformance } from "./transportConformance";
+export type { ConformanceCheck, ConformanceRequest, ConformanceResponse, ConformanceServer } from "./transportConformance";
 import type { ClientConfig } from "../core/clientConfig";
 import { ApiError, UsageError, apiErrorFromResponse } from "../core/errors";
 import type { RequestOptions, Transport } from "../core/transport";

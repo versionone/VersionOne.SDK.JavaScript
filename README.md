@@ -108,6 +108,7 @@ expect(fake.sent[0]).toEqual([{ from: "Story:1", execute: "QuickClose" }]);     
 - Writes need no script: a create answers a new OID, an update or operation by OID answers that OID. `onSend` scripts anything else, failures included.
 - `resolve.numbers` finds a number among the scripted rows; `localize` answers `onLocalize` labels and echoes any other tag; `fake.transport` can be the transport of a client your code builds itself.
 - `onRequest(path, answer)` answers any other endpoint in its own shape. An `Error` as an answer is thrown.
+- A custom `Transport` has its own suite: `transportConformance(make)` answers the SDK's expectations of a transport as named checks (`for (const c of transportConformance(make)) it(c.name, c.run)`), and the SDK's fetch transport runs the same ones.
 - The fake evaluates no filter or sort and applies no write. It proves what your code asks and what it does with the answer; what the server answers is for a test against an instance.
 
 API reference: https://docs.digital.ai/agility-api/
