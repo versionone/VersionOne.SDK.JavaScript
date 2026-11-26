@@ -405,7 +405,8 @@ export class FakeAgilityClient extends AgilityApiClient {
   /**
    * Every search made, in order: its text and options. A search made by a
    * client of your own over `fake.transport` is recorded too, with the
-   * options the request shows: `types` and `page`.
+   * options the request shows: `types` and `page`. For what else such a
+   * client asked (its filter, its sort), read the request in `requests`.
    */
   readonly searched: { text: string; options: SearchOptions }[];
   private readonly script: Script;

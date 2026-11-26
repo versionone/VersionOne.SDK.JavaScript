@@ -59,6 +59,13 @@
     },
     "./package.json": "./package.json"
   },
+  "typesVersions": {
+    "*": {
+      "wire": ["dist/wire.d.ts"],
+      "services": ["dist/services.d.ts"],
+      "testing": ["dist/testing.d.ts"]
+    }
+  },
   "files": [
     "dist",
     "CHANGELOG.md"

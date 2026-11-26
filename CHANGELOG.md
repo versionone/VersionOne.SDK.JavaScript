@@ -70,6 +70,11 @@
 - `FakeAgilityClient.onSearch(rows)` and `fake.searched`, to test code
   that searches, through the fake or through a client built on
   `fake.transport`.
+- The subpaths' types resolve under TypeScript's `moduleResolution:
+  "node"` (node10), which ignores `exports`: `package.json` has a
+  `typesVersions` entry for `/wire`, `/services` and `/testing`. A
+  consumer's ambient `declare module` bridge for them can go.
+  (a browser-app consumer.)
 - `@versionone/agility-sdk/services` has `search`. The root exports the
   types `SearchOptions`, `SearchResult`, `SearchRow`.
 
