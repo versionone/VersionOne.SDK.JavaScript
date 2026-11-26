@@ -32,6 +32,8 @@ export function kindOf(status: number, code?: string): ErrorKind {
     case "COMMAND_FAILURE": return "commandFailure";
     case "CONFLICT": return "conflict";
     case "RECEIPT_VERSION": return "usage";
+    case "NO_SUCH_VALUE":
+    case "AMBIGUOUS_VALUE":
     case "QUERY_REJECTED":
     case "TOO_LARGE": return "invalid";
     case "NOT_FOUND": return "notFound";

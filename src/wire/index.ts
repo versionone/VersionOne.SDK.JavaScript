@@ -11,6 +11,8 @@ export * as queryV1 from "./queryV1";
 export * as attachment from "./attachment";
 export * as select from "./select";
 export * as fields from "./fields";
+export * as validValues from "./validValues";
 export type { AssetDocument, AssetsDocument, ReadParams, ReadResult } from "./rest1";
 export type { AssetApiResponse, Command, CommandBody, CommandValue, CreateBody, ExecuteBody, QueryBody, UpdateBody, CommandFailure, CommandError, OidTokens, ReadOptions, RowContext, SendOptions } from "./assetApi";
 export type { Localizations, LocalizeOptions } from "./loc2";
+export type { ValidValuesParams } from "./validValues";

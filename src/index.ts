@@ -29,6 +29,7 @@ export type { Localizations, LocalizeOptions } from "./wire/loc2";
 export type { ConditionalOptions, MetamodelDocument, Tagged } from "./wire/meta";
 export type { QueryRejection } from "./wire/queryV1";
 export type { FieldsOf } from "./services/fields";
+export type { ListTarget, ListValue, ValueInput, ValuesInput } from "./services/lists";
 export { importantName } from "./services/fields";
 // The wire modules themselves (assetApi, queryV1, rest1, meta, loc2, attachment, fields, select) and the
 // endpoints' envelope types are at "@versionone/agility-sdk/wire".

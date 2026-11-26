@@ -58,10 +58,15 @@ const typeOfFrom = (from: string): string => (isOidToken(from) ? typeOfOid(from)
 
 /** What a scripted search answers: rows (the whole result, paged by the fake), a function of the text and options answering one page, or an Error to throw. */
 type SearchAnswer = FakeRows | Error | ((text: string, options: SearchOptions) => FakeRows);
+/** What `client.lists` asked the fake: the type and attribute, and the asset or the scope (and team) it asked for. */
+export interface ValuesAsked { type: string; attribute: string; asset?: Oid; scope?: Oid; team?: Oid }
+type ValuesAnswer = Record<string, readonly FakeRow[] | Error | ((asked: ValuesAsked) => readonly FakeRow[])>;
 type ListMatch = string | ((type: string, params: Record<string, string | undefined>) => boolean);
 
 interface Script {
   searches: SearchAnswer[];
+  /** Valid values scripted with onValues, by attribute name; the one scripted last wins. */
+  values: ValuesAnswer;
   /** The options of the search the fake's own client is making right now, for the record. */
   searching: SearchOptions | null;
   lists: { match: ListMatch; answer: FakeRows | Error | ((type: string, params: Record<string, string | undefined>) => FakeRows) }[];
@@ -70,7 +75,7 @@ interface Script {
   sends: SendAnswer[];
   requests: { match: RequestMatch; answer: RequestAnswer }[];
   labels: Record<string, string>;
-  seen: { requests: RequestOptions[]; asked: QueryBody[]; sent: Command[][]; searched: { text: string; options: SearchOptions }[] };
+  seen: { requests: RequestOptions[]; asked: QueryBody[]; sent: Command[][]; searched: { text: string; options: SearchOptions }[]; valuesAsked: ValuesAsked[] };
   nextId: number;
   /** The fake's versions: each asset's moment (1 until something writes it), and the assets that are gone. */
   moments: Map<Oid, number>;
@@ -181,8 +186,11 @@ function answerSend(script: Script, commands: Command[], writes: { body: Command
 function anyType(script: Script, token: string): unknown {
   const scripted = script.searches.flatMap((answer) => (Array.isArray(answer) ? answer : answer && typeof answer === "object" && "rows" in answer ? answer.rows : []) as readonly FakeRow[]).flatMap((row) => Object.keys(row));
   const root = ["Name", "Description", "AssetType", "AssetState", "ChangeDateUTC", "CreateDateUTC"];
-  const names = token === "BaseAsset" ? root : [...new Set([...ATTRIBUTE_NAMES, ...scripted.map((key) => key.split(".")[0]!)])].filter((name) => name !== "_oid");
-  const Attributes = Object.fromEntries(names.map((Name) => [`${token}.${Name}`, { _type: "AttributeDefinition", Name, Token: `${token}.${Name}`, DisplayName: Name, AttributeType: "Text", IsReadOnly: false, IsRequired: false, IsMultivalue: false, IsCanned: true, IsCustom: false }]));
+  // What onValues scripted: its attributes are relations to a list type, and its rows' keys are attributes of that type.
+  const listed = Object.keys(script.values);
+  const valueKeys = Object.values(script.values).flatMap((answer) => (Array.isArray(answer) ? (answer as readonly FakeRow[]).flatMap((row) => Object.keys(row)) : []));
+  const names = token === "BaseAsset" ? root : [...new Set([...ATTRIBUTE_NAMES, ...scripted.map((key) => key.split(".")[0]!), ...listed, ...valueKeys])].filter((name) => name !== "_oid");
+  const Attributes = Object.fromEntries(names.map((Name) => [`${token}.${Name}`, { _type: "AttributeDefinition", Name, Token: `${token}.${Name}`, DisplayName: Name, AttributeType: "Text", IsReadOnly: false, IsRequired: false, IsMultivalue: false, IsCanned: true, IsCustom: false, ...(listed.includes(Name) && token !== "List" ? { AttributeType: "Relation", RelatedAsset: { nameref: "List", href: "/meta.v1/List" } } : {}) }]));
   // A family the generated table knows (Workitem) is abstract here as on a server, so a search naming it expands to its subtypes.
   return { _type: "AssetType", Name: token, Token: token, DisplayName: token, Abstract: token === "BaseAsset" || token in CONCRETE_SUBTYPES, ...(token === "BaseAsset" ? {} : { Base: { nameref: "BaseAsset", href: "/meta.v1/BaseAsset" } }), Attributes };
 }
@@ -199,7 +207,7 @@ function respond(script: Script, request: RequestOptions): unknown {
     request.onResponse?.({ status: 200, headers: { get: () => null } });
     return found;
   }
-  if (!raw && request.method === "GET" && request.path.startsWith("/meta.v1/") && script.searches.length && !request.path.slice("/meta.v1/".length).includes("/")) {
+  if (!raw && request.method === "GET" && request.path.startsWith("/meta.v1/") && (script.searches.length || Object.keys(script.values).length) && !request.path.slice("/meta.v1/".length).includes("/")) {
     // A search asks the schema which searched type has which attribute. With a search scripted and no metamodel, the fake's
     // instance has whatever type is asked for, with every attribute a scripted row could carry, so the rows come back as scripted.
     request.onResponse?.({ status: 200, headers: { get: () => null } });
@@ -215,6 +223,25 @@ function respond(script: Script, request: RequestOptions): unknown {
     // loc-2 answers a tag it does not know with the tag itself; so does the fake, for every tag onLocalize did not script.
     const encoded = request.method === "GET" ? request.path.slice(request.path.indexOf("?") + 1) : String(request.body);
     return Object.fromEntries((JSON.parse(decodeURIComponent(encoded)) as string[]).map((tag) => [tag, script.labels[tag] ?? tag]));
+  }
+  if (request.method === "GET" && request.path.startsWith("/api/ValidValues/")) {
+    // Both forms of the endpoint: <Type>.<Attribute>/?context=Scope=…[,Team=…] and <Type>/<id>/<Attribute>[?teamoid=…].
+    const [path, query = ""] = request.path.slice("/api/ValidValues/".length).split("?");
+    const params = new Map(query.split("&").filter(Boolean).map((pair) => { const at = pair.indexOf("="); return [pair.slice(0, at), decodeURIComponent(pair.slice(at + 1))] as const; }));
+    const parts = path!.split("/").filter(Boolean).map(decodeURIComponent);
+    const context = new Map((params.get("context") ?? "").split(",").filter(Boolean).map((term) => { const at = term.indexOf("="); return [term.slice(0, at), term.slice(at + 1)] as const; }));
+    const asked: ValuesAsked = parts.length === 3
+      ? { type: parts[0]!, attribute: parts[2]!, asset: `${parts[0]}:${parts[1]}`, ...(params.get("teamoid") ? { team: params.get("teamoid")! } : {}) }
+      : { type: parts[0]!.split(".")[0]!, attribute: parts[0]!.split(".")[1]!, ...(context.get("Scope") ? { scope: context.get("Scope")! } : {}), ...(context.get("Team") ? { team: context.get("Team")! } : {}) };
+    script.seen.valuesAsked.push(asked);
+    const answer = script.values[asked.attribute];
+    if (answer === undefined) throw new UsageError(`FakeAgilityClient: no valid values scripted for ${asked.type}.${asked.attribute}; script them with onValues({ ${asked.attribute}: [...] })`);
+    if (answer instanceof Error) throw answer;
+    const rows = typeof answer === "function" ? answer(asked) : answer;
+    // As the endpoint answers: the selected attributes and no others, one the row does not carry as null.
+    const selected = (params.get("sel") ?? "").split(",").filter(Boolean);
+    const projected = selected.length ? rows.map((row) => ({ _oid: row._oid, ...Object.fromEntries(selected.map((name) => [name, (row as Record<string, unknown>)[name] ?? null])) }) as FakeRow) : rows;
+    return { _type: "Assets", total: rows.length, pageSize: 2147483647, pageStart: 0, Assets: projected.map(toAssetDocument) };
   }
   if (request.method === "GET" && request.path.startsWith("/rest-1.v1/Data/") && !request.path.slice("/rest-1.v1/Data/".length).includes("/")) {
     const type = decodeURIComponent(request.path.slice("/rest-1.v1/Data/".length));
@@ -416,10 +443,12 @@ export class FakeAgilityClient extends AgilityApiClient {
    * client asked (its filter, its sort), read the request in `requests`.
    */
   readonly searched: { text: string; options: SearchOptions }[];
+  /** Every request for valid values (`client.lists.values` / `lists.value`), in order: one per attribute asked. */
+  readonly valuesAsked: ValuesAsked[];
   private readonly script: Script;
 
   constructor(config: Partial<ClientConfig> & FakeOptions = {}) {
-    const script: Script = { lists: [], metamodel: config.metamodel ?? null, queries: [], sends: [], requests: [], labels: {}, seen: { requests: [], asked: [], sent: [], searched: [] }, searches: [], searching: null, nextId: 1000, moments: new Map(), gone: new Set(), known: new Set() };
+    const script: Script = { lists: [], metamodel: config.metamodel ?? null, queries: [], sends: [], requests: [], labels: {}, seen: { requests: [], asked: [], sent: [], searched: [], valuesAsked: [] }, values: {}, searches: [], searching: null, nextId: 1000, moments: new Map(), gone: new Set(), known: new Set() };
     const transport: Transport = {
       // Answers are computed synchronously and delivered as a real response would be: later, and a throw as a rejection.
       request: async <T>(request: RequestOptions): Promise<T> => {
@@ -436,6 +465,7 @@ export class FakeAgilityClient extends AgilityApiClient {
     this.asked = script.seen.asked;
     this.sent = script.seen.sent;
     this.searched = script.seen.searched;
+    this.valuesAsked = script.seen.valuesAsked;
   }
 
   /**
@@ -464,6 +494,26 @@ export class FakeAgilityClient extends AgilityApiClient {
    */
   onList(match: ListMatch, answer: FakeRows | Error | ((type: string, params: Record<string, string | undefined>) => FakeRows)): this {
     this.script.lists.push({ match, answer });
+    return this;
+  }
+
+  /**
+   * Script what `client.lists.values` and `lists.value` answer: for each
+   * attribute, the valid values as rows in the model's shape (`{ _oid,
+   * Name, … }`, in the order to return them), a function of what was
+   * asked (the asset, or the scope and team) answering the rows, or an
+   * Error to throw. Calls add up by attribute; the answer scripted last
+   * for an attribute wins. No scheme or team process is evaluated: the
+   * rows scripted are the valid values. The lookup itself is the client's
+   * own, so name matching, NO_SUCH_VALUE and AMBIGUOUS_VALUE behave as
+   * they do live, also for a client built on `fake.transport`. Without a
+   * `metamodel` the fake's instance treats each scripted attribute as a
+   * relation to a list type on whatever asset type asks; with one, the
+   * metamodel decides, as a server's does. What was asked is in
+   * `valuesAsked`.
+   */
+  onValues(answer: ValuesAnswer): this {
+    Object.assign(this.script.values, answer);
     return this;
   }
 

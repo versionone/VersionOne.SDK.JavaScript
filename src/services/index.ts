@@ -11,6 +11,7 @@ export * as batch from "./batch";
 export * as explain from "./explain";
 export * as fields from "./fields";
 export * as guard from "./guard";
+export * as lists from "./lists";
 export * as resolve from "./resolve";
 export * as schema from "./schema";
 export * as search from "./search";
