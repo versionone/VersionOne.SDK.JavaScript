@@ -47,7 +47,7 @@ describeInstance("schema (live)", () => {
 
   it("through the client, api/asset rows arrive in the model's shape: numbers, booleans, one Ref for a sub-selected single relation, numbers for aggregates", async () => {
     const client = new AgilityApiClient({ baseUrl: instance!.url }, { transport: t });
-    const rows = await client.assets.query<Story>({
+    const { rows } = await client.queryPage<Story>({
       from: "Story",
       select: ["Name", "Estimate", "IsClosed", "IsReadOnly", "AssetState", { from: "Status", select: ["Name"] }, { from: "Owners", select: ["Name", "IsInactive"] }, "Scope", "Owners.@Count", "Children:Task.@Count"],
       filter: ["ID=$story"],

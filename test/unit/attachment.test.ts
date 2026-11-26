@@ -71,7 +71,10 @@ describe("attachments service", () => {
     const created = await add(t, "Story:1", new TextEncoder().encode("hello attachment\n"), { filename: "a.txt", contentType: "text/plain" });
     expect(t.calls).toHaveLength(1);
     expect(t.calls[0]!.body).toEqual([{ AssetType: "Attachment", Asset: "Story:1", Name: "a.txt", Filename: "a.txt", ContentType: "text/plain", Content: "aGVsbG8gYXR0YWNobWVudAo=" }]);
-    expect(created).toEqual({ _oid: "Attachment:77", id: "77", Name: "a.txt", Filename: "a.txt", ContentType: "text/plain", Description: null, CreateDate: null, "CreatedBy.Name": null });
+    expect(created).toEqual({ _oid: "Attachment:77", id: "77", Name: "a.txt", Filename: "a.txt", ContentType: "text/plain", Description: null });
+    // The server's stamps were not read back, so the type does not offer them: null would read as "it has none".
+    // @ts-expect-error not on what add answers; read the attachment with info
+    void created.CreateDate;
   });
 
   it("a large file goes in two steps: create with empty Content, then POST the bytes", async () => {
@@ -138,8 +141,8 @@ describe("attachments service", () => {
 
   it("the client exposes attachments and embedded images, with URLs on its own base", () => {
     const client = new AgilityApiClient({ baseUrl: "https://agility.example.com/MyInstance/" }, { transport: fake() });
-    expect(client.attachments.url("Attachment:5")).toBe("https://agility.example.com/MyInstance/attachment.img/5");
-    expect(client.embeddedImages.url(12)).toBe("https://agility.example.com/MyInstance/embedded.img/12");
+    expect(client.urls.attachment("Attachment:5")).toBe("https://agility.example.com/MyInstance/attachment.img/5");
+    expect(client.urls.embeddedImage(12)).toBe("https://agility.example.com/MyInstance/embedded.img/12");
   });
 });
 

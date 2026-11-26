@@ -21,7 +21,9 @@ client, and `src/testing` (§5a) stands on the client. Nothing imports
   (`src/types/assets/`, one file per asset type, the `extends` chain from
   the metamodel's `Base` chain) and the hand-written roots in
   `src/types/asset.ts` (`Asset`, `Ref`, `Oid`, `DateString`,
-  `AssetStateValue`, `CustomAttributes`).
+  `AssetStateValue`, `CustomAttributes`), and the vocabulary of a batch in
+  `src/types/command.ts`: what a caller writes (`QueryBody`, `Command`)
+  and what a batch did in the model's terms (`Outcome`).
 - **`wire`** is one module per endpoint (`assetApi`, `rest1`, `queryV1`,
   `meta`, `loc2`, `attachment`, `fields`, …). Each knows exactly two
   things: the envelope its endpoint takes and returns, typed as the server
@@ -45,6 +47,23 @@ pulled through) in a create, in an update, and in a query result alike.
 — api/asset writing a relation as an OID token, rest-1 wrapping every value
 in `Attributes` and rendering `AssetState` as a number — is translated in
 that endpoint's wire module, once, on the way in and on the way out.
+
+A row's identity is `_oid`: the key the server sends for it, underscored
+so that it can never collide with an attribute (an asset's own identity
+attribute is `ID`). Every row has it, and so does anything that is a row
+or stands for one (a Ref, a resolved asset, an attachment, the assets on
+a receipt). A record that is not a row but mentions an asset — a
+described update, a drifted entry — says plain `oid`.
+
+One rule for a row, on every read path (query.v1, api/asset, rest-1):
+**a relation you select is a Ref; a path you select by name is at
+`row[path]`; nothing arrives that you did not select.** A sub-select is
+how to ask for attributes on the related rows. rest-1 sends display
+columns beside a selected relation unasked; its wire module folds them
+onto the Refs and drops their keys from the row unless the path was
+selected, and keeps a dotted key that has no Ref to fold onto. An
+integration test reads one asset through all three paths and compares
+the keys.
 
 Corollaries:
 
@@ -155,11 +174,15 @@ index lag, what a preview echoes — are what fakes cannot reproduce; the
 integration tier is where a live probe becomes permanent, with an
 expect-zero control beside every "it returned rows".
 
-## 5a. Three import paths, and a fake for consumers
+## 5a. Four import paths, and a fake for consumers
 
-The package has three entries: the root (the client, the model, the
-services), `/wire` (the wire modules, for passthroughs and transport
-authors) and `/testing`. They are built with shared chunks in both module
+The package has four entries: the root (the client, the model, the errors
+and what a client user imports), `/wire` (the wire modules, for
+passthroughs and transport authors), `/services` (the services as free
+functions over a Transport; their request sequences are internal) and
+`/testing`. All of them, and the chunks they share, are built into one
+flat `dist/` directory: a consumer that vendors the package copies that
+directory. They are built with shared chunks in both module
 formats, so a class is one class whichever path imported it; the CommonJS
 unit test proves it.
 
@@ -184,13 +207,25 @@ retries only idempotent requests (GET by default, and every query.v1
 POST, since that endpoint cannot write), only on a network
 failure, a 5xx or a 429 (Retry-After honoured, up to 30 s), never
 another 4xx, and once by default (`retries: 1`); a batch write is never retried unless the
-caller has made it idempotent with a guard and says so.
+caller has made it idempotent with a guard and says so. That rule is
+the client's, not one transport's: the built-in fetch transport applies it
+itself (it can read Retry-After), and the client applies it around a
+custom Transport (`core/retry`), so a consumer's transport does not
+re-implement it and cannot forget it. `retries: 0` turns it off for a
+client. A 401 or 403 is never resent by it.
 
 Re-authentication follows the same rule. On a 401 (or a status the caller
 lists) the transport calls `onUnauthorized` once per request; "retry" resends
 an idempotent request one more time, outside the `retries` count. A plain
 write is never resent: the hook still runs, so the session can be repaired,
-and the caller decides. A caller's abort (`signal`) ends the request as
+and the caller decides. There is one way round that, and it is the
+consumer's assertion, not the SDK's: a hook that answers "retry-write"
+has the refused request sent once more, a plain write included, on its
+own word that on its server such a refusal means nothing in the request
+was executed. The SDK cannot verify that premise (its tests run where
+every request is authenticated) and never assumes it. A request sent with `reauthorize: false` skips
+the hook: it is how a hook asks whether the session is alive without
+waiting on itself. A caller's abort (`signal`) ends the request as
 `ABORTED` and is never retried.
 
 A failure never reads as an empty. api/asset answers 200 and commits per
@@ -199,7 +234,7 @@ command, so a failed command is reported inside the envelope
 it there by default and throws a `CommandFailureError` (an `ApiError`
 carrying every failure by index and the whole translated response, so
 what did commit is still known) when asked with `throwOnFailure`. Reads —
-`assetApi.query`/`queries`, and the client's `assets.query`/`queries` —
+`assetApi.query`/`queries`, and the client's `query`/`queries`/`queryPage` —
 always throw: a query the server rejected must not come back as `[]`.
 The server drops a failed query's slot from `queryResult.results` (later
 results shift up); `send` restores it as `null` by `sourceCommandIndex`, so
@@ -210,24 +245,36 @@ answer (thrown for reads and with throwOnFailure); a disagreement with no
 such failure is an error of its own.
 
 The guard (`services/guard`) is what makes a write batch safe to resend:
-each per-asset command of the server's projection is sent scoped to its
-ID and the ChangeDate read just before, so a stale or repeated command
-matches nothing. ChangeDate goes in the filter as a literal — the one
-exception to "values travel as `with` variables", because a ChangeDate
-variable never compares equal — after a strict timestamp check. Moment is
-not a stamp: a filter on an earlier Moment selects the asset as it was then.
-A guarded batch with no creates is sent idempotent; a plain one never is.
-Two commands on one asset are sent in passes: the second goes only if the
-first applied, guarded on the ChangeDate read just after it (a shared
-pre-batch stamp would make the second match nothing). A reverse batch
-reactivates a closed asset before deleting it, since Agility refuses to
-delete a closed asset.
+each per-asset command of the server's projection is sent scoped to the
+asset at the Moment read just before (`where { ID, Moment }`) and to that
+version still being the current one (`filter RetireDateUTC=''`), so a stale
+or repeated command matches nothing. The two terms always travel together:
+a Moment alone selects the asset as it was then, and a write scoped by it
+lands on the current asset; the filter alone is a server error. Both values
+are `with` variables, like every value. A command that matched lists its
+asset in the response even when it changed no value, so an asset the
+response does not list, and that no failure names, matched nothing: a
+**conflict** (`conflicts`, or a `ConflictError` with `throwOnFailure`),
+never a success and never confused with a no-op. A caller may supply the
+moment it read earlier, with the row a person is looking at; the guard then
+compares against what they saw. What the guard cannot see is a change that
+makes no new version of the asset (a child added to it): it protects an
+asset's own attributes. A guarded batch with no creates is sent
+idempotent; a plain one never is. Two commands on one asset are sent in
+passes: the second goes only if the first applied, guarded on the Moment
+read just after it (the response does not say the new moment, and a shared
+pre-batch stamp would make the second match nothing). `batch.run` takes
+`guard: true | false` with no default: which one a batch wants is the
+caller's decision. A receipt records Moments (`receipt: 2`); one from
+before that cannot be checked for drift and is refused unless forced. A
+reverse batch reactivates a closed asset before deleting it, since Agility
+refuses to delete a closed asset.
 
 ## 7. One error, one kind
 
 Everything the SDK throws is an `ApiError` (`src/core/errors.ts`), and
 every `ApiError` has a `kind`: `auth`, `forbidden`, `notFound`, `invalid`,
-`transient`, `aborted`, `commandFailure`, `protocol`, `usage` or
+`transient`, `aborted`, `commandFailure`, `conflict`, `protocol`, `usage` or
 `unknown`. `status` and `code` say what happened; `kind` says what to do.
 A mistake the SDK catches before any request (an unpaged read, an empty
 batch, a bad OID token) is a `UsageError` (`kind: "usage"`, `status: 0`),

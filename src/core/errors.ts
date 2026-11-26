@@ -10,12 +10,14 @@
  *   transient       no answer, or a 5xx/408/429: the same request may succeed later
  *   aborted         the caller's signal ended it
  *   commandFailure  api/asset answered 200 with failed commands inside (CommandFailureError)
+ *   conflict        a guarded write found the asset changed since it was read (ConflictError):
+ *                   nothing was applied to it; read it again and decide
  *   protocol        the server answered something the SDK cannot read
  *   usage           a mistake caught before any request (UsageError): nothing was sent, so
  *                   do not blame the server — fix the call (status is 0 here)
  *   unknown         none of the above
  */
-export type ErrorKind = "auth" | "forbidden" | "notFound" | "invalid" | "transient" | "aborted" | "commandFailure" | "protocol" | "usage" | "unknown";
+export type ErrorKind = "auth" | "forbidden" | "notFound" | "invalid" | "transient" | "aborted" | "commandFailure" | "conflict" | "protocol" | "usage" | "unknown";
 
 /** The kind an HTTP status and an SDK code imply. A code wins over a status. */
 export function kindOf(status: number, code?: string): ErrorKind {
@@ -26,7 +28,9 @@ export function kindOf(status: number, code?: string): ErrorKind {
     case "BAD_JSON":
     case "BAD_RESPONSE": return "protocol";
     case "USAGE": return "usage";
-    case "CommandFailure": return "commandFailure";
+    case "COMMAND_FAILURE": return "commandFailure";
+    case "CONFLICT": return "conflict";
+    case "RECEIPT_VERSION": return "usage";
     case "QUERY_REJECTED":
     case "TOO_LARGE": return "invalid";
     case "NOT_FOUND": return "notFound";

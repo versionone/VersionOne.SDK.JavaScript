@@ -28,8 +28,8 @@ describe("TypeCache: one instance's types shared across clients with different c
     const types = new TypeCache();
     const alice = new AgilityApiClient({ baseUrl: "https://x" }, { transport: userTransport("alice", log), types });
     const bob = new AgilityApiClient({ baseUrl: "https://x" }, { transport: userTransport("bob", log), types });
-    await alice.assets.query({ from: "Story", select: ["Estimate"], page: { size: 1, start: 0 } });
-    await bob.assets.query({ from: "Story", select: ["Estimate", { from: "Status", select: ["Name"] }], page: { size: 1, start: 0 } });
+    await alice.queryPage({ from: "Story", select: ["Estimate"], page: { size: 1, start: 0 } });
+    await bob.queryPage({ from: "Story", select: ["Estimate", { from: "Status", select: ["Name"] }], page: { size: 1, start: 0 } });
     expect(log.filter((l) => l.includes("meta.v1"))).toEqual(["alice /meta.v1/Story", "bob /meta.v1/StoryStatus"]);
     expect(alice.schema.cache).toBe(types);
     expect(bob.schema.assetType("StoryStatus")).toBeDefined();
@@ -49,7 +49,7 @@ describe("TypeCache: one instance's types shared across clients with different c
     const log: string[] = [];
     const types = TypeCache.fromMetamodel(toMetamodel(metamodel));
     const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: userTransport("carol", log), types });
-    await client.assets.query({ from: "Story", select: ["Estimate", { from: "Status", select: ["Name"] }], page: { size: 1, start: 0 } });
+    await client.queryPage({ from: "Story", select: ["Estimate", { from: "Status", select: ["Name"] }], page: { size: 1, start: 0 } });
     expect(log).toEqual(["carol /api/asset"]);
   });
 });

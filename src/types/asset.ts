@@ -39,10 +39,20 @@ export function assetStateOf(value: unknown): AssetStateValue | string | null {
 }
 
 /**
- * A reference to another asset: always at least its OID, plus whatever a
- * select pulled through (Owners.Name lands on the Ref as Name).
+ * A reference to another asset: always its OID. It carries more only when
+ * asked to: a sub-select (`{ from: "Owners", select: ["Name"] }`) puts
+ * `Name` on each Ref. A dotted path selected by name (`"Owners.Name"`) is
+ * not folded onto the Ref: it arrives under its own key, `row["Owners.Name"]`,
+ * like everything a query selects.
  */
-export type Ref<T extends Asset = Asset> = { _oid: Oid } & Partial<Omit<T, "_oid">>;
+export type Ref<T extends Asset = Asset> = { _oid: Oid } & Partial<Omit<T, "_oid">> & { readonly [refTarget]?: T };
+
+/**
+ * Types only: the key under which a Ref remembers which asset type it
+ * points at, so a sub-select can be typed by the related type. Nothing has
+ * this property at run time, and a plain `{ _oid }` is still a Ref.
+ */
+export declare const refTarget: unique symbol;
 
 /** The value types an attribute can carry in the model. */
 export type AttributeValue = string | number | boolean | null | Ref | Ref[];
@@ -62,4 +72,32 @@ export interface CustomAttributes {
 /** The root every generated asset type extends. */
 export interface Asset extends CustomAttributes {
   _oid: Oid;
+}
+
+/**
+ * What an AssetState means for someone deciding what to do with the asset,
+ * for the five states whose meaning is established against a server:
+ *   "open"      Active — and only Active
+ *   "future"    Future: not begun yet (a Timebox or a Scope ahead of its
+ *               dates; the server sends the name)
+ *   "closed"    Closed
+ *   "template"  code 200, which the server sends as "200" (it has no name
+ *               for it; `Template` is this SDK's)
+ *   "deleted"   Deleted
+ * and "other" for every other state — Dead (the server's word for the
+ * whole range from 192 up, not a state rows are seen to carry),
+ * OldBrokenDownStory (a story that was split: dead, not deleted),
+ * Deprecated — and for a value it does not know. Null for no value. Takes
+ * a name or a code, as assetStateOf does.
+ */
+export function assetStateKind(value: unknown): "open" | "future" | "closed" | "template" | "deleted" | "other" | null {
+  switch (assetStateOf(value)) {
+    case null: return null;
+    case "Active": return "open";
+    case "Future": return "future";
+    case "Closed": return "closed";
+    case "Template": return "template";
+    case "Deleted": return "deleted";
+    default: return "other";
+  }
 }

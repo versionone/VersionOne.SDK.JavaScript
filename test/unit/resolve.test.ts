@@ -44,8 +44,8 @@ describe("resolve", () => {
       expect(q.page.size).toBe(3);
     }
     expect(res.found).toEqual([
-      { number: "S-21622", oid: "Story:145845", type: "Story", name: "One", assetState: "Active" },
-      { number: "I-01001", oid: "Issue:7", type: "Issue", name: "Two", assetState: "Closed" }
+      { _oid: "Story:145845", AssetType: "Story", Number: "S-21622", Name: "One", AssetState: "Active" },
+      { _oid: "Issue:7", AssetType: "Issue", Number: "I-01001", Name: "Two", AssetState: "Closed" }
     ]);
     expect(res.missing).toEqual(["S-99999999"]);
   });
@@ -65,7 +65,7 @@ describe("resolve", () => {
     const roots = ROOTS.filter((r) => r !== "Okr");
     const missingOkr = envelope(roots.map(() => []), [{ "@x$auto-aliased": { from: "Okr" }, error: { message: "Unknown AssetType: Okr", sourceCommandIndex: ROOTS.indexOf("Okr") } }]);
     const t = fakeTransport(missingOkr, answer({ Workitem: [{ _oid: "Story:1", Name: "A", Number: "S-1", AssetState: "Active" }] }, roots), answer({}, roots));
-    expect((await resolveNumbers(t, ["S-1"])).found.map((f) => f.oid)).toEqual(["Story:1"]);
+    expect((await resolveNumbers(t, ["S-1"])).found.map((f) => f._oid)).toEqual(["Story:1"]);
     expect((t.calls[1]!.body as Sent).map((q) => q.from)).toEqual(roots);
     // Remembered for this transport: the next call does not ask Okr at all.
     await resolveNumbers(t, ["S-2"]);
@@ -85,7 +85,7 @@ describe("resolve", () => {
     expect(bob.calls).toHaveLength(1);
     expect((bob.calls[0]!.body as Sent).map((q) => q.from)).toEqual(roots);
     // A template's state comes back as its code; it reads by name.
-    expect(found.found[0]!.assetState).toBe("Template");
+    expect(found.found[0]!.AssetState).toBe("Template");
   });
 
   it("any other failure is the caller's to see", async () => {
@@ -96,9 +96,9 @@ describe("resolve", () => {
 
   it("resolveRef takes an OID token as is, without a request; a number by resolving it; null when nothing has that number; anything else is a UsageError", async () => {
     const none = fakeTransport();
-    expect(await resolveRef(none, " Story:1234:55 ")).toEqual({ number: null, oid: "Story:1234", type: "Story", name: null, assetState: null });
+    expect(await resolveRef(none, " Story:1234:55 ")).toEqual({ _oid: "Story:1234", AssetType: "Story", Number: null, Name: null, AssetState: null });
     expect(none.calls).toHaveLength(0);
-    expect(await resolveRef(fakeTransport(answer({ Workitem: [{ _oid: "Defect:9", Name: "D", Number: "D-9", AssetState: "Active" }] })), "d-9")).toMatchObject({ oid: "Defect:9", type: "Defect", number: "D-9" });
+    expect(await resolveRef(fakeTransport(answer({ Workitem: [{ _oid: "Defect:9", Name: "D", Number: "D-9", AssetState: "Active" }] })), "d-9")).toMatchObject({ _oid: "Defect:9", AssetType: "Defect", Number: "D-9" });
     expect(await resolveRef(fakeTransport(answer({})), "D-404")).toBeNull();
     await expect(resolveRef(none, "fix the thing")).rejects.toThrow(UsageError);
     expect(isAssetNumber("TK-12")).toBe(true);

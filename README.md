@@ -39,26 +39,59 @@ npm test
 
 ## Public API
 
+### Which call for what
+
+| You want | Call | Notes |
+| --- | --- | --- |
+| Rows | `client.query(q)` / `client.queries([q, …])` | The default read. Read-only endpoint, resent once like a GET. No total. |
+| One asset | `client.get(oid, select)` | Null when nothing has that OID. |
+| Rows and how many there are | `client.queryPage(q)` | `{ rows, total, more }`. |
+| Everything, page by page | `client.pages(q, { limit })` / `client.all(q, { limit })` | Bounded: default limit 1000. |
+| Text search across types, a total, deleted assets | `client.data.list(type, params)` | rest-1: `find` / `findin`, `Story.Number` from `BaseAsset`, `deleted: true`. |
+| An asset's past versions | `client.history(oid, params)` | One row per version; `_oid` carries the moment. |
+| Who am I | `client.me()` | The member the credentials belong to. |
+| Numbers and OIDs a person typed | `client.resolve.numbers([...])` / `client.resolve.refs([...])` | Answered as rows. One request for numbers of any mix of types. |
+| Write | `client.send(commands)` | Unguarded: writes whatever is there. Answers an `Outcome`; `unmatched` lists commands whose asset was gone. |
+| Write only if nobody changed it | `client.sendGuarded(commands, { moments? })` | `conflicts` lists what was left alone. |
+| Write with a record and an undo | `client.batch.run(commands, { guard })` then `client.batch.reversible(receipt)` | `guard` has no default. |
+| Copy an asset, or run an operation for its result | `client.copy(oid)` / `client.operate(oid, op)` | |
+| Defaults for a new asset | `client.template(type, { ctx })` | Nothing is created. |
+| What a form needs | `client.fields.describe(type, scope)` | Required, visible and important attributes. |
+| Files | `client.attachments.*`, `client.embeddedImages.*` | |
+| A link for a person | `client.urls.asset(oidOrNumber)` | |
+| An error, said to a person | `client.explain(error)` | "Project is required.", with the instance's labels. |
+| Labels in the instance's words | `client.localize(tags)` | |
+
+Every row follows one rule, whichever call read it: **a relation you select is a Ref (`{ _oid }`); a path you select by name is at `row[path]` (`row["Status.Name"]`); nothing arrives that you did not select.** Select both `Owners` and `Owners.Name` and you get the Refs and, beside them, a parallel array at `"Owners.Name"`. To get attributes on the related rows themselves, use a sub-select: `{ from: "Owners", select: ["Name"] }` gives `row.Owners[i].Name`. (rest-1 also puts the display attributes it sends unasked on the Refs of a relation you selected.)
+
+A row's identity is `_oid`: it is the key the server sends, underscored so it cannot collide with an attribute (the identity attribute is `ID`). Rows, Refs, resolved assets, attachments and the assets on a receipt all carry it; a record that only mentions an asset (a receipt's `described` entries, a `drifted` entry) says `oid`.
+
+Rows are typed from what you select, against the product's metamodel: a selected key is its value or `null`, never `undefined`. For an attribute your instance has and the generated model does not (a custom field's relation, a product module's attribute), name your own row type at the call: `client.query<MyRow>(q)` needs only `_oid` on `MyRow`.
+
+### Reference
+
 Changes between alphas are in `CHANGELOG.md`, each with its migration line.
 
 - `AgilityApiClient` - the client. One query body everywhere; the client picks the endpoint:
-  - `query` / `queries` - rows, translated (numbers as numbers, booleans as booleans, a single relation as one `Ref`), through query.v1: read-only, so a request is retried like a GET. A page is required; a refused query throws, never an empty result. Written with a literal `from`, `select` completes from the type's attributes and the rows are typed by what was selected
+  - `query` / `queries` - rows, translated (numbers as numbers, booleans as booleans, a single relation as one `Ref`), through query.v1: read-only, so a request is retried like a GET. A page is required (by the type: an unpaged read does not compile); a refused query throws, never an empty result. Written with a literal `from`, `select` completes from the type's attributes and the rows are typed by what was selected
   - `get(oid, select)` - one asset or null; `queryPage(q)` - rows with the total and whether more follow (`more` is what a pager reads: when the server reports no total, `total` is null and `more` is whether the page came back full); `pages(q, { limit })` / `all(q, { limit })` - page by page up to a limit (default 1000); `me()` - the member the credentials belong to
-  - `assets.send` - an api/asset batch, answered as an `Outcome` (`created`, `modified`, `operated`, `failures` with parsed violations, `queryResults`); `throwOnFailure` throws a `CommandFailureError` carrying the same Outcome. `assets.preview` - the projection. `assets.sendGuarded` - a batch as a compare-and-set on each asset's ChangeDate; changed assets come back `skipped`
-  - `batch.run` / `batch.reversible` - preview, snapshot, (confirm,) send guarded, and a receipt with a reverse batch; undo reactivates a closed asset before deleting it and reopens what a close cascaded to
+  - `send` - an api/asset batch, answered as an `Outcome` (`created`, `modified`, `operated`, `failures` with parsed violations, `queryResults`); `throwOnFailure` throws a `CommandFailureError` carrying the same Outcome. `preview` - the projection. `sendGuarded` - a batch as a compare-and-set on each asset's Moment (read just before, or passed in as the one a person saw); an asset someone changed in between comes back in `conflicts`, untouched. It cannot see a change that makes no new version of the asset, such as a child added to it
+  - `batch.run(commands, { guard })` / `batch.reversible` - preview, snapshot, (confirm,) send (guarded or not: `guard` has no default), and a receipt with a reverse batch; undo reactivates a closed asset before deleting it and reopens what a close cascaded to
   - `resolve.numbers` / `resolve.ref` - asset numbers and OID tokens to assets, in one request
   - `attachments.list` / `page` / `info` / `get` / `add` / `put` / `remove` - files attached to an asset, each answered as a row of the Attachment type (`_oid`, `Name`, `Filename`, `ContentType`, …) plus `id`, the number its bytes are addressed by; `list` and `page` answer metadata, plus whatever keys a `select` adds; `get` reads metadata and bytes in two requests, or in one with `{ inline: true }` for a small file; `add` sends a small file inline and a large one in two steps, and a failed upload throws `AttachmentUploadError` naming the empty attachment it left
   - `embeddedImages.upload` / `normalize` - images in rich text; they cannot be deleted
-  - `copy(oid)` - the Copy operation, answering the copy's OID (api/asset performs it but never says what it made); `data.operate(oid, op)` is the general form
+  - `copy(oid)` - the Copy operation, answering the copy's OID (api/asset performs it but never says what it made); `operate(oid, op)` is the general form
   - `fields.describe(type, scope)` - what a form needs: required attributes (meta), the ones the product shows there (`api/visibleFields`, custom fields included), the scheme's important fields and whether they are enforced at close
   - `urls.asset(oidOrNumber)` / `attachment` / `embeddedImage` - where a browser opens each
-  - `data.list` / `get` / `history` / `template` - rest-1 reads: deleted assets, history, and a new asset's template for a context (`New/<Type>?ctx=`); `meta.*` - meta.v1 raw, with conditional reads (`read` / `readType` with `ifNoneMatch`, `etag()`: meta.v1 sends one ETag for the whole schema); `schema` - the translated, cached view, `schema.revalidate()` drops it only when that tag moves; `localize` - loc-2 labels for tags (a violation's `tag` is one)
+  - `data.list` / `history` / `template` - rest-1 reads: text search and deleted assets, history, and a new asset's template for a context (`New/<Type>?ctx=`); `meta.*` - meta.v1 raw, with conditional reads (`read` / `readType` with `ifNoneMatch`, `etag()`: meta.v1 sends one ETag for the whole schema); `schema` - the translated, cached view, `schema.revalidate()` drops it only when that tag moves; `localize` - loc-2 labels for tags (a violation's `tag` is one)
 - `normalizeQuery(q)` - a query written with rest-1's spellings (`sel`, a textual `where`, comma-joined lists, a `"size,start"` page) as the `QueryBody` every read takes
-- Errors: everything thrown is an `ApiError` with a `kind` (`auth`, `forbidden`, `notFound`, `invalid`, `transient`, `aborted`, `commandFailure`, `protocol`, `usage`, `unknown`). A mistake caught before any request is a `UsageError`: `kind: "usage"` means nothing was sent (`status` is 0), so the fix is in the call, not on the server
-- `TypeCache` - one instance's loaded type definitions, shared by many clients (`new AgilityApiClient(config, { types })`)
+- Errors: everything thrown is an `ApiError` with a `kind` (`auth`, `forbidden`, `notFound`, `invalid`, `transient`, `aborted`, `commandFailure`, `conflict`, `protocol`, `usage`, `unknown`). A mistake caught before any request is a `UsageError`: `kind: "usage"` means nothing was sent (`status` is 0), so the fix is in the call, not on the server
+- `TypeCache` - one instance's loaded type definitions, shared by many clients (`new AgilityApiClient(config, { types })`); `TypeCache.fromMetamodel(metamodel)` seeds one so nothing is loaded
 - `createFetchTransport` - configurable HTTP transport: `credentials` for same-origin cookie auth, `onUnauthorized` to re-authenticate on a 401 (resends idempotent requests once), and a per-request `signal`; `client.withSignal(signal)` ties a whole client to one
+- Resends and failures are the client's business with any transport: an idempotent request (a GET, a read, a guarded batch with no creates) is sent once more after a network failure, a timeout, a 5xx or a 429 (`retries`, default 1, 0 for none; never a plain write, a 401 or a 403), and `onError(error, request)` in the config is told about each request that finally failed
 - A custom `Transport` (`new AgilityApiClient(config, { transport })`) decides by itself where requests go; `config.baseUrl` is then used only for the links the client builds (`urls.*`, `embeddedImages.normalize`). `apiErrorFromResponse(status, data)` is the error the fetch transport throws for a refused response, for a custom transport to throw the same
-- `@versionone/agility-sdk/wire` - the wire modules (`assetApi`, `queryV1`, `rest1`, `meta`, `loc2`, `attachment`, `fields`, `select`), for passthroughs and transport authors; they speak the endpoints' own shapes. (The root still exports them in this alpha and stops in the next.)
+- `@versionone/agility-sdk/services` - the services as free functions over a `Transport` (`guard`, `batch`, `resolve`, `schema`, `attachments`, `fields`), for a caller that composes one differently; the client's methods are the same things
+- `@versionone/agility-sdk/wire` - the wire modules (`assetApi`, `queryV1`, `rest1`, `meta`, `loc2`, `attachment`, `fields`, `select`), for passthroughs and transport authors; they speak the endpoints' own shapes.
 
 ## Testing code that uses the SDK
 
@@ -78,8 +111,10 @@ expect(fake.sent[0]).toEqual([{ from: "Story:1", execute: "QuickClose" }]);     
 
 - `onQuery(match, rows)` answers every read (`query`, `get`, `queryPage`, `pages`, …). A list is the whole result: the fake pages it and answers a read by OID with that row. A function gets the query and answers one page. A read nothing was scripted for throws; it never looks like an empty result.
 - Writes need no script: a create answers a new OID, an update or operation by OID answers that OID. `onSend` scripts anything else, failures included.
+- `sendGuarded` and `batch.run` work on assets addressed by OID that you scripted a row for: `fake.touch(oid)` is someone else changing the asset (the next write stamped earlier is a conflict), `fake.remove(oid)` is it being deleted.
 - `resolve.numbers` finds a number among the scripted rows; `localize` answers `onLocalize` labels and echoes any other tag; `fake.transport` can be the transport of a client your code builds itself.
-- `onRequest(path, answer)` answers any other endpoint in its own shape. An `Error` as an answer is thrown.
+- `onList(type, rows)` answers `client.data.list` the same way. `onRequest(path, answer)` answers any other endpoint in its own shape; with `new FakeAgilityClient({ metamodel })` (a meta.v1 document) a response captured from a server reads translated, as it would live. An `Error` as an answer is thrown.
+- A custom `Transport` has its own suite: `transportConformance(make)` answers the SDK's expectations of a transport as named checks (`for (const c of transportConformance(make)) it(c.name, c.run)`), and the SDK's fetch transport runs the same ones.
 - The fake evaluates no filter or sort and applies no write. It proves what your code asks and what it does with the answer; what the server answers is for a test against an instance.
 
 API reference: https://docs.digital.ai/agility-api/
@@ -90,7 +125,7 @@ API reference: https://docs.digital.ai/agility-api/
 
 ## Installing an unreleased commit
 
-`npm install github:versionone/VersionOne.SDK.JavaScript#<sha>` builds `dist` on install (the `prepare` script). CI also uploads an `npm pack` tarball on every run.
+`npm install github:versionone/VersionOne.SDK.JavaScript#<sha>` builds `dist` on install (the `prepare` script). CI also uploads an `npm pack` tarball on every run. The package's entries (`index`, `wire`, `services`, `testing`) and the chunks they share are all in one flat `dist/` directory, so a copy of `dist/` is a working copy.
 
 ## Releasing
 

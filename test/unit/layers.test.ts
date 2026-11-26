@@ -61,7 +61,8 @@ describe("layers", () => {
       // bare word Attributes is meta.v1's own name for a type's attribute map
       // and belongs in the metamodel types.
       for (const word of ["oidTokens", "commandFailures", "queryResult", "previewOnly", "\"Attribute\"", "resultMetaData", "pageStart"]) {
-        if (text.includes(word)) leaks.push(`${relative(src, file)} mentions ${word}`);
+        // As a whole word: the model's Outcome has `queryResults`, which is not the envelope's `queryResult`.
+        if (new RegExp(`(?<![A-Za-z])${word.replace(/"/g, '\\"')}(?![A-Za-z])`).test(text)) leaks.push(`${relative(src, file)} mentions ${word}`);
       }
     }
     expect(leaks).toEqual([]);

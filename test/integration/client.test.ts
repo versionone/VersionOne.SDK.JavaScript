@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { AgilityApiClient } from "../../src/client";
 import type { Story } from "../../src/types/assets/Story";
+import { assetStateKind } from "../../src/types/asset";
 import { normalizeQuery } from "../../src/wire/rest1";
 import { describeInstance, fixtureName, instance } from "./instance";
 
@@ -36,6 +37,108 @@ describeInstance("client reads (live)", () => {
     expect(loose).toEqual({ from: "Member", select: ["Name", "Username"], filter: [`ID='${me._oid}';IsSelf='true'`], sort: ["Name"], page: { size: 5, start: 0 } });
     expect(await client.query(loose)).toEqual([{ _oid: me._oid, Name: me.Name, Username: me.Username }]);
     expect(await client.query(normalizeQuery({ from: "Member", sel: "Name", where: `ID='${me._oid}';IsSelf='false'`, page: "5,0" }))).toEqual([]);
+  });
+
+  it("the rows rule holds on every read path: a selected relation is a Ref, a path selected by name is at row[path], and no other key arrives", async () => {
+    const me = await client.me();
+    const made = await client.send([{ AssetType: "Story", Name: fixtureName("rows rule"), Scope: { _oid: "Scope:0" }, Owners: [{ _oid: me._oid }] }], { throwOnFailure: true });
+    const story = made.created[0]!;
+    try {
+      const select = ["Name", "Owners", "Owners.Name", "Scope.Name"];
+      const keys = ["Name", "Owners", "Owners.Name", "Scope.Name", "_oid"];
+      const viaQuery = (await client.query({ from: "Story", select, filter: ["ID=$id"], with: { $id: story }, page: { size: 1, start: 0 } }))[0]! as Record<string, unknown>;
+      const viaPage = (await client.queryPage({ from: "Story", select, filter: ["ID=$id"], with: { $id: story }, page: { size: 1, start: 0 } })).rows[0]! as Record<string, unknown>;
+      const viaRest = (await client.data.list("Story", { select, filter: [`ID='${story}'`], page: { size: 1, start: 0 } })).rows[0]! as unknown as Record<string, unknown>;
+      for (const row of [viaQuery, viaPage, viaRest]) {
+        expect(Object.keys(row).sort()).toEqual(keys);
+        expect(row["Owners.Name"]).toEqual([me.Name]); // a parallel array beside the Refs
+        expect(typeof row["Scope.Name"]).toBe("string"); // its relation was not selected: the path is still there
+        expect((row.Owners as { _oid: string }[]).map((o) => o._oid)).toEqual([me._oid]);
+      }
+      // query.v1 and api/asset Refs are bare; rest-1 puts the display attributes it sends on the Ref as well.
+      expect(viaQuery.Owners).toEqual([{ _oid: me._oid }]);
+      expect(viaPage.Owners).toEqual([{ _oid: me._oid }]);
+      expect((viaRest.Owners as { Name: string }[])[0]!.Name).toBe(me.Name);
+      // rest-1 without the dotted path selected: its uninvited columns are on the Ref, not on the row.
+      const bare = (await client.data.list("Story", { select: ["Name", "Owners"], filter: [`ID='${story}'`], page: { size: 1, start: 0 } })).rows[0]! as unknown as Record<string, unknown>;
+      expect(Object.keys(bare).sort()).toEqual(["Name", "Owners", "_oid"]);
+      // And a refused rest-1 read is a QUERY_REJECTED with sentences, like query.v1's.
+      await expect(client.data.list("Story", { filter: ["Nope=1"], page: { size: 1, start: 0 } })).rejects.toMatchObject({ kind: "invalid", code: "QUERY_REJECTED", message: expect.stringMatching(/^Invalid WHERE parameter; /) });
+      await expect(client.query({ from: "Story", filter: ["Nope=1"], page: { size: 1, start: 0 } })).rejects.toMatchObject({ kind: "invalid", code: "QUERY_REJECTED" });
+    } finally {
+      await client.send([{ from: story, execute: "Delete" }]);
+    }
+  });
+
+  it("a command addressed to one asset that is gone did nothing and is in `unmatched` (the server calls it a success); one that applied, a no-op and a refused one are not", async () => {
+    const me = await client.me();
+    const made = await client.send([
+      { "@c": { AssetType: "Conversation" } },
+      { AssetType: "Expression", Author: me._oid, AuthoredAt: new Date().toISOString(), Content: fixtureName("unmatched"), BelongsTo: "@c" },
+      { AssetType: "Story", Name: fixtureName("unmatched"), Scope: "Scope:0" }
+    ], { throwOnFailure: true });
+    const [conversation, expression, story] = made.created as [string, string, string];
+    expect(made.unmatched).toEqual([]);
+    try {
+      // The control: an update and an operation that do apply are not flagged, a no-op update included.
+      const applied = await client.send([{ from: story, update: { Name: fixtureName("unmatched renamed") } }, { from: story, update: { Estimate: null } }, { from: story, execute: "QuickClose" }]);
+      expect(applied).toMatchObject({ unmatched: [], failures: [] });
+      // An operation the type does not have is a failure, which is an answer: not also flagged.
+      const refused = await client.send([{ from: conversation, execute: "Delete" }]);
+      expect(refused).toMatchObject({ operated: [], unmatched: [], failures: [{ index: 0, message: "Unknown Operation 'Conversation.Delete'" }] });
+    } finally {
+      await client.send([{ from: story, execute: "Reactivate" }]);
+      await client.send([{ from: story, execute: "Delete" }, { from: expression, execute: "Delete" }]);
+    }
+    // Both are gone now (the Conversation went with its last Expression): an update by OID matches nothing, and says so.
+    expect(await client.send([{ from: story, update: { Name: "x" } }, { from: conversation, execute: "Join" }])).toMatchObject({ modified: [], operated: [], failures: [], unmatched: [0, 1] });
+    expect(await client.get(conversation)).toBeNull();
+    // The same for a command under an alias, and on the receipt of a batch sent unguarded (where nothing else would say so).
+    expect(await client.send([{ "@u": { from: story, update: { Name: "x" } } }])).toMatchObject({ modified: [], failures: [], unmatched: [0] });
+    const receipt = await client.batch.run([{ "@u": { from: story, update: { Name: "x" } } }], { guard: false });
+    expect(receipt).toMatchObject({ sent: true, guarded: false, conflicts: [], outcome: { modified: [], failures: [], unmatched: [0] } });
+  });
+
+  it("explain says real failures in a sentence with the instance's labels, in one loc-2 request; nothing is created", async () => {
+    const outcome = await client.send([
+      { AssetType: "Story", Name: fixtureName("explain") },                                      // no Scope
+      { AssetType: "Story", Name: fixtureName("explain"), Scope: "Scope:0", Status: "NoSuchStatus" }, // nothing by that name
+      { AssetType: "Story", Name: fixtureName("explain"), Scope: "Scope:0", Estimate: "abc" }      // not a number
+    ]);
+    expect(outcome.created).toEqual([]); // the control: all three were refused
+    const explained = await client.explain(outcome);
+    expect(explained.map((e) => [e.index, e.rule, e.attribute])).toEqual([[0, "Required", "Story.Scope"], [1, "Unresolved", "Story.Status"], [2, null, null]]);
+    // The instance's own words for Story.Scope and for Story (they are configurable, so only their presence is asserted).
+    expect(explained[0]!.attributeLabel).toEqual(expect.any(String));
+    expect(explained[0]!.sentence).toBe(`${explained[0]!.attributeLabel} is required.`);
+    expect(explained[0]!.localized).toMatch(/required/i);
+    expect(explained[0]!.typeLabel).not.toBe("AssetType'Story");
+    expect(explained[1]!.sentence).toMatch(/: no .+ matches the value given\.$/);
+    expect(explained[2]!.sentence).toBe(outcome.failures[2]!.message);
+  });
+
+  it("assetStateKind agrees with the server for the states it names: a live story open, then closed, then deleted; a template, where the instance has one", async () => {
+    const made = await client.send([{ AssetType: "Story", Name: fixtureName("state kind"), Scope: "Scope:0" }], { throwOnFailure: true });
+    const story = made.created[0]!;
+    const state = async () => (await client.get<{ _oid: string; AssetState: string }>(story, ["AssetState"]))?.AssetState;
+    try {
+      expect([await state(), assetStateKind(await state())]).toEqual(["Active", "open"]);
+      await client.send([{ from: story, execute: "QuickClose" }], { throwOnFailure: true });
+      expect([await state(), assetStateKind(await state())]).toEqual(["Closed", "closed"]);
+      await client.send([{ from: story, execute: "Reactivate" }], { throwOnFailure: true });
+    } finally {
+      await client.send([{ from: story, execute: "Delete" }]);
+    }
+    // Gone from an ordinary read; rest-1's deleted read still shows it, and says Deleted.
+    expect(await client.get(story)).toBeNull();
+    const [deleted] = (await client.data.list<{ _oid: string; AssetState: string }>("Story", { select: ["AssetState"], filter: [`ID='${story}'`], deleted: true, page: { size: 1, start: 0 } })).rows;
+    expect([deleted?.AssetState, assetStateKind(deleted?.AssetState)]).toEqual(["Deleted", "deleted"]);
+    // A template is state 200, which query.v1 sends as "200" and the model names Template. (None on an empty instance: then nothing is asserted.)
+    const [template] = await client.query<{ _oid: string; AssetState: string }>({ from: "Story", select: ["AssetState"], filter: ["AssetState='200'"], page: { size: 1, start: 0 } });
+    if (template) expect(assetStateKind(template.AssetState)).toBe("template");
+    // Future is a state the server names (a Timebox ahead of its dates); it is its own kind, not "open".
+    const [future] = await client.query<{ _oid: string; AssetState: string }>({ from: "Timebox", select: ["AssetState"], filter: ["AssetState='Future'"], page: { size: 1, start: 0 } });
+    if (future) expect([future.AssetState, assetStateKind(future.AssetState)]).toEqual(["Future", "future"]);
   });
 
   it("the asset page URL answers for a real asset (assetdetail.v1 redirects to the type's detail page)", async () => {
@@ -81,7 +184,7 @@ describeInstance("rest-1 operate, template and fields (live)", () => {
   const client = new AgilityApiClient({ baseUrl: instance!.url }, { transport: instance!.transport });
 
   it("copy answers the new story's OID, which api/asset's execute does not; the copy is then deleted", async () => {
-    const created = await client.assets.send([{ AssetType: "Story", Name: fixtureName("copy source"), Scope: "Scope:0" }], { throwOnFailure: true });
+    const created = await client.send([{ AssetType: "Story", Name: fixtureName("copy source"), Scope: "Scope:0" }], { throwOnFailure: true });
     const source = created.created[0]!;
     const made: string[] = [source];
     try {
@@ -91,24 +194,24 @@ describeInstance("rest-1 operate, template and fields (live)", () => {
       expect(copy).not.toBe(source);
       const row = await client.get(copy, ["Name"]);
       expect(row?.Name).toMatch(/^Copy Of sdk-integration/);
-      const viaBulk = await client.assets.send([{ from: source, execute: "Copy" }], { throwOnFailure: true });
+      const viaBulk = await client.send([{ from: source, execute: "Copy" }], { throwOnFailure: true });
       expect(viaBulk.created).toEqual([]); // the control: api/asset reports only the operated source
       expect(viaBulk.operated).toEqual([source]);
       const strays = await client.query({ from: "Story", select: ["Name"], filter: ["Name=$n"], with: { $n: `Copy Of ${created.created.length ? (await client.get(source, ["Name"]))!.Name : ""}` }, page: { size: 5, start: 0 } });
       made.push(...strays.map((s) => s._oid).filter((o) => !made.includes(o)));
     } finally {
-      await client.assets.send(made.map((oid) => ({ from: oid, execute: "Delete" })));
+      await client.send(made.map((oid) => ({ from: oid, execute: "Delete" })));
     }
   }, 60_000);
 
   it("template for a Timebox in a scope carries the initializer's suggestions; for a Story, the scope", async () => {
-    const timebox = await client.data.template("Timebox", { ctx: "Scope:0" });
+    const timebox = await client.template("Timebox", { ctx: "Scope:0" });
     expect(typeof timebox.Name).toBe("string");
     expect(timebox.Schedule).toMatchObject({ _oid: expect.stringMatching(/^Schedule:\d+$/) });
     expect(timebox.Owner).toMatchObject({ _oid: (await client.me())._oid });
-    const story = await client.data.template("Story", { ctx: "Scope:0" });
+    const story = await client.template("Story", { ctx: "Scope:0" });
     expect(story).toEqual({ Scope: { _oid: "Scope:0" } });
-    await expect(client.data.operate("Story:999999999", "NoSuchOp")).rejects.toMatchObject({ status: 400, kind: "invalid" });
+    await expect(client.operate("Story:999999999", "NoSuchOp")).rejects.toMatchObject({ status: 400, kind: "invalid" });
   }, 60_000);
 
   it("fields.describe answers required, visible and important attributes for a Story in Scope:0", async () => {

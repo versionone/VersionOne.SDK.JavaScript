@@ -87,12 +87,12 @@ describe("transport for real callers", () => {
     expect(idle).not.toHaveBeenCalled();
   });
 
-  it("client.withSignal ties every request to the signal and shares the schema", async () => {
+  it("client.withSignal ties every request to the signal and shares the loaded types", async () => {
     const transport = { request: vi.fn().mockResolvedValue({ Story: "Story" }) };
     const base = new AgilityApiClient({ baseUrl: "https://x" }, { transport });
     const controller = new AbortController();
     const scoped = base.withSignal(controller.signal);
-    expect(scoped.schema).toBe(base.schema);
+    expect(scoped.schema.cache).toBe(base.schema.cache);
     await scoped.localize(["Story"]);
     expect(transport.request.mock.calls[0]![0].signal).toBe(controller.signal);
     // The original client is untouched.

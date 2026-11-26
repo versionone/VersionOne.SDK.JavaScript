@@ -33,6 +33,14 @@ describeInstance("attachments (live)", () => {
     const small = await client.attachments.add(story, text("hello attachment\n"), { filename: "sdk-integration small.txt", contentType: "text/plain" });
     const large = await client.attachments.add(story, new Blob([text("two-step bytes\n")], { type: "text/plain" }), { filename: "sdk-integration large.txt", inlineLimit: 0, description: "two-step" });
     made.push(small._oid, large._oid);
+    // add answers what it wrote and not the server's stamps, which it never read: they are absent, not null.
+    for (const added of [small, large]) {
+      expect(added).not.toHaveProperty("CreateDate");
+      expect(added).not.toHaveProperty("CreatedBy.Name");
+    }
+    const read = await client.attachments.info(small.id);
+    expect(typeof read?.CreateDate).toBe("string");
+    expect(typeof read?.["CreatedBy.Name"]).toBe("string");
     expect(decode((await client.attachments.get(small.id)).bytes)).toBe("hello attachment\n");
     const got = await client.attachments.get(large._oid);
     expect(decode(got.bytes)).toBe("two-step bytes\n");
@@ -51,12 +59,13 @@ describeInstance("attachments (live)", () => {
     const a = await client.attachments.add(story, text("inline read\n"), { filename: "sdk-integration inline.txt", contentType: "text/plain", description: "one request" });
     made.push(a._oid);
     const calls: string[] = [];
-    const counting = new AgilityApiClient({ baseUrl: instance!.url }, { transport: { request: (o) => { calls.push(o.path); return t.request(o); } }, schema: client.schema });
+    const counting = new AgilityApiClient({ baseUrl: instance!.url }, { transport: { request: (o) => { calls.push(o.path); return t.request(o); } }, types: client.schema.cache });
     const got = await counting.attachments.get(a._oid, { inline: true });
     expect(calls).toEqual(["/query.v1"]);
     expect(decode(got.bytes)).toBe("inline read\n");
     expect(got).toMatchObject({ _oid: a._oid, id: a.id, Filename: "sdk-integration inline.txt", ContentType: "text/plain", servedContentType: null, Description: "one request" });
     expect(got).not.toHaveProperty("Content");
+    expect(got.base64).toBe(btoa("inline read\n")); // as it arrived: no re-encoding for a caller that wants Base64
     // The same bytes the two-request read serves.
     expect(decode((await client.attachments.get(a._oid)).bytes)).toBe("inline read\n");
     // A two-step attachment whose upload never happened reads as zero bytes; one that does not exist is NOT_FOUND.

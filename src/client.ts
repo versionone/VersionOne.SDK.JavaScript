@@ -1,9 +1,11 @@
 import type { ClientConfig } from "./core/clientConfig";
 import { ApiError, UsageError } from "./core/errors";
 import { createFetchTransport } from "./core/fetchTransport";
+import { withErrorHook, withRetry } from "./core/retry";
 import type { Transport } from "./core/transport";
 import * as attachments from "./services/attachments";
 import * as batch from "./services/batch";
+import * as explainService from "./services/explain";
 import * as fieldsService from "./services/fields";
 import * as guard from "./services/guard";
 import * as resolve from "./services/resolve";
@@ -11,7 +13,6 @@ import { Schema, type TypeCache } from "./services/schema";
 import type { Asset, Oid } from "./types/asset";
 import type { Attachment } from "./types/assets/Attachment";
 import type { Member } from "./types/assets/Member";
-import type { Metamodel } from "./types/metamodel";
 import type { From, RowOf, RowsOf, Selected, SelectPath, TypeOf } from "./types/query";
 import { isOidToken, momentless } from "./types/oid";
 import { isAssetNumber } from "./services/resolve";
@@ -27,25 +28,19 @@ export interface ClientOptions {
   /** Bring your own transport (a fake in tests, an instrumented one in an app). */
   transport?: Transport;
   /**
-   * Seed the schema so no type is fetched: a metamodel document as
-   * meta.getMetamodel returns it, or the committed metamodel.json run
-   * through meta.toMetamodel. Without it, types are loaded from meta.v1 as
-   * queries first touch them.
-   */
-  metamodel?: Metamodel;
-  /** Share an existing schema (and its cache) instead of starting a new one. */
-  schema?: Schema;
-  /**
    * Share loaded type definitions with other clients of the same instance,
    * whatever their credentials: this client's schema keeps its types in
    * `types` and loads anything missing through this client's transport.
    * A server that builds a client per user keeps one TypeCache per instance.
+   * To load nothing at all, seed one from a metamodel document:
+   * `TypeCache.fromMetamodel(metamodel)`. Without it, types are loaded from
+   * meta.v1 as queries first touch them.
    */
   types?: TypeCache;
 }
 
 /** One page of rows, with the total number of matches when the server reports it, and whether more pages follow. */
-export interface Page<Row extends Asset = Asset> {
+export interface Page<Row extends { _oid: Oid } = Asset> {
   rows: Row[];
   /** The number of matches across all pages; null when the server did not report one. */
   total: number | null;
@@ -72,6 +67,14 @@ export interface PagesOptions {
 export type Me = Pick<Member, "_oid" | "Name" | "Username" | "Nickname" | "Email">;
 
 const DEFAULT_LIMIT = 1000;
+
+/** Transports a client has already put its resend rule and error hook around. */
+const dressed = new WeakSet<Transport>();
+
+/** Every read is bounded: the type says so, and for a caller the type did not reach this says so before any request (not even a schema load) is sent. */
+function bounded(qs: readonly assetApi.QueryBody[]): void {
+  for (const q of qs) if (!q.page) throw new UsageError(`query of ${q.from} without a page: every read must be bounded`);
+}
 const ME_SELECT = ["Name", "Username", "Nickname", "Email"];
 
 /**
@@ -86,19 +89,19 @@ const ME_SELECT = ["Name", "Username", "Nickname", "Email"];
  * construction, so a request can be resent like a GET — but its shape has
  * nowhere to put a total; api/asset reports one (`needTotal`) beside the
  * rows, which is why `queryPage` goes there and `query` does not. rest-1
- * sits behind `data` for what neither does: deleted assets, history, a
- * new asset's template, an operation's result. Writes: `assets.send`,
- * `assets.sendGuarded`, `batch.run`, `copy`. Services: `resolve`,
+ * serves what neither does: `data.list` (text search across types,
+ * deleted assets), `history`, `template`, `operate`. Writes: `send`,
+ * `sendGuarded`, `batch.run`, `copy`. Services: `resolve`,
  * `fields`, `attachments`, `embeddedImages`, `schema`, `localize`, `urls`.
  */
 export class AgilityApiClient {
   readonly transport: Transport;
   readonly schema: Schema;
 
-  constructor(config: ClientConfig, options: ClientOptions | Transport = {}) {
-    // A bare Transport as the second argument is the older spelling; keep it working.
-    const opts: ClientOptions = "request" in options ? { transport: options } : options;
-    this.transport = opts.transport ?? createFetchTransport({
+  constructor(config: ClientConfig, opts: ClientOptions = {}) {
+    // The built-in transport resends idempotent requests itself (it can read Retry-After); a custom one gets the
+    // same rule from the client. A transport another client of ours already dressed (withSignal) is taken as it is.
+    let transport = opts.transport ?? createFetchTransport({
       baseUrl: config.baseUrl,
       authorization: config.authorization,
       accessToken: config.accessToken,
@@ -109,8 +112,14 @@ export class AgilityApiClient {
       onUnauthorized: config.onUnauthorized,
       unauthorizedStatuses: config.unauthorizedStatuses
     });
+    if (!dressed.has(transport)) {
+      if (opts.transport) transport = withRetry(transport, config.retries ?? 1);
+      if (config.onError) transport = withErrorHook(transport, config.onError);
+      dressed.add(transport);
+    }
+    this.transport = transport;
     this.config = config;
-    this.schema = opts.schema ?? new Schema(this.transport, opts.metamodel, opts.types);
+    this.schema = new Schema(this.transport, undefined, opts.types);
   }
 
   private readonly config: ClientConfig;
@@ -118,13 +127,14 @@ export class AgilityApiClient {
   /**
    * The same client, with every request it sends tied to `signal`: abort it
    * (on navigation, say) and in-flight requests end with an ApiError coded
-   * ABORTED. The schema and its cache are shared; a type load that other
+   * ABORTED. The loaded types are shared; a type load that other
    * callers are waiting on is not cancelled.
    */
   withSignal(signal: AbortSignal): AgilityApiClient {
     const base = this.transport;
     const transport: Transport = { request: (options) => base.request({ ...options, signal: options.signal ?? signal }) };
-    return new AgilityApiClient(this.config, { transport, schema: this.schema });
+    dressed.add(transport); // `base` already resends and reports errors: not twice
+    return new AgilityApiClient(this.config, { transport, types: this.schema.cache });
   }
 
   // ---- reads ------------------------------------------------------------------
@@ -138,17 +148,19 @@ export class AgilityApiClient {
    * sentences, `details` each exception's type and message), never an
    * empty result.
    */
-  query<const F extends From, const Q extends assetApi.QueryBody<F>>(q: Q & assetApi.QueryBody<F>): Promise<RowOf<Q>[]>;
-  query<Row extends Asset = Asset>(q: assetApi.QueryBody): Promise<Row[]>;
-  async query(q: assetApi.QueryBody): Promise<Asset[]> {
+  query<const F extends From, const Q extends assetApi.Query<F>>(q: Q & assetApi.Query<F>): Promise<RowOf<Q>[]>;
+  query<Row extends { _oid: Oid } = Asset>(q: assetApi.Query): Promise<Row[]>;
+  async query(q: assetApi.Query): Promise<Asset[]> {
+    bounded([q]);
     await this.schema.ensureFor([q]);
     return queryV1.query(this.transport, q, { lookup: this.schema });
   }
 
   /** Several queries in one request; one array of rows per query, in order. */
-  queries<const Qs extends readonly assetApi.QueryBody[]>(qs: Qs): Promise<RowsOf<Qs>>;
-  queries<Row extends Asset = Asset>(qs: assetApi.QueryBody[]): Promise<Row[][]>;
-  async queries(qs: readonly assetApi.QueryBody[]): Promise<Asset[][]> {
+  queries<const Qs extends readonly assetApi.Query[]>(qs: Qs): Promise<RowsOf<Qs>>;
+  queries<Row extends { _oid: Oid } = Asset>(qs: assetApi.Query[]): Promise<Row[][]>;
+  async queries(qs: readonly assetApi.Query[]): Promise<Asset[][]> {
+    bounded(qs);
     await this.schema.ensureFor(qs);
     return queryV1.queries(this.transport, [...qs], { lookup: this.schema });
   }
@@ -159,7 +171,7 @@ export class AgilityApiClient {
    * exists.)
    */
   get<const O extends string, const S extends readonly (SelectPath<TypeOf<O>> | assetApi.QueryBody)[]>(oid: O, select: S): Promise<Selected<TypeOf<O>, S> | null>;
-  get<Row extends Asset = Asset>(oid: Oid, select?: assetApi.QueryBody["select"]): Promise<Row | null>;
+  get<Row extends { _oid: Oid } = Asset>(oid: Oid, select?: assetApi.QueryBody["select"]): Promise<Row | null>;
   async get(oid: Oid, select?: assetApi.QueryBody["select"]): Promise<Asset | null> {
     const rows = await this.query({ from: momentless(oid), ...(select ? { select } : {}), page: { size: 1, start: 0 } });
     return rows[0] ?? null;
@@ -170,9 +182,10 @@ export class AgilityApiClient {
    * asked (query.v1 does not), so this read goes there. `total` is null
    * when the server did not say; `more` is then whether the page was full.
    */
-  queryPage<const F extends From, const Q extends assetApi.QueryBody<F>>(q: Q & assetApi.QueryBody<F>): Promise<Page<RowOf<Q>>>;
-  queryPage<Row extends Asset = Asset>(q: assetApi.QueryBody): Promise<Page<Row>>;
-  async queryPage(q: assetApi.QueryBody): Promise<Page> {
+  queryPage<const F extends From, const Q extends assetApi.Query<F>>(q: Q & assetApi.Query<F>): Promise<Page<RowOf<Q>>>;
+  queryPage<Row extends { _oid: Oid } = Asset>(q: assetApi.Query): Promise<Page<Row>>;
+  async queryPage(q: assetApi.Query): Promise<Page> {
+    bounded([q]);
     await this.schema.ensureFor([q]);
     return assetApi.queryPage(this.transport, q, { lookup: this.schema });
   }
@@ -184,10 +197,10 @@ export class AgilityApiClient {
    * Each page is a plain read on query.v1, so a long walk survives a
    * transient failure like any GET.
    */
-  pages<const F extends From, const Q extends assetApi.QueryBody<F>>(q: Q & assetApi.QueryBody<F>, options?: PagesOptions): AsyncGenerator<RowOf<Q>[], void, undefined>;
-  pages<Row extends Asset = Asset>(q: assetApi.QueryBody, options?: PagesOptions): AsyncGenerator<Row[], void, undefined>;
-  async *pages(q: assetApi.QueryBody, options: PagesOptions = {}): AsyncGenerator<Asset[], void, undefined> {
-    if (!q.page) throw new UsageError(`query of ${q.from} without a page: every read must be bounded`);
+  pages<const F extends From, const Q extends assetApi.Query<F>>(q: Q & assetApi.Query<F>, options?: PagesOptions): AsyncGenerator<RowOf<Q>[], void, undefined>;
+  pages<Row extends { _oid: Oid } = Asset>(q: assetApi.Query, options?: PagesOptions): AsyncGenerator<Row[], void, undefined>;
+  async *pages(q: assetApi.Query, options: PagesOptions = {}): AsyncGenerator<Asset[], void, undefined> {
+    bounded([q]);
     const limit = options.limit ?? DEFAULT_LIMIT;
     const size = q.page.size;
     let start = q.page.start, read = 0;
@@ -202,9 +215,9 @@ export class AgilityApiClient {
   }
 
   /** Every row of the query up to `limit` (default 1000), read page by page. */
-  all<const F extends From, const Q extends assetApi.QueryBody<F>>(q: Q & assetApi.QueryBody<F>, options?: PagesOptions): Promise<RowOf<Q>[]>;
-  all<Row extends Asset = Asset>(q: assetApi.QueryBody, options?: PagesOptions): Promise<Row[]>;
-  async all(q: assetApi.QueryBody, options: PagesOptions = {}): Promise<Asset[]> {
+  all<const F extends From, const Q extends assetApi.Query<F>>(q: Q & assetApi.Query<F>, options?: PagesOptions): Promise<RowOf<Q>[]>;
+  all<Row extends { _oid: Oid } = Asset>(q: assetApi.Query, options?: PagesOptions): Promise<Row[]>;
+  async all(q: assetApi.Query, options: PagesOptions = {}): Promise<Asset[]> {
     const out: Asset[] = [];
     for await (const page of this.pages(q, options)) out.push(...page);
     return out;
@@ -251,24 +264,64 @@ export class AgilityApiClient {
   }
 
   /**
-   * rest-1.v1, for what the other endpoints cannot do: deleted assets
-   * (`deleted: true`), one asset by OID without a page, history (one row
-   * per moment), a new asset's template (`template`: what the type's
-   * initializer fills in for a context — a Timebox's next name and dates,
-   * a Story's carry-over from a Request), and an operation's result
-   * (`operate`: api/asset performs a Copy but never says what it made;
-   * rest-1 answers the new OID). Parameters are spelled as a query's
-   * (`select`, `filter`).
+   * An error, said to a person: one Explanation per failed command (from a
+   * CommandFailureError, an Outcome or its `failures`), or one for any
+   * other error. Each has a short `sentence` — "Project is required.",
+   * with the instance's own label for the attribute — and the parts it was
+   * made from (`rule`, `attribute`, `attributeLabel`, `typeLabel`, the
+   * server's own `localized` sentence where it has one). One loc-2 request
+   * at most; a label it cannot get is replaced by the attribute's name,
+   * never an error.
+   */
+  explain(error: unknown, options?: loc2.LocalizeOptions): Promise<explainService.Explanation[]> {
+    return explainService.explain(this.transport, error, options);
+  }
+
+  /**
+   * rest-1's list read, for what the other reads cannot do: full-text
+   * `find` / `findin` across types with one order and a total, a
+   * type-qualified select from a base type (`Story.Number` on BaseAsset),
+   * and deleted assets (`deleted: true`). Parameters are spelled as a
+   * query's (`select`, `filter`), and rows follow the rule every read
+   * follows: a relation you select is a Ref, a path you select by name is
+   * at `row[path]`, and nothing arrives that you did not select. For
+   * everything else use `query` / `queryPage`. (`data` has this one member
+   * on purpose: it is the cross-type text search until a `client.search`
+   * exists, and stays here so that nobody needs the wire modules for an
+   * everyday read.)
    */
   readonly data = {
-    list: <Row extends Asset = Asset>(type: string, params: rest1.ReadParams) => rest1.list<Row>(this.transport, type, params),
-    get: <Row extends Asset = Asset>(oid: string, select?: string[]) => rest1.get<Row>(this.transport, oid, select),
-    history: <Row extends Asset = Asset>(target: string, params: rest1.ReadParams) => rest1.history<Row>(this.transport, target, params),
-    template: <F extends From>(type: F, options?: { ctx?: Oid }) => rest1.template<TypeOf<F>>(this.transport, type, options),
-    operate: (oid: Oid, op: string) => rest1.operate(this.transport, oid, op)
+    list: <Row extends Asset = Asset>(type: string, params: rest1.ReadParams) => rest1.list<Row>(this.transport, type, params)
   };
 
-  /** Copy an asset (the server's Copy operation) and answer the copy's OID: the one thing api/asset's `execute: "Copy"` does not say. */
+  /**
+   * An asset's history: one row per version, newest paging as asked, each
+   * row's `_oid` carrying its moment (`Story:1234:5678`). `target` is an
+   * OID token, or an asset type for the history of every asset of it.
+   */
+  history<Row extends Asset = Asset>(target: string, params: rest1.ReadParams): Promise<rest1.ReadResult<Row>> {
+    return rest1.history<Row>(this.transport, target, params);
+  }
+
+  /**
+   * A new asset's template: what the type's initializer would fill in for
+   * a context (a Timebox's next name and dates in a schedule's scope, a
+   * Story's carry-over from a Request). Nothing is created.
+   */
+  template<F extends From>(type: F, options?: { ctx?: Oid }): Promise<rest1.Template<TypeOf<F>>> {
+    return rest1.template<TypeOf<F>>(this.transport, type, options);
+  }
+
+  /**
+   * Run an operation for its result: the asset the server answered with
+   * and its new moment. `send` with an `execute` performs the same
+   * operations but does not say what a Copy made; this does. Never resent.
+   */
+  operate(oid: Oid, op: string): Promise<rest1.OperationResult> {
+    return rest1.operate(this.transport, oid, op);
+  }
+
+  /** Copy an asset (the server's Copy operation) and answer the copy's OID. */
   async copy(oid: Oid): Promise<Oid> {
     return (await rest1.operate(this.transport, oid, "Copy")).oid;
   }
@@ -286,71 +339,75 @@ export class AgilityApiClient {
     visibleByAsset: (oid: Oid) => fields.visibleFieldsByAsset(this.transport, oid)
   };
 
-  /** @deprecated since 1.0.0-alpha.3: use `client.query` / `client.queries` (the same endpoint, query.v1; only the name moved). Removed in 1.0.0. */
-  readonly queryV1 = {
-    query: <Row extends Asset = Asset>(q: assetApi.QueryBody) => this.query<Row>(q),
-    queries: <Row extends Asset = Asset>(qs: assetApi.QueryBody[]) => this.queries<Row>(qs)
-  };
-
   // ---- writes -----------------------------------------------------------------------
 
-  /** api/asset: batches, answered in the model's terms. */
-  readonly assets = {
-    /**
-     * Send a batch. The Outcome says what it did — created, modified and
-     * operated OIDs, failures by index (each with its parsed violation),
-     * query rows per query command — and never the envelope. api/asset
-     * commits per command and answers 200 either way, so a failed command
-     * is in `failures`, or thrown as a CommandFailureError with
-     * `throwOnFailure` (the error carries the same Outcome).
-     */
-    send: async <Row extends Asset = Asset>(commands: assetApi.Command[], options?: Omit<assetApi.SendOptions, "lookup" | "previewOnly">): Promise<assetApi.Outcome<Row>> => {
-      await this.schema.ensureFor(commands);
-      return assetApi.outcomeOf(await assetApi.send<Row>(this.transport, commands, { ...options, lookup: this.schema }));
-    },
-    /** The server's projection of a batch: one command per asset it would touch, nothing applied. */
-    preview: (commands: assetApi.Command[]) => assetApi.preview(this.transport, commands),
-    /**
-     * Send as a compare-and-set: each asset is changed only if nobody has
-     * changed it since the preview read it; the rest come back `skipped`.
-     * Throws UnguardableError, before any request, for shapes it cannot
-     * cover.
-     */
-    sendGuarded: async <Row extends Asset = Asset>(commands: assetApi.Command[], options?: Pick<assetApi.SendOptions, "throwOnFailure">) => {
-      await this.schema.ensureFor(commands);
-      return guard.sendGuarded<Row>(this.transport, commands, { ...options, lookup: this.schema });
-    },
-    /** @deprecated since 1.0.0-alpha.3: use `client.query` (rows, through query.v1) or `client.queryPage` (rows and a total, through api/asset as this does). Removed in 1.0.0. */
-    query: async <Row extends Asset = Asset>(q: assetApi.QueryBody) => {
-      await this.schema.ensureFor([q]);
-      return assetApi.query<Row>(this.transport, q, { lookup: this.schema });
-    },
-    /** @deprecated since 1.0.0-alpha.3: use `client.queries`. Removed in 1.0.0. */
-    queries: async <Row extends Asset = Asset>(qs: assetApi.QueryBody[]) => {
-      await this.schema.ensureFor(qs);
-      return assetApi.queries<Row>(this.transport, qs, { lookup: this.schema });
-    }
-  };
+  /**
+   * Send a batch (api/asset). The Outcome says what it did — created,
+   * modified and operated OIDs, failures by index (each with its parsed
+   * violation), query rows per query command — and never the envelope.
+   * The server commits per command and answers 200 either way, so a
+   * failed command is in `failures`, or thrown as a CommandFailureError
+   * with `throwOnFailure` (the error carries the same Outcome). A command
+   * addressed to one asset by OID that did nothing and reported nothing
+   * (the asset is gone) is in `unmatched`: the server calls that a
+   * success. Not guarded: it writes
+   * whatever is there now. `sendGuarded` is the
+   * compare-and-set.
+   */
+  async send<Row extends Asset = Asset>(commands: assetApi.Command[], options?: Omit<assetApi.SendOptions, "lookup" | "previewOnly">): Promise<assetApi.Outcome<Row>> {
+    await this.schema.ensureFor(commands);
+    const outcome = assetApi.outcomeOf(await assetApi.send<Row>(this.transport, commands, { ...options, lookup: this.schema }));
+    outcome.unmatched = assetApi.unmatchedOf(commands, outcome);
+    return outcome;
+  }
+
+  /** The server's projection of a batch: one command per asset it would touch, nothing applied. */
+  preview(commands: assetApi.Command[]): Promise<assetApi.Command[]> {
+    return assetApi.preview(this.transport, commands);
+  }
 
   /**
-   * Services: what a person types, turned into assets. Numbers resolve in
-   * one api/asset request across every number root; an OID token is taken
-   * as is.
+   * Send as a compare-and-set: each asset is changed only if nobody has
+   * changed it since it was read. The result is a plain send's Outcome
+   * plus `conflicts`: the assets whose command matched nothing, because
+   * someone changed them (or they are gone); nothing was applied to those.
+   * By default the moment is read just before the send; pass `moments`
+   * to guard on the version a person saw earlier (select `Moment` with the
+   * row you show, keep it, pass it here). With `throwOnFailure` a failed
+   * command throws a CommandFailureError and a conflict a ConflictError
+   * (kind "conflict"). Throws UnguardableError, before any write, for
+   * shapes it cannot cover. What it cannot see: a change that makes no new
+   * version of the asset, such as a child added to it.
+   */
+  async sendGuarded<Row extends Asset = Asset>(commands: assetApi.Command[], options?: Omit<guard.GuardedOptions, "lookup">): Promise<guard.GuardedResult<Row>> {
+    await this.schema.ensureFor(commands);
+    return guard.sendGuarded<Row>(this.transport, commands, { ...options, lookup: this.schema });
+  }
+
+  /**
+   * Services: what a person types, turned into assets, each answered as a
+   * row (`_oid`, `AssetType`, `Number`, `Name`, `AssetState`). Numbers
+   * resolve in one api/asset request across every number root; `ref`
+   * takes an OID token as given, without a request; `refs` reads a mixed
+   * list.
    */
   readonly resolve = {
     numbers: (numbers: readonly string[]) => resolve.resolveNumbers(this.transport, numbers, { types: this.schema.cache }),
-    ref: (spec: string) => resolve.resolveRef(this.transport, spec, { types: this.schema.cache })
+    ref: (spec: string) => resolve.resolveRef(this.transport, spec, { types: this.schema.cache }),
+    /** Numbers and OID tokens mixed, each one read (Number, Name, AssetState where its type has them): two requests at most. */
+    refs: (specs: readonly string[]) => resolve.resolveRefs(this.transport, this.schema, specs, { types: this.schema.cache })
   };
 
   /**
    * A batch with a record: preview, snapshot what it overwrites, (confirm,)
-   * send guarded, and a receipt with created/touched/skipped assets and a
-   * reverse batch. `reversible` drops from a receipt's reverse the assets
-   * changed since, unless forced.
+   * send — guarded or not, as `guard` says; it has no default — and a
+   * receipt with the created, touched and conflicting assets and a reverse
+   * batch. `reversible` drops from a receipt's reverse the assets changed
+   * since, unless forced.
    */
   readonly batch = {
-    run: (commands: assetApi.Command[], options?: batch.BatchOptions) => batch.runBatch(this.transport, this.schema, commands, options),
-    reversible: (receipt: Pick<batch.Receipt, "reverse" | "after">, options?: { force?: boolean }) => batch.reversible(this.transport, receipt, options)
+    run: (commands: assetApi.Command[], options: batch.BatchOptions) => batch.runBatch(this.transport, this.schema, commands, options),
+    reversible: (receipt: batch.ReversibleReceipt, options?: { force?: boolean }) => batch.reversible(this.transport, receipt, options)
   };
 
   /**
@@ -368,9 +425,7 @@ export class AgilityApiClient {
     get: (id: string | number, options?: attachments.GetOptions) => attachments.get(this.transport, id, options),
     add: (asset: string, data: attachment.Bytes, options: attachments.AddOptions) => attachments.add(this.transport, asset, data, options),
     put: (id: string | number, data: attachment.Bytes, contentType?: string) => attachments.put(this.transport, id, data, contentType),
-    remove: (id: string | number) => attachments.remove(this.transport, id),
-    /** @deprecated since 1.0.0-alpha.3: `client.urls.attachment`. Removed in 1.0.0. */
-    url: (id: string | number) => this.urls.attachment(id)
+    remove: (id: string | number) => attachments.remove(this.transport, id)
   };
 
   /**
@@ -381,8 +436,6 @@ export class AgilityApiClient {
    */
   readonly embeddedImages = {
     upload: (asset: string, data: attachment.Bytes, options?: { filename?: string; contentType?: string }) => attachment.uploadEmbeddedImage(this.transport, asset, data, options),
-    /** @deprecated since 1.0.0-alpha.3: `client.urls.embeddedImage`. Removed in 1.0.0. */
-    url: (id: string | number) => this.urls.embeddedImage(id),
     normalize: (html: string) => attachment.normalizeEmbeddedImageUrls(html, this.config.baseUrl)
   };
 

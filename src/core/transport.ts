@@ -36,6 +36,15 @@ export interface RequestOptions {
    */
   onResponse?: (response: { status: number; headers: { get(name: string): string | null } }) => void;
   /**
+   * False: a refusal of this request (a 401, or another status the
+   * transport treats as "not signed in") is answered as an error straight
+   * away, without calling the transport's re-authentication hook. For the
+   * request a hook itself sends to ask whether the session is alive: sent
+   * through the same transport without this, its own refusal would call
+   * the hook that is waiting for it.
+   */
+  reauthorize?: boolean;
+  /**
    * The request is conditional (an If-None-Match header is set) and a
    * 304 Not Modified is an answer, not a failure: the promise then resolves
    * to undefined after onResponse has seen the 304 and its headers.
