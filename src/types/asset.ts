@@ -73,3 +73,23 @@ export interface CustomAttributes {
 export interface Asset extends CustomAttributes {
   _oid: Oid;
 }
+
+/**
+ * What an AssetState means for someone deciding what to do with the asset:
+ * "open" (Future, Active), "closed" (Closed), "template" (Template),
+ * "deleted" (Dead, Deleted), or "other" for the server's two rare states
+ * (OldBrokenDownStory, Deprecated) and anything unknown. Takes a name or a
+ * code, as assetStateOf does; null for no value.
+ */
+export function assetStateKind(value: unknown): "open" | "closed" | "template" | "deleted" | "other" | null {
+  switch (assetStateOf(value)) {
+    case null: return null;
+    case "Future":
+    case "Active": return "open";
+    case "Closed": return "closed";
+    case "Template": return "template";
+    case "Dead":
+    case "Deleted": return "deleted";
+    default: return "other";
+  }
+}

@@ -131,6 +131,16 @@ export interface Outcome<Row extends Asset = Asset> {
   failures: CommandFailureDetail[];
   /** One slot per query, in request order; null where the query failed. */
   queryResults: (Row[] | null)[];
+  /**
+   * Indexes, in the batch as sent, of updates and operations addressed to
+   * one asset by its OID (`from: "Story:1"`) that matched nothing: the
+   * asset is not in `modified` / `operated` and no failure names the
+   * command. The server answers such a command with success and silence —
+   * the asset is gone. (An operation its type does not have is a failure,
+   * not this.) Empty for a command scoped by a query, where matching
+   * nothing is an answer, and for a guarded send, which says `conflicts`.
+   */
+  unmatched: number[];
   durationSeconds: number | null;
 }
 

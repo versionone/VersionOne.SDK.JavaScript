@@ -50,8 +50,8 @@ npm test
 | Text search across types, a total, deleted assets | `client.data.list(type, params)` | rest-1: `find` / `findin`, `Story.Number` from `BaseAsset`, `deleted: true`. |
 | An asset's past versions | `client.history(oid, params)` | One row per version; `_oid` carries the moment. |
 | Who am I | `client.me()` | The member the credentials belong to. |
-| Numbers a person typed | `client.resolve.numbers([...])` / `client.resolve.ref(spec)` | One request for any mix of types. |
-| Write | `client.send(commands)` | Unguarded: writes whatever is there. Answers an `Outcome`. |
+| Numbers and OIDs a person typed | `client.resolve.numbers([...])` / `client.resolve.refs([...])` | Answered as rows. One request for numbers of any mix of types. |
+| Write | `client.send(commands)` | Unguarded: writes whatever is there. Answers an `Outcome`; `unmatched` lists commands whose asset was gone. |
 | Write only if nobody changed it | `client.sendGuarded(commands, { moments? })` | `conflicts` lists what was left alone. |
 | Write with a record and an undo | `client.batch.run(commands, { guard })` then `client.batch.reversible(receipt)` | `guard` has no default. |
 | Copy an asset, or run an operation for its result | `client.copy(oid)` / `client.operate(oid, op)` | |

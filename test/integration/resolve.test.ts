@@ -34,15 +34,32 @@ describeInstance("resolve (live)", () => {
   it("one request resolves a workitem's number and another root's, case-insensitively, and reports the number nothing has as missing — the expect-zero control", async () => {
     const res = await client.resolve.numbers([story.number.toLowerCase(), issue.number, "S-999999999"]);
     expect(res.found).toEqual([
-      { number: story.number, oid: story.oid, type: "Story", name: expect.stringContaining("resolve story"), assetState: "Active" },
-      { number: issue.number, oid: issue.oid, type: "Issue", name: expect.stringContaining("resolve issue"), assetState: "Active" }
+      { _oid: story.oid, AssetType: "Story", Number: story.number, Name: expect.stringContaining("resolve story"), AssetState: "Active" },
+      { _oid: issue.oid, AssetType: "Issue", Number: issue.number, Name: expect.stringContaining("resolve issue"), AssetState: "Active" }
     ]);
     expect(res.missing).toEqual(["S-999999999"]);
   });
 
   it("ref resolves a number, and takes an OID token as given", async () => {
-    expect(await client.resolve.ref(issue.number)).toMatchObject({ oid: issue.oid, type: "Issue" });
-    expect(await client.resolve.ref(story.oid)).toMatchObject({ oid: story.oid, number: null });
+    expect(await client.resolve.ref(issue.number)).toMatchObject({ _oid: issue.oid, AssetType: "Issue" });
+    expect(await client.resolve.ref(story.oid)).toMatchObject({ _oid: story.oid, Number: null });
     expect(await client.resolve.ref("I-999999999")).toBeNull();
+  });
+
+  it("refs reads numbers and OID tokens mixed, in the order asked, in two requests; what names nothing is missing", async () => {
+    const calls: string[] = [];
+    const counting = new AgilityApiClient({ baseUrl: instance!.url }, { transport: { request: (o) => { if (!o.path.startsWith("/meta.v1")) calls.push(o.path); return t.request(o); } }, types: client.schema.cache });
+    await counting.schema.load("Story"); await counting.schema.load("Issue"); await counting.schema.load("Member");
+    const me = await client.me();
+    calls.length = 0;
+    const res = await counting.resolve.refs([issue.oid, story.number.toLowerCase(), me._oid, "Story:999999999", "S-999999999", `${story.oid}:1`]);
+    expect(calls).toEqual(["/api/asset", "/api/asset"]);
+    expect(res.found).toEqual([
+      { _oid: issue.oid, AssetType: "Issue", Number: issue.number, Name: expect.stringContaining("resolve issue"), AssetState: "Active" },
+      { _oid: story.oid, AssetType: "Story", Number: story.number, Name: expect.stringContaining("resolve story"), AssetState: "Active" },
+      { _oid: me._oid, AssetType: "Member", Number: null, Name: me.Name, AssetState: "Active" }, // a Member has no Number: not asked for, so the query is not refused
+      { _oid: story.oid, AssetType: "Story", Number: story.number, Name: expect.stringContaining("resolve story"), AssetState: "Active" }
+    ]);
+    expect(res.missing).toEqual(["Story:999999999", "S-999999999"]);
   });
 });

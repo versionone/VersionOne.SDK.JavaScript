@@ -69,6 +69,31 @@ describeInstance("client reads (live)", () => {
     }
   });
 
+  it("a command addressed to one asset that is gone did nothing and is in `unmatched` (the server calls it a success); one that applied, a no-op and a refused one are not", async () => {
+    const me = await client.me();
+    const made = await client.send([
+      { "@c": { AssetType: "Conversation" } },
+      { AssetType: "Expression", Author: me._oid, AuthoredAt: new Date().toISOString(), Content: fixtureName("unmatched"), BelongsTo: "@c" },
+      { AssetType: "Story", Name: fixtureName("unmatched"), Scope: "Scope:0" }
+    ], { throwOnFailure: true });
+    const [conversation, expression, story] = made.created as [string, string, string];
+    expect(made.unmatched).toEqual([]);
+    try {
+      // The control: an update and an operation that do apply are not flagged, a no-op update included.
+      const applied = await client.send([{ from: story, update: { Name: fixtureName("unmatched renamed") } }, { from: story, update: { Estimate: null } }, { from: story, execute: "QuickClose" }]);
+      expect(applied).toMatchObject({ unmatched: [], failures: [] });
+      // An operation the type does not have is a failure, which is an answer: not also flagged.
+      const refused = await client.send([{ from: conversation, execute: "Delete" }]);
+      expect(refused).toMatchObject({ operated: [], unmatched: [], failures: [{ index: 0, message: "Unknown Operation 'Conversation.Delete'" }] });
+    } finally {
+      await client.send([{ from: story, execute: "Reactivate" }]);
+      await client.send([{ from: story, execute: "Delete" }, { from: expression, execute: "Delete" }]);
+    }
+    // Both are gone now (the Conversation went with its last Expression): an update by OID matches nothing, and says so.
+    expect(await client.send([{ from: story, update: { Name: "x" } }, { from: conversation, execute: "Join" }])).toMatchObject({ modified: [], operated: [], failures: [], unmatched: [0, 1] });
+    expect(await client.get(conversation)).toBeNull();
+  });
+
   it("the asset page URL answers for a real asset (assetdetail.v1 redirects to the type's detail page)", async () => {
     const me = await client.me();
     const response = await fetch(client.urls.asset(me._oid), { headers: { authorization: `Bearer ${process.env.V1_ACCESS_TOKEN ?? ""}` }, redirect: "manual" });

@@ -316,13 +316,18 @@ export class AgilityApiClient {
    * violation), query rows per query command — and never the envelope.
    * The server commits per command and answers 200 either way, so a
    * failed command is in `failures`, or thrown as a CommandFailureError
-   * with `throwOnFailure` (the error carries the same Outcome). Not
-   * guarded: it writes whatever is there now. `sendGuarded` is the
+   * with `throwOnFailure` (the error carries the same Outcome). A command
+   * addressed to one asset by OID that did nothing and reported nothing
+   * (the asset is gone) is in `unmatched`: the server calls that a
+   * success. Not guarded: it writes
+   * whatever is there now. `sendGuarded` is the
    * compare-and-set.
    */
   async send<Row extends Asset = Asset>(commands: assetApi.Command[], options?: Omit<assetApi.SendOptions, "lookup" | "previewOnly">): Promise<assetApi.Outcome<Row>> {
     await this.schema.ensureFor(commands);
-    return assetApi.outcomeOf(await assetApi.send<Row>(this.transport, commands, { ...options, lookup: this.schema }));
+    const outcome = assetApi.outcomeOf(await assetApi.send<Row>(this.transport, commands, { ...options, lookup: this.schema }));
+    outcome.unmatched = assetApi.unmatchedOf(commands, outcome);
+    return outcome;
   }
 
   /** The server's projection of a batch: one command per asset it would touch, nothing applied. */
@@ -349,13 +354,17 @@ export class AgilityApiClient {
   }
 
   /**
-   * Services: what a person types, turned into assets. Numbers resolve in
-   * one api/asset request across every number root; an OID token is taken
-   * as is.
+   * Services: what a person types, turned into assets, each answered as a
+   * row (`_oid`, `AssetType`, `Number`, `Name`, `AssetState`). Numbers
+   * resolve in one api/asset request across every number root; `ref`
+   * takes an OID token as given, without a request; `refs` reads a mixed
+   * list.
    */
   readonly resolve = {
     numbers: (numbers: readonly string[]) => resolve.resolveNumbers(this.transport, numbers, { types: this.schema.cache }),
-    ref: (spec: string) => resolve.resolveRef(this.transport, spec, { types: this.schema.cache })
+    ref: (spec: string) => resolve.resolveRef(this.transport, spec, { types: this.schema.cache }),
+    /** Numbers and OID tokens mixed, each one read (Number, Name, AssetState where its type has them): two requests at most. */
+    refs: (specs: readonly string[]) => resolve.resolveRefs(this.transport, this.schema, specs, { types: this.schema.cache })
   };
 
   /**

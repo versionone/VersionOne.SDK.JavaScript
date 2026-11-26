@@ -20,7 +20,7 @@
 import { UsageError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import { assetStateOf, type Asset, type AssetStateValue, type Oid } from "../types/asset";
-import type { TypeCache } from "./schema";
+import type { Schema, TypeCache } from "./schema";
 import type { AssetTypeToken } from "../types/metamodel";
 import { isOidToken, momentless, typeOfOid } from "../types/oid";
 import * as assetApi from "../wire/assetApi";
@@ -62,19 +62,24 @@ export const isAssetNumber = (text: string): boolean => /^[A-Za-z]+-\d+$/.test(t
 /** How many numbers one request asks about: bounded, never one giant filter. */
 export const CHUNK = 100;
 
+/**
+ * A resolved asset: a row, under the names every row uses, with what
+ * resolving reads. `Number` is null for an asset that has none (or for an
+ * OID token taken as given by `ref`), `Name` and `AssetState` likewise.
+ */
 export interface ResolvedAsset {
-  /** The number as the server spells it; null for a ref given as an OID token. */
-  number: string | null;
-  oid: Oid;
-  type: AssetTypeToken;
-  name: string | null;
-  assetState: AssetStateValue | null;
+  _oid: Oid;
+  AssetType: AssetTypeToken;
+  /** The number as the server spells it. */
+  Number: string | null;
+  Name: string | null;
+  AssetState: AssetStateValue | null;
 }
 
 export interface Resolution {
-  /** In the order the numbers were asked for, one per distinct number found. */
+  /** In the order asked for, one per distinct number (or OID) found. */
   found: ResolvedAsset[];
-  /** Numbers no root knows, as they were asked for. */
+  /** What nothing answered to, as it was asked for. */
   missing: string[];
 }
 
@@ -131,7 +136,7 @@ export async function resolveNumbers(transport: Transport, numbers: readonly str
     for (const r of await askRoots(transport, asked.slice(i, i + CHUNK), options.types)) {
       if (!r.Number || byNumber.has(r.Number.toUpperCase())) continue;
       const oid = momentless(r._oid);
-      byNumber.set(r.Number.toUpperCase(), { number: r.Number, oid, type: typeOfOid(oid), name: r.Name ?? null, assetState: assetStateOf(r.AssetState) as AssetStateValue | null });
+      byNumber.set(r.Number.toUpperCase(), { _oid: oid, AssetType: typeOfOid(oid), Number: r.Number, Name: r.Name ?? null, AssetState: assetStateOf(r.AssetState) as AssetStateValue | null });
     }
   }
   return {
@@ -142,12 +147,50 @@ export async function resolveNumbers(transport: Transport, numbers: readonly str
 
 /**
  * One asset by whichever shape the person has: an OID token (Story:1234 —
- * used as is, no request, so `number` and `name` are null) or a number
- * (resolved; null when no root knows it). Anything else is a TypeError.
+ * used as is, no request, so `Number`, `Name` and `AssetState` are null) or
+ * a number (resolved; null when no root knows it). Anything else is a
+ * UsageError. `resolveRefs` reads OID tokens too.
  */
 export async function resolveRef(transport: Transport, spec: string, options: { types?: TypeCache } = {}): Promise<ResolvedAsset | null> {
   const text = spec.trim();
-  if (isOidToken(text)) { const oid = momentless(text); return { number: null, oid, type: typeOfOid(oid), name: null, assetState: null }; }
+  if (isOidToken(text)) { const oid = momentless(text); return { _oid: oid, AssetType: typeOfOid(oid), Number: null, Name: null, AssetState: null }; }
   if (isAssetNumber(text)) return (await resolveNumbers(transport, [text], options)).found[0] ?? null;
   throw new UsageError(`"${spec}" is neither an asset number (S-1234) nor an OID token (Story:1234)`);
+}
+
+/**
+ * Several refs at once, numbers and OID tokens mixed, as a message or a
+ * command line mentions them: every one is read, so each answer carries its
+ * Number, Name and AssetState where its type has them, and one that names
+ * nothing is `missing`. Two requests at most, however many refs: one for
+ * the numbers (every number root asked at once), one for the OID tokens
+ * (one query per asset type among them). `schema` says which of the three
+ * attributes each OID's type has; an unknown select would fail the query.
+ */
+export async function resolveRefs(transport: Transport, schema: Schema, specs: readonly string[], options: { types?: TypeCache } = {}): Promise<Resolution> {
+  const asked = [...new Map(specs.map((s) => [s.trim().toUpperCase(), s.trim()])).values()];
+  const invalid = asked.filter((s) => !isOidToken(s) && !isAssetNumber(s));
+  if (invalid.length) throw new UsageError(`neither asset numbers (S-1234) nor OID tokens (Story:1234): ${invalid.join(", ")}`);
+  const numbers = asked.filter((s) => !isOidToken(s));
+  const byNumber = new Map((numbers.length ? (await resolveNumbers(transport, numbers, options)).found : []).map((r) => [r.Number!.toUpperCase(), r]));
+  const oids = [...new Set(asked.filter(isOidToken).map(momentless))];
+  const byType = new Map<AssetTypeToken, Oid[]>();
+  for (const oid of oids) byType.set(typeOfOid(oid), [...(byType.get(typeOfOid(oid)) ?? []), oid]);
+  const queries: assetApi.QueryBody[] = [];
+  for (const [type, list] of byType) {
+    // A type the instance does not have has no assets: its OIDs are simply missing.
+    if (!(await schema.load(type))) continue;
+    for (let i = 0; i < list.length; i += CHUNK) {
+      const part = list.slice(i, i + CHUNK);
+      queries.push({ from: type, select: ["Number", "Name", "AssetState"].filter((a) => schema.attribute(type, a)), filter: ["ID=$oids"], with: { $oids: part }, page: { size: part.length, start: 0 } });
+    }
+  }
+  const byOid = new Map<Oid, ResolvedAsset>();
+  for (const r of (queries.length ? await assetApi.queries<Row>(transport, queries) : []).flat()) {
+    const oid = momentless(r._oid);
+    byOid.set(oid, { _oid: oid, AssetType: typeOfOid(oid), Number: r.Number ?? null, Name: r.Name ?? null, AssetState: assetStateOf(r.AssetState) as AssetStateValue | null });
+  }
+  const isOid = (spec: string): boolean => isOidToken(spec);
+  const answer = (spec: string): ResolvedAsset | undefined => (isOid(spec) ? byOid.get(momentless(spec)) : byNumber.get(spec.toUpperCase()));
+  return { found: asked.flatMap((s) => answer(s) ?? []), missing: asked.filter((s) => !answer(s)) };
 }

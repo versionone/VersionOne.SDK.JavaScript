@@ -130,8 +130,26 @@ Each entry has the line a consumer follows to migrate.
   a required single relation without a null check gets a compile error
   and needs the check.
 
+- **A resolved asset is a row**: `client.resolve.numbers` and `ref`
+  answer `{ _oid, AssetType, Number, Name, AssetState }`, the names every
+  row uses. Migration: `oid` → `_oid`; `type` → `AssetType`; `number` →
+  `Number`; `name` → `Name`; `assetState` → `AssetState`.
+
 ### Added
 
+- **`client.resolve.refs(specs)`**: numbers and OID tokens mixed, each
+  one read, in two requests at most; what names nothing is `missing`.
+- **`Outcome.unmatched`**: the indexes of updates and operations
+  addressed to one asset by OID that did nothing and reported nothing,
+  because the asset is gone. The server answers such a command with
+  success; a caller that checked `operated.length === 0` by hand reads
+  this instead. (A command that applied without changing a value, and
+  one the server refused, are not in it.)
+- `assetStateKind(value)`: an AssetState name or code as `"open"`,
+  `"closed"`, `"template"`, `"deleted"` or `"other"`.
+- The fetch transport calls the global `fetch` as it is at each request
+  (it captured it when the transport was made), so a stub installed
+  later is used without passing `fetchImpl`.
 - A read's explicit row type can be the caller's own: `client.query<Card>(…)`
   needs only `_oid` on `Card`, not the SDK's `Asset`.
 - `ReadResult.more` on rest-1 reads, as on `queryPage`.

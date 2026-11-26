@@ -27,7 +27,7 @@
 import { ApiError, UsageError } from "../core/errors";
 import type { Transport } from "../core/transport";
 import type { Asset, Oid, Ref } from "../types/asset";
-import { parseViolation, type Command, type CommandFailureDetail, type CommandValue, type Outcome, type QueryBody } from "../types/command";
+import { parseViolation, type Command, type CommandFailureDetail, type CommandValue, type ExecuteBody, type Outcome, type QueryBody, type UpdateBody } from "../types/command";
 import type { AssetTypeToken, AttributeLookup, AttributeTokenRef, AttributeType } from "../types/metamodel";
 import { momentless } from "../types/oid";
 import { fromTypeOf, resolvePath, type PathResolution } from "./select";
@@ -200,12 +200,13 @@ export function outcomeOf<Row extends Asset = Asset>(response: AssetApiResponse<
     operated: (response.assetsOperatedOn?.oidTokens ?? []).map(momentless),
     failures: failuresOf(response),
     queryResults: response.queryResult?.results ?? [],
+    unmatched: [],
     durationSeconds: typeof response.durationSeconds === "number" ? response.durationSeconds : null
   };
 }
 
 /** An outcome with nothing in it, to merge several sends into. */
-export const emptyOutcome = <Row extends Asset = Asset>(): Outcome<Row> => ({ requestId: null, created: [], modified: [], operated: [], failures: [], queryResults: [], durationSeconds: null });
+export const emptyOutcome = <Row extends Asset = Asset>(): Outcome<Row> => ({ requestId: null, created: [], modified: [], operated: [], failures: [], queryResults: [], unmatched: [], durationSeconds: null });
 
 /**
  * Add one send's outcome to another's, for a batch sent in several
@@ -221,6 +222,28 @@ export function mergeOutcome<Row extends Asset = Asset>(into: Outcome<Row>, done
   into.requestId = null; // several sends, several ids: none is "the" request
   if (done.durationSeconds !== null) into.durationSeconds = (into.durationSeconds ?? 0) + done.durationSeconds;
   return into;
+}
+
+/**
+ * The commands of a batch that addressed one asset by OID and matched
+ * nothing (see Outcome.unmatched). An update that matched is in `modified`
+ * even when it changed no value, and an operation that ran is in
+ * `operated`, so absence from both with no failure is "nothing was there to
+ * act on". Aliased commands are left out: an alias's target is not known
+ * from the request.
+ */
+export function unmatchedOf(commands: readonly Command[], outcome: Pick<Outcome, "modified" | "operated" | "failures">): number[] {
+  const failed = new Set(outcome.failures.map((f) => f.index));
+  // A failure the server could not place may be any command: claim nothing.
+  if (failed.has(null)) return [];
+  const modified = new Set(outcome.modified.map(momentless)), operated = new Set(outcome.operated.map(momentless));
+  return commands.flatMap((c, index) => {
+    const body = c as Partial<UpdateBody & ExecuteBody>;
+    if (typeof body.from !== "string" || !/^[A-Za-z][A-Za-z0-9_]*:\d+(:\d+)?$/.test(body.from) || failed.has(index)) return [];
+    if ("update" in body) return modified.has(momentless(body.from)) ? [] : [index];
+    if ("execute" in body) return operated.has(momentless(body.from)) ? [] : [index];
+    return [];
+  });
 }
 
 /**

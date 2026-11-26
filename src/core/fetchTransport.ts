@@ -144,7 +144,6 @@ function retryDelay(response: { status: number; headers: { get(name: string): st
 const retriable = (status: number): boolean => status === 429 || status >= 500;
 
 export function createFetchTransport(config: FetchTransportConfig): Transport {
-  const fetchImpl = config.fetchImpl ?? fetch;
   const timeoutMs = config.timeoutMs ?? 60_000;
   const retries = Math.max(0, config.retries ?? 1);
   const authorization = config.authorization ?? (config.accessToken ? `Bearer ${config.accessToken}` : undefined);
@@ -180,7 +179,8 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
         try {
           const init: RequestInit = { method: options.method, headers, body, signal: controller.signal };
           if (config.credentials) init.credentials = config.credentials;
-          response = await fetchImpl(url, init);
+          // Looked up at each request, not when the transport was made: whatever replaces the global fetch later (a test's stub, an instrumented fetch) is what gets called.
+          response = await (config.fetchImpl ?? globalThis.fetch)(url, init);
         } catch (error) {
           settle();
           // The caller gave up: final, whatever attempt this was.

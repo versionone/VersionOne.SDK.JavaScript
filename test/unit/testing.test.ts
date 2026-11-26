@@ -111,10 +111,10 @@ describe("FakeAgilityClient", () => {
       .onQuery("Story", [{ _oid: "Story:1", Number: "S-01001", Name: "Logon", AssetState: "Active" }])
       .onQuery("Defect", { rows: [{ _oid: "Defect:9", Number: "D-00009", Name: "Crash", AssetState: "Closed" }] });
     expect(await fake.resolve.numbers(["d-00009", "S-01001", "S-99999"])).toEqual({
-      found: [{ number: "D-00009", oid: "Defect:9", type: "Defect", name: "Crash", assetState: "Closed" }, { number: "S-01001", oid: "Story:1", type: "Story", name: "Logon", assetState: "Active" }],
+      found: [{ _oid: "Defect:9", AssetType: "Defect", Number: "D-00009", Name: "Crash", AssetState: "Closed" }, { _oid: "Story:1", AssetType: "Story", Number: "S-01001", Name: "Logon", AssetState: "Active" }],
       missing: ["S-99999"]
     });
-    expect(await fake.resolve.ref("S-01001")).toMatchObject({ oid: "Story:1" });
+    expect(await fake.resolve.ref("S-01001")).toMatchObject({ _oid: "Story:1" });
     expect(await new FakeAgilityClient().resolve.ref("S-1")).toBeNull();
   });
 

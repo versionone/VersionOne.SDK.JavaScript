@@ -6,7 +6,9 @@ import { ApiError, UsageError } from "../../src/core/errors";
 import type { RequestOptions, Transport } from "../../src/core/transport";
 import { Schema } from "../../src/services/schema";
 import type { Story } from "../../src/types/assets/Story";
-import { CommandFailureError, type AssetApiResponse } from "../../src/wire/assetApi";
+import { createFetchTransport } from "../../src/core/fetchTransport";
+import { assetStateKind } from "../../src/types/asset";
+import { CommandFailureError, unmatchedOf, type AssetApiResponse } from "../../src/wire/assetApi";
 import { toMetamodel, type MetamodelDocument } from "../../src/wire/meta";
 
 /**
@@ -27,6 +29,43 @@ const envelope = (over: Partial<AssetApiResponse> = {}): AssetApiResponse => ({
   requestId: "r", createdDate: "", completedDate: "", duration: "", durationSeconds: 0.1, complete: true, processing: false,
   assetsCreated: { oidTokens: [], count: 0 }, assetsModified: { oidTokens: [], count: 0 }, assetsOperatedOn: { oidTokens: [], count: 0 },
   commandFailures: { commands: [], count: 0 }, queryResult: { results: [], resultMetaData: [], count: 0 }, ...over
+});
+
+describe("unmatched, asset state kinds and the fetch a transport calls", () => {
+  it("unmatchedOf flags an update or operation by OID that is in neither list and has no failure; a query-scoped or aliased command, a failed one, and a failure nobody can place are not flagged", () => {
+    const commands = [
+      { from: "Story:1", update: { Name: "a" } },          // applied
+      { from: "Story:2:77", update: { Name: "b" } },       // nothing: gone
+      { from: "Conversation:3", execute: "Delete" },       // nothing: no such operation
+      { from: "Story:4", execute: "QuickClose" },          // failed
+      { from: "Story", filter: ["Number='S-0'"], update: { Name: "c" } }, // matching nothing is an answer
+      { "@u": { from: "Story:5", update: { Name: "d" } } },  // aliased: not known from the request
+      { from: "Story:6", select: ["Name"], page: { size: 1, start: 0 } },
+      { AssetType: "Story", Name: "new" }
+    ] as never[];
+    const failure = (index: number | null) => ({ index, message: "x", violation: null, echoed: {} });
+    expect(unmatchedOf(commands, { modified: ["Story:1:900"], operated: [], failures: [failure(3)] })).toEqual([1, 2]);
+    expect(unmatchedOf(commands, { modified: ["Story:1"], operated: [], failures: [failure(null)] })).toEqual([]);
+    // An update does not count as an operation, nor the reverse.
+    expect(unmatchedOf([{ from: "Story:1", execute: "QuickClose" }], { modified: ["Story:1"], operated: [], failures: [] })).toEqual([0]);
+  });
+
+  it("assetStateKind reads a name or a code as what to do with the asset", () => {
+    expect(["Active", "Future", 64, "0"].map(assetStateKind)).toEqual(["open", "open", "open", "open"]);
+    expect(["Closed", 128, "Template", "200", "Dead", 255, "Deleted"].map(assetStateKind)).toEqual(["closed", "closed", "template", "template", "deleted", "deleted", "deleted"]);
+    expect([208, "Deprecated", "Whatever", null, undefined].map(assetStateKind)).toEqual(["other", "other", "other", null, null]);
+  });
+
+  it("the fetch transport calls whatever the global fetch is when the request is made, so a stub installed after the client was built is used", async () => {
+    const transport = createFetchTransport({ baseUrl: "https://x", retries: 0 });
+    const original = globalThis.fetch;
+    const stub = vi.fn(async () => new Response("[[]]", { status: 200, headers: { "content-type": "application/json" } }));
+    globalThis.fetch = stub as unknown as typeof fetch;
+    try {
+      expect(await transport.request({ method: "POST", path: "/query.v1", body: [], responseType: "json" })).toEqual([[]]);
+    } finally { globalThis.fetch = original; }
+    expect(stub).toHaveBeenCalledOnce();
+  });
 });
 
 describe("client: reads", () => {
@@ -140,7 +179,7 @@ describe("outcomeOf: a partial envelope is a contract", () => {
   it("every field has a default, so a fake that sends only queryResult yields a complete Outcome", async () => {
     const { outcomeOf } = await import("../../src/wire/assetApi");
     const o = outcomeOf({ queryResult: { results: [[]], resultMetaData: [], count: 1 } } as never);
-    expect(o).toEqual({ requestId: null, created: [], modified: [], operated: [], failures: [], queryResults: [[]], durationSeconds: null });
+    expect(o).toEqual({ requestId: null, created: [], modified: [], operated: [], failures: [], queryResults: [[]], unmatched: [], durationSeconds: null });
   });
 });
 
