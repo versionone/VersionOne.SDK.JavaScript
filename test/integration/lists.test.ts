@@ -159,6 +159,9 @@ describeInstance("valid values (live)", () => {
     await client.send([{ from: o["noTeam"]!, update: { Status: null } }], { throwOnFailure: true });
   });
 
+  // What the server accepts here is what it accepted when this was written, not a promise: the product has added enforcement
+  // over time. If a release starts refusing one of the "accepted" cases, that is the server getting stricter, not a fault in
+  // the SDK: change the expectation and the README's "Resolve before you write" with it.
   it("on a write, only a story's or defect's Status is checked, and only against the team: any other list value is accepted wherever it comes from", async () => {
     const set = async (story: string, update: Record<string, string | null>) => { const done = await client.send([{ from: story, update }]); return done.failures.length ? done.failures[0]!.message : "accepted"; };
     // Priority, three ways the list says are not valid: the scheme's on a story whose team owns a priority, a team's on a story on no team, one in no scheme.

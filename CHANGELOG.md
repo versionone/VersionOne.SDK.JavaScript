@@ -76,7 +76,10 @@
     status outside the scheme are accepted. Moving a story or defect to
     another project or team clears a status that is not valid there,
     without a failure, unless the same write sets one. A team's
-    workflow rules can still refuse a status the list offers.
+    workflow rules can still refuse a status the list offers. This is
+    what one release does, not a contract: the product has added
+    enforcement over time, so follow the list and do not rely on a
+    value outside it being accepted.
 - **An empty answer could be the server giving up.** When the server
   cannot work out its rule for lack of context it answers no values and
   no error. `client.lists` always sends the project; for a new
