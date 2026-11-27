@@ -47,7 +47,7 @@ describe("validValues wire", () => {
     const refusing = fake(() => { throw apiErrorFromResponse(400, { Exceptions: ["Bad Request", "Reference: 00000000-0000-0000-0000-000000000000"] }); });
     await expect(forNew(refusing, "Story", "Nmae", "Scope:5")).rejects.toMatchObject({ status: 400, kind: "invalid" });
     await expect(forNew(fake(() => ({ nope: 1 })), "Story", "Status", "Scope:5")).rejects.toMatchObject({ code: "BAD_RESPONSE" });
-    // An instance without the endpoint: its 404, never an empty list.
+    // A 404 from the endpoint is thrown as it is, never read as an empty list.
     await expect(forNew(fake(() => { throw new ApiError("Not Found", 404); }), "Story", "Status", "Scope:5")).rejects.toMatchObject({ status: 404 });
   });
 });
@@ -174,7 +174,7 @@ describe("client.lists", () => {
     expect(t.calls.at(-1)!.path).toBe("/api/ValidValues/Story/1077/Status?teamoid=NULL&sel=Name&sort=Order");
   });
 
-  it("a failure is never an empty list: the endpoint's error is thrown, also when it is absent from the instance", async () => {
+  it("a failure is never an empty list: an error from the endpoint is thrown", async () => {
     const gone = fake(() => { throw new ApiError("Not Found", 404); });
     await expect(client(gone).lists.values({ asset: "Story:1", attributes: ["Status"] })).rejects.toMatchObject({ status: 404 });
     await expect(client(gone).lists.value({ asset: "Story:1", attribute: "Status", name: "Done" })).rejects.toMatchObject({ status: 404 });

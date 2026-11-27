@@ -13,10 +13,6 @@
  * service asks for; anything else is a UsageError naming the read to use
  * instead. No read in this SDK is unbounded (spec 000 section 6).
  *
- * There is no fallback. On an instance without the endpoint the call
- * fails as the server's 404; it does not quietly offer every value of the
- * list type, which is a different answer.
- *
  * Values are translated by the schema like any other row: the endpoint
  * sends every value as a string, and a number, a Boolean and a relation
  * come out as they do from `client.query` (spec 000 section 2). A date
