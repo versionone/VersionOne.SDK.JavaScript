@@ -9,6 +9,7 @@ import * as batch from "./services/batch";
 import * as explainService from "./services/explain";
 import * as fieldsService from "./services/fields";
 import * as listsService from "./services/lists";
+import * as validValuesQuery from "./services/validValuesQuery";
 import * as guard from "./services/guard";
 import * as resolve from "./services/resolve";
 import { Schema, type TypeCache } from "./services/schema";
@@ -104,7 +105,7 @@ const ME_SELECT = ["Name", "Username", "Nickname", "Email"];
  * serves what neither does: `search` (text search across types),
  * `deleted`, `history`, `template`, `operate`. Writes: `send`,
  * `sendGuarded`, `batch.run`, `copy`. Services: `resolve`,
- * `fields`, `attachments`, `embeddedImages`, `schema`, `localize`, `urls`.
+ * `fields`, `validValues`, `attachments`, `embeddedImages`, `schema`, `localize`, `urls`.
  */
 export class AgilityApiClient {
   readonly transport: Transport;
@@ -389,12 +390,25 @@ export class AgilityApiClient {
    * value a name (or an OID) means there, or throws NO_SUCH_VALUE /
    * AMBIGUOUS_VALUE with the candidates as rows in `details.values`.
    * Only relations to a list type: the endpoint cannot be paged, so for
-   * Owners, Team or Timebox use `client.query` on the related type with a
-   * filter and a page.
+   * Owners, Team or Timebox ask `client.validValues.query` for the query
+   * to read.
    */
   readonly lists = {
     values: (input: listsService.ValuesInput) => listsService.values(this.transport, this.schema, input),
     value: (input: listsService.ValueInput) => listsService.value(this.transport, this.schema, input)
+  };
+
+  /**
+   * Which assets a relation that is not to a list type may point to
+   * (Owners, Team, Timebox, Super, Parent), as the start of a query:
+   * `{ from, filter, with }`, for an existing asset (`{ asset }`) or one
+   * not created yet (`{ type, scope, context? }`). Add a select, a `find`
+   * and a page and read it with `queryPage`: the answer is what the
+   * product's own pickers offer, bounded and searchable. The rule comes
+   * from the metamodel and is read once per relation.
+   */
+  readonly validValues = {
+    query: (input: validValuesQuery.ValidValuesQueryInput) => validValuesQuery.queryFor(this.transport, this.schema, input)
   };
 
   // ---- writes -----------------------------------------------------------------------

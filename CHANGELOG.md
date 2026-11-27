@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased (to be 1.0.0-alpha.15)
+
+### Added
+
+- **`client.validValues.query`: the assets a relation may point to, as a
+  query to page and search.** For a relation that is not to a list type
+  (Owners, Team, Timebox, Super, Parent, a custom relation),
+  `client.validValues.query({ asset, attribute })` or
+  `({ type, scope, context?, attribute })` answers `{ from, filter, with }`:
+  the related type and the filter the product's own pickers apply, with
+  the asset's values filled in. Spread it into `client.queryPage` with a
+  select, a `find` and a page. The server's valid-values endpoint cannot
+  be paged, which is why `client.lists` refuses these relations; its
+  refusal now names this call. The rule is read from the instance's
+  metamodel, once per relation, and the integration tier compares the
+  answer with the server's endpoint relation by relation. A rule that
+  needs something the call was not given (a new task's `Parent`) is a
+  `UsageError` naming it. `FakeAgilityClient.onValidValuesQuery` scripts
+  the answer and `validValuesAsked` records what was asked. New example:
+  `examples/13-relation-values.ts`.
+  *Migration:* none. A consumer that built this filter by hand can
+  replace it with the call.
+
+### Changed
+
+- `client.lists` refusing a relation that is not to a list type now says
+  to ask `client.validValues.query`, where it said `client.query`. Only
+  the message changed.
+
 ## 1.0.0-alpha.14
 
 ### Fixed

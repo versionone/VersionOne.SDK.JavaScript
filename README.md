@@ -63,6 +63,7 @@ npm test
 | What a form needs | `client.fields.describe(type, scope)` | Required, visible and important attributes, and which of them are list-typed. |
 | The values a Status, Priority or other list may take | `client.lists.values({ asset, attributes })` or `{ type, scope, team?, attributes }` | As the project's scheme and the team's process allow. See "List values". |
 | The value a name means | `client.lists.value({ asset, attribute, name })` | `{ _oid, Name }` to write; `NO_SUCH_VALUE` with the valid values otherwise. |
+| The assets a relation may point to (Owners, Team, Timebox, Super) | `client.validValues.query({ asset, attribute })` or `{ type, scope, attribute }` | The start of a query: add a select, a `find` and a page. See "Relation values". |
 | Files | `client.attachments.*`, `client.embeddedImages.*` | |
 | A link for a person | `client.urls.asset(oidOrNumber)` | |
 | An error, said to a person | `client.explain(error)` | "Project is required.", with the instance's labels. |
@@ -149,11 +150,32 @@ await client.send([{ from: "Story:1077", update: { Status: done._oid } }]);
 - **A move can clear a status.** When a story or defect changes project or team and the same write does not set a Status, a status that is not valid in the new place (not among the new team's own, or else not selected in the new project's scheme) is set to empty, with no failure reported. Read the Status back after a move if you show it.
 - **Valid is not the same as allowed.** A team can restrict which status may follow which, and which roles may make the change; a value `client.lists` offers can still be refused by such a workflow rule when written.
 - **`lists.value` matches the whole name**, ignoring case and surrounding space. `match: "prefix"` also accepts the start of the name or of a word in it ("prog" finds "In Progress") when no name matches whole. It never picks among several: no match is an `ApiError` coded `NO_SUCH_VALUE`, more than one is `AMBIGUOUS_VALUE`, and both carry the candidates as rows in `error.details.values` (every valid value, or the ones that matched), ready to offer.
-- **Only lists.** The server's endpoint takes no page and would answer every member, team or iteration it considers valid, so for `Owners`, `Team`, `Timebox` and any relation that is not to a list type, `client.lists` throws a `UsageError` before sending anything. Read those with `client.query({ from: "Member", filter, page })`, bounded like every other read.
+- **Only lists.** The server's endpoint takes no page and would answer every member, team or iteration it considers valid, so for `Owners`, `Team`, `Timebox` and any relation that is not to a list type, `client.lists` throws a `UsageError` before sending anything. Ask `client.validValues.query` for those ("Relation values", below).
 - **Values are rows like any other.** `select` takes attributes of the value itself (`Order`, `RollupState`, `Team`): a number is a number, a Boolean a Boolean, a relation a Ref or `null`. Not a path, not a multi-value relation, and not a date, which the endpoint writes in the server's culture format.
 - **An empty list means no value is valid, and the SDK keeps it meaning that.** The server answers "no values" also when it cannot work the rule out for lack of context, so the SDK always sends the project, and for a type whose rule needs more it asks you for it: `context: { RegressionPlan: "RegressionPlan:7" }` for a new regression suite. `context` takes any attribute of the asset to be.
 - **Costs.** One request per attribute, sent together. Nothing is cached, because an administrator can change a scheme or a team's values at any time; the schema is cached as for every read, and telling a list from another relation needs the list type's own definition and nothing above it.
 - `client.fields.describe(type, scope).lists` says which of a form's attributes are list-typed and to which list type each points.
+
+### Relation values
+
+Which members may own a story, which iteration a defect may go in, which portfolio item a story may go under: for a relation that is not to a list type, the answer can be thousands of assets. `client.validValues.query` answers the start of a query instead, the related type and the filter the product's own pickers apply, and you read it like any other:
+
+```ts
+const q = await client.validValues.query({ asset: "Story:1077", attribute: "Owners" });
+// { from: "Member", filter: ["Scopes=$valid0", "AssetState!=$valid1"], with: { $valid0: "Scope:1005", $valid1: "Closed" } }
+const page = await client.queryPage({ ...q, select: ["Name"], find: "ann", findin: ["Name"], page: { size: 10, start: 0 } });
+
+// For an asset that does not exist yet: its type and where it will be.
+await client.validValues.query({ type: "Defect", scope: "Scope:1005", attribute: "Timebox" });
+await client.validValues.query({ type: "Task", scope: "Scope:1005", context: { Parent: "Story:1077" }, attribute: "Owners" });
+```
+
+- **Where the rule comes from.** Each relation's rule is kept in the instance's metamodel, and a type can have its own rule for a relation it inherits (a task's owners depend on the story it belongs to). The SDK reads the rule for the asset's type, once per relation, and fills in what it refers to from the asset: one request for the rule the first time, and one for the asset when the rule refers to it.
+- **A new asset can have a rule of its own**, and `{ type, scope }` uses it. When a rule needs more than the scope, the call throws a `UsageError` naming the attribute to give in `context`; an existing asset that has no value for it is refused the same way. The server's own endpoint answers "nothing is valid" in both cases.
+- **No rule means anything of the type**: `filter` is empty and the query reads every asset of `from` that the member may see. Give it a page like any other.
+- **Add your own terms.** `filter` and `with` are ordinary: append to `filter`, and add variables under names that do not begin `$valid`.
+- **Not lists.** For a Status or a Priority a team can have values of its own, which no filter says: `client.validValues.query` refuses a relation to a list type and names `client.lists.values`.
+- **Valid is what a person should be offered, not what the server enforces.** As with lists, a write is checked against far less.
 
 ### Reference
 
@@ -209,6 +231,7 @@ expect(fake.sent[0]).toEqual([{ from: "Story:1", execute: "QuickClose" }]);     
 - `sendGuarded` and `batch.run` work on assets addressed by OID that you scripted a row for: `fake.touch(oid)` is someone else changing the asset (the next write stamped earlier is a conflict), `fake.remove(oid)` is it being deleted.
 - `resolve.numbers` finds a number among the scripted rows; `localize` answers `onLocalize` labels and echoes any other tag; `fake.transport` can be the transport of a client your code builds itself.
 - `onValues({ Status: [{ _oid: "StoryStatus:135", Name: "Done" }] })` scripts the valid values by attribute (rows, a function of what was asked, or an Error). `lists.value`'s matching and its errors are the client's own, and `fake.valuesAsked` records each request: the type, the attribute and the asset or the scope and team.
+- `onValidValuesQuery((asked) => ({ from: "Member", filter: [], with: {} }))` scripts what `client.validValues.query` answers; `fake.validValuesAsked` records each request. The rows that query then reads are whatever `onQuery` scripts for its `from`.
 - `onList(type, rows)` answers rest-1's list read the same way (`client.deleted`, and `rest1.list` from `/wire`). `onRequest(path, answer)` answers any other endpoint in its own shape; with `new FakeAgilityClient({ metamodel })` (a meta.v1 document) a response captured from a server reads translated, as it would live. An `Error` as an answer is thrown.
 - A custom `Transport` has its own suite: `transportConformance(make)` answers the SDK's expectations of a transport as named checks (`for (const c of transportConformance(make)) it(c.name, c.run)`), and the SDK's fetch transport runs the same ones.
 - The fake evaluates no filter or sort and applies no write. It proves what your code asks and what it does with the answer; what the server answers is for a test against an instance.

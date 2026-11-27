@@ -93,7 +93,7 @@ const typeOf = (target: ListTarget): AssetTypeToken => ("asset" in target ? mome
  * instance's custom dropdowns included, and for no other type. A type
  * that cannot be loaded is an error of its own, not "not a list".
  */
-async function isListType(schema: Schema, type: AssetTypeToken): Promise<boolean> {
+export async function isListType(schema: Schema, type: AssetTypeToken): Promise<boolean> {
   if (type === "List") return true;
   const loaded = await schema.load(type);
   if (!loaded) throw new ApiError(`could not load the asset type ${type} to tell whether it is a list type`, 404, "NOT_FOUND", { type });
@@ -139,7 +139,7 @@ async function checked(schema: Schema, target: ListTarget, attributes: readonly 
     if (listType === null) {
       const related = schema.attribute(type, attribute)?.RelatedAsset;
       throw new UsageError(related
-        ? `${what}: ${type}.${attribute} points to ${related}, which is not a list type. The server's valid-values endpoint cannot be paged or filtered and would return every ${related} in the scope. Read them with client.query({ from: "${related}", filter, page }) instead`
+        ? `${what}: ${type}.${attribute} points to ${related}, which is not a list type. The server's valid-values endpoint cannot be paged or filtered and would return every ${related} it considers valid. Ask client.validValues.query({ ${"asset" in target ? "asset" : "type, scope"}, attribute: "${attribute}" }) for the query to read instead, and give it a page`
         : `${what}: ${type}.${attribute} is not a relation, so it has no list of valid values`);
     }
     if (select?.length) await schema.load(listType);
