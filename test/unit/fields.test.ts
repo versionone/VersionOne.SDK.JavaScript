@@ -51,6 +51,18 @@ describe("fields service", () => {
     expect(body).toMatchObject({ from: "Scope", with: { $scope: "Scope:0" }, page: { size: 1, start: 0 } });
   });
 
+  it("describe loads the types its scheme query needs, so a client that has loaded nothing answers the same the first time", async () => {
+    const document = JSON.parse(readFileSync(join(__dirname, "..", "..", "metamodel.json"), "utf8")) as MetamodelDocument;
+    const t = fake((o) => (o.path.startsWith("/meta.v1/") ? document.AssetTypes[o.path.slice("/meta.v1/".length)] : o.path.startsWith("/api/visibleFields") ? visibleAnswer : { requestId: "r", queryResult: { results: [[{ _oid: "Scope:0", Scheme: [{ _oid: "Scheme:1000", ImportantFields: ["Story.Owners"], IsRequiredAtClose: "True" }] }]], resultMetaData: [], count: 1 } }));
+    const client = new AgilityApiClient({ baseUrl: "https://x" }, { transport: t });
+    const first = await client.fields.describe("Story", "Scope:0");
+    expect(first).toMatchObject({ scheme: "Scheme:1000", important: ["Owners"], requiredAtClose: true });
+    const paths = t.calls.map((c) => c.path);
+    expect(paths.indexOf("/meta.v1/Scope")).toBeGreaterThanOrEqual(0);
+    expect(paths.indexOf("/meta.v1/Scope")).toBeLessThan(paths.indexOf("/api/asset"));
+    expect(await client.fields.describe("Story", "Scope:0")).toEqual(first);
+  });
+
   it("describe answers an empty scheme and no visible entry without guessing", async () => {
     const t = fake((o) => (o.path.startsWith("/api/visibleFields") ? [] : { queryResult: { results: [[{ _oid: "Scope:9", Scheme: [] }]], resultMetaData: [], count: 1 } }));
     const f = await describeFields(t, schema(), "Story", "Scope:9");
