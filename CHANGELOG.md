@@ -12,6 +12,17 @@
   loads the types its scheme query needs before reading the answer.
   *Migration:* none; a `client.schema.load("Scope")` added before the
   call as a workaround can be removed.
+- **`client.deleted` and `client.history` through a base type spell
+  dates the same on their first call.** A read of `PrimaryWorkitem` (or
+  any base type) answers rows of its subtypes, and a row's dates are
+  spelled by its own type. On a client that had not yet loaded those
+  subtypes, a date rest-1 writes as the day alone (`2011-09-14`, a
+  midnight) was left that way instead of `2011-09-14T00:00:00.000`;
+  once the types were loaded the same read answered the full spelling.
+  The read now loads the types of the rows that came back before
+  spelling them. Only midnights differed, and only through a base type.
+  *Migration:* none. A custom `lookup` handed to the rest-1 wire module
+  may implement `ensureFor` to get the same; without it nothing changes.
 
 ## 1.0.0-alpha.13
 

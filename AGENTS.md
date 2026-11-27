@@ -105,6 +105,14 @@ change, by design: `layers.test.ts` (imports point down the layer table),
 - **One shape for a row** on every read path (spec 000 §2): a selected
   relation is a Ref, a path selected by name is at `row[path]`, nothing
   unselected arrives, and a row's identity is `_oid`.
+- **A read answers the same on a client that has loaded no type.** Rows
+  are translated by the schema, and only by types already loaded, so a
+  read loads what its answer needs before reading it (`schema.ensureFor`;
+  a rest-1 read also loads the types of the rows that came back). A
+  suite that shares one client cannot see this fail:
+  `test/integration/coldClient.test.ts` runs every translating read on a
+  fresh client and on one seeded with the whole metamodel and compares.
+  A new read method is added to its list.
 - **The examples stay true.** `npm run typecheck` compiles `examples/`
   against the source and the integration tier runs each one. A change to
   the public API that an example uses changes the example in the same

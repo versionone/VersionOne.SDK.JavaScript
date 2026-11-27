@@ -117,7 +117,15 @@ export function fromAssetDocument<Row extends Asset = Asset>(doc: AssetDocument,
  * date cannot be told from text by its looks. Without a lookup, or for a
  * type it has not loaded, values are as rest-1 sent them.
  */
-export interface ReadContext { lookup?: AttributeLookup }
+export interface ReadContext {
+  /**
+   * A lookup that can also load (the client's schema) is asked for the
+   * types of the rows that came back before they are read: a read through
+   * a base type answers rows of its subtypes, which no caller can load
+   * ahead of the answer.
+   */
+  lookup?: AttributeLookup & { ensureFor?(commands: readonly { from: string; select?: string[] }[]): Promise<void> };
+}
 
 /** The row's dates in the model's spelling, by the row's own type. */
 function dated<Row extends Asset>(row: Row, lookup: AttributeLookup | undefined): Row {
@@ -163,7 +171,9 @@ async function read<Row extends Asset>(transport: Transport, path: string, param
     // A read rest-1 refused (a bad filter, an unknown attribute) reads like one query.v1 refused.
     throw error instanceof ApiError && error.status === 400 ? rejected(error) : error;
   }
-  const rows = (doc.Assets ?? []).map((a) => dated(fromAssetDocument<Row>(a, { history, select: params.select }), context.lookup));
+  const sent = (doc.Assets ?? []).map((a) => fromAssetDocument<Row>(a, { history, select: params.select }));
+  await context.lookup?.ensureFor?.([...new Set(sent.map((row) => row._oid.split(":")[0]!))].map((from) => ({ from, select: params.select })));
+  const rows = sent.map((row) => dated(row, context.lookup));
   const total = typeof doc.total === "number" && doc.total >= 0 ? doc.total : null;
   return { rows, total, more: total === null ? rows.length === params.page.size : params.page.start + rows.length < total, pageSize: doc.pageSize, pageStart: doc.pageStart };
 }

@@ -154,6 +154,16 @@ describe("client: reads", () => {
     expect(t.calls[0]).toMatchObject({ method: "GET", path: "/rest-1.v1/Data/Story", query: expect.objectContaining({ sel: "Name,ChangeDate,CreateDate", where: "Scope='Scope:0';IsDeleted='true'", page: "2,0", deleted: "true", needTotal: "true" }) });
     expect((client as unknown as { data?: unknown }).data).toBeUndefined();
   });
+
+  it("deleted through a base type loads the types of the rows that came back, so a client that has loaded nothing spells their dates the same", async () => {
+    const row = (id: string) => ({ _type: "Asset", href: "", id, Attributes: { Name: { _type: "Attribute", name: "Name", value: "n" }, CreateDate: { _type: "Attribute", name: "CreateDate", value: "2011-09-20" } } });
+    const t = fake((o) => (o.path.startsWith("/meta.v1/") ? document.AssetTypes[o.path.slice("/meta.v1/".length)] : { _type: "Assets", pageSize: 2, pageStart: 0, Assets: [row("Story:7"), row("Defect:8")] }));
+    const read = (c: AgilityApiClient) => c.deleted("PrimaryWorkitem", { select: ["Name", "CreateDate"], page: { size: 2, start: 0 } });
+    const cold = await read(new AgilityApiClient({ baseUrl: "https://x" }, { transport: t }));
+    expect(cold.rows).toEqual([{ _oid: "Story:7", Name: "n", CreateDate: "2011-09-20T00:00:00.000" }, { _oid: "Defect:8", Name: "n", CreateDate: "2011-09-20T00:00:00.000" }]);
+    expect(t.calls.map((c) => c.path)).toEqual(expect.arrayContaining(["/meta.v1/PrimaryWorkitem", "/meta.v1/Story", "/meta.v1/Defect"]));
+    expect(await read(new AgilityApiClient({ baseUrl: "https://x" }, { transport: t, types: schema().cache }))).toEqual(cold);
+  });
 });
 
 describe("client: writes", () => {
