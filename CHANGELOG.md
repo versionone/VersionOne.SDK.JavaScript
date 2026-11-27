@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (to be 1.0.0-alpha.13)
+## 1.0.0-alpha.13
 
 ### Breaking
 
