@@ -101,8 +101,6 @@
   asset were on no team).
 - The requests for several attributes, and the type loads before them,
   go out together instead of one after another, as on every other read.
-- The endpoint has been in the product since release 17.0; the notes no
-  longer say its availability is not established.
 
 ### Changed
 

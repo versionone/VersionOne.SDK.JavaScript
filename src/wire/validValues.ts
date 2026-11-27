@@ -23,7 +23,7 @@
  *   scope. The context may carry any attribute of the type, not only
  *   Scope and Team (`Scope=Scope:5,RegressionPlan=RegressionPlan:7`): the
  *   server sets them on an asset it makes up and asks what would be valid
- *   for that. The endpoint has been in the product since release 17.0.
+ *   for that.
  *
  * What the answer means, for a relation to a list type (Status,
  * Priority, …). Two rules are tried in order, and the first that finds

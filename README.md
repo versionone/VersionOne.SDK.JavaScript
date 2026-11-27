@@ -153,7 +153,7 @@ await client.send([{ from: "Story:1077", update: { Status: done._oid } }]);
 - **Values are rows like any other.** `select` takes attributes of the value itself (`Order`, `RollupState`, `Team`): a number is a number, a Boolean a Boolean, a relation a Ref or `null`. Not a path, not a multi-value relation, and not a date, which the endpoint writes in the server's culture format.
 - **An empty list means no value is valid, and the SDK keeps it meaning that.** The server answers "no values" also when it cannot work the rule out for lack of context, so the SDK always sends the project, and for a type whose rule needs more it asks you for it: `context: { RegressionPlan: "RegressionPlan:7" }` for a new regression suite. `context` takes any attribute of the asset to be.
 - **Costs.** One request per attribute, sent together. Nothing is cached, because an administrator can change a scheme or a team's values at any time; the schema is cached as for every read, and telling a list from another relation needs the list type's own definition and nothing above it.
-- **Availability.** The endpoint has been in the product since release 17.0. There is no fallback for an instance without it: the call fails as the server's 404.
+- **No fallback.** On an instance without the endpoint the call fails as the server's 404; it does not offer every value of the list type instead, which would be a different answer.
 - `client.fields.describe(type, scope).lists` says which of a form's attributes are list-typed and to which list type each points.
 
 ### Reference
