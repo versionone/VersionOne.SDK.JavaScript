@@ -12,6 +12,7 @@ export * as explain from "./explain";
 export * as fields from "./fields";
 export * as guard from "./guard";
 export * as lists from "./lists";
+export * as validValuesQuery from "./validValuesQuery";
 export * as resolve from "./resolve";
 export * as schema from "./schema";
 export * as search from "./search";

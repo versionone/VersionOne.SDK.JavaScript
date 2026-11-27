@@ -72,8 +72,8 @@ describe("client.lists", () => {
   it("only a relation to a list type is asked for, because the endpoint cannot be bounded; everything else is refused before anything is sent, with the read to use instead", async () => {
     const t = fake(statuses);
     const lists = client(t).lists;
-    await expect(lists.values({ asset: "Story:1", attributes: ["Owners"] })).rejects.toMatchObject({ kind: "usage", message: expect.stringMatching(/Story\.Owners points to Member, which is not a list type.*client\.query\(\{ from: "Member", filter, page \}\)/) });
-    await expect(lists.values({ type: "Story", scope: "Scope:5", attributes: ["Team"] })).rejects.toMatchObject({ kind: "usage", message: expect.stringContaining('client.query({ from: "Team"') });
+    await expect(lists.values({ asset: "Story:1", attributes: ["Owners"] })).rejects.toMatchObject({ kind: "usage", message: expect.stringMatching(/Story\.Owners points to Member, which is not a list type.*client\.validValues\.query\(\{ asset, attribute: "Owners" \}\)/) });
+    await expect(lists.values({ type: "Story", scope: "Scope:5", attributes: ["Team"] })).rejects.toMatchObject({ kind: "usage", message: expect.stringContaining('client.validValues.query({ type, scope, attribute: "Team" })') });
     await expect(lists.values({ asset: "Story:1", attributes: ["Timebox"] })).rejects.toMatchObject({ kind: "usage" });
     await expect(lists.values({ asset: "Story:1", attributes: ["Name"] })).rejects.toMatchObject({ kind: "usage", message: expect.stringContaining("Story.Name is not a relation") });
     await expect(lists.values({ asset: "Story:1", attributes: ["Nmae"] })).rejects.toMatchObject({ kind: "usage", message: expect.stringContaining("Story has no attribute Nmae") });

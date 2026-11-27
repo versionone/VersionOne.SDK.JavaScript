@@ -21,6 +21,7 @@ import type { ClientConfig } from "../core/clientConfig";
 import type { SearchOptions, SearchResult, SearchRow } from "../services/search";
 import * as listsService from "../services/lists";
 import type { ValueInput, ValuesInput } from "../services/lists";
+import type { ValidValuesQuery, ValidValuesQueryInput } from "../services/validValuesQuery";
 import { ATTRIBUTE_NAMES, CONCRETE_SUBTYPES } from "../types/assets/subtypes";
 import { ApiError, UsageError, apiErrorFromResponse } from "../core/errors";
 import type { RequestOptions, Transport } from "../core/transport";
@@ -540,6 +541,33 @@ export class FakeAgilityClient extends AgilityApiClient {
       value: async (input: ValueInput) => { scripted("lists.value", input, [input.attribute]); return listsService.value(this.transport, this.schema, input); }
     };
   })();
+
+  private validQueries: ((input: ValidValuesQueryInput) => ValidValuesQuery | undefined)[] = [];
+  /** Every `client.validValues.query` asked of the fake, in order. */
+  readonly validValuesAsked: ValidValuesQueryInput[] = [];
+
+  /**
+   * Script what `client.validValues.query` answers: a function of what was
+   * asked, answering the query (`{ from, filter, with }`) or
+   * undefined to leave it to an earlier script. No rule is read or
+   * evaluated: the fake has no metamodel rules of its own, and the rows
+   * the query then reads are whatever `onQuery` scripts for its `from`.
+   */
+  onValidValuesQuery(answer: (input: ValidValuesQueryInput) => ValidValuesQuery | undefined): this {
+    this.validQueries.push(answer);
+    return this;
+  }
+
+  override readonly validValues = {
+    query: async (input: ValidValuesQueryInput): Promise<ValidValuesQuery> => {
+      this.validValuesAsked.push(input);
+      for (const script of [...this.validQueries].reverse()) {
+        const answer = script(input);
+        if (answer) return answer;
+      }
+      throw new UsageError(`FakeAgilityClient: no valid-values query scripted for ${"asset" in input ? input.asset : input.type}.${input.attribute}; script one with onValidValuesQuery((asked) => ({ from: "Member", filter: [], with: {} }))`);
+    }
+  };
 
   /**
    * Script what a search answers: rows in the model's shape (a list is

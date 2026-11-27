@@ -1,6 +1,6 @@
 # Examples
 
-Twelve short programs, one per task, each runnable as it stands. Read them
+Thirteen short programs, one per task, each runnable as it stands. Read them
 in order; each says at the top what it does.
 
 | File | Shows | Writes? |
@@ -17,6 +17,7 @@ in order; each says at the top what it does.
 | `10-search.ts` | `client.search` across asset types; `find` on an ordinary read within one family | no |
 | `11-axios-transport.ts` | A `Transport` over an axios instance, and an axios adapter that lets `transportConformance` stand in for the network | no instance at all |
 | `12-list-values.ts` | `client.lists`: the Status and Priority values an asset may take, a name resolved to the value to write, and what is refused | no |
+| `13-relation-values.ts` | `client.validValues`: who may own an asset or which iteration it may go in, as a query to page and search | no |
 
 ## Running one
 
