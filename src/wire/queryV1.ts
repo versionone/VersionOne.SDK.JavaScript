@@ -41,7 +41,8 @@ export function rejected(error: ApiError): ApiError {
   const details = error.details as { error?: unknown; exceptions?: { type?: unknown; message?: unknown }[] } | undefined;
   const rejections: QueryRejection[] = (details?.exceptions ?? []).filter((e) => e && typeof e.message === "string" && e.message).map((e) => ({ type: typeof e.type === "string" ? e.type : null, message: e.message as string }));
   // The server's own timeout is not a refusal of the query, whatever status it came with.
-  if (!rejections.length || error.code === "SERVER_TIMEOUT") return error;
+  // Nor is a write refused for want of rights (rest-1's 400 with a Security violation): it keeps its kind.
+  if (!rejections.length || error.code === "SERVER_TIMEOUT" || error.kind === "forbidden") return error;
   // rest-1 names what it refused in `error` ("Invalid WHERE parameter"); query.v1 says only "Bad Request", which adds nothing.
   const lead = typeof details?.error === "string" && details.error && details.error !== "Bad Request" ? [details.error] : [];
   return new ApiError([...lead, ...rejections.map((r) => r.message)].join("; "), error.status, "QUERY_REJECTED", rejections);

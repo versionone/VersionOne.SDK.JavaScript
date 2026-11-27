@@ -428,8 +428,10 @@ function toAssetDocument(row: FakeRow): Record<string, unknown> {
  *   over everything above. With `new FakeAgilityClient({ metamodel })` a
  *   captured query response reads as it would live: translated.
  * - An `Error` as an answer is thrown: `new ApiError("Unauthorized", 401)`,
- *   or `apiErrorFromResponse(status, body)` for a refusal as the fetch
- *   transport words it.
+ *   or `apiErrorFromResponse(status, body, headers)` for a refusal as the
+ *   fetch transport makes it; the headers script a response header, as
+ *   in `apiErrorFromResponse(403, { error: "Unauthorized" }, {
+ *   "www-authenticate": "Bearer" })` for an ended session.
  */
 export class FakeAgilityClient extends AgilityApiClient {
   /** Every request the client made, in order, as a Transport sees it (the client's own unscripted meta.v1 type loads left out). */

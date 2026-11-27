@@ -51,13 +51,16 @@ export interface FetchTransportConfig {
    * product release with OIDC sign-in, a session that had expired answer
    * 401 without that header and 403 with it, both with the same
    * `WWW-Authenticate: Bearer` challenge and the same body, and neither
-   * with a redirect to a login page. So: without the header, an ended
-   * session is a 401 and `onUnauthorized` runs by default; with it, set
-   * `unauthorizedStatuses: [401, 403]`, or the hook is never called.
-   * (Earlier releases of this comment advised the header "so the server
-   * answers 401 rather than a login page"; that is not what was seen.)
-   * Not checked: other releases, other ways of signing in, and whether a
-   * 403 for a genuine permission denial carries the same challenge.
+   * with a redirect to a login page. Either way it is kind "auth" and
+   * `onUnauthorized` runs: this transport reads the challenge, so a 403
+   * that carries one is treated as the 401 it stands for. On the same
+   * release a genuine permission denial was never a 403: api/asset
+   * reported it per command inside a 200, and rest-1 as a 400, neither
+   * with a challenge. (Earlier releases of this comment advised the
+   * header "so the server answers 401 rather than a login page"; that
+   * is not what was seen.) Not checked: administration endpoints that
+   * might answer 403 for rights, other releases, other ways of signing
+   * in.
    */
   credentials?: RequestCredentials;
   /**
@@ -78,14 +81,16 @@ export interface FetchTransportConfig {
    */
   onUnauthorized?: (context: UnauthorizedContext) => UnauthorizedDecision | Promise<UnauthorizedDecision>;
   /**
-   * Which statuses call onUnauthorized. Default [401]. An app that sends
-   * `X-Requested-With: XMLHttpRequest` needs [401, 403]: an ended session
-   * was seen to answer 403 to a request with that header (see
-   * `credentials`). A 403 is also what a permission denial may answer,
-   * and it is not known whether the response tells the two apart, so a
-   * hook called for a 403 should ask whether the session is still alive
-   * (a one-row read sent with `reauthorize: false`) before it prompts
-   * anyone, and answer "fail" when it is.
+   * Statuses that call onUnauthorized IN ADDITION to every refusal that
+   * is about the sign-in: a 401, and a 403 that carries a
+   * `WWW-Authenticate` challenge (kind "auth"; what an ended session
+   * answers to a request sent with `X-Requested-With: XMLHttpRequest`).
+   * Those two always call the hook, whatever this lists. Default [401].
+   * Listing 403 here also sends a 403 WITHOUT a challenge to the hook,
+   * which nothing seen so far requires. A hook that prompts a person
+   * should first ask whether the session is still alive (a one-row read
+   * sent with `reauthorize: false`) and answer "fail" when it is: a
+   * prompt is cheap to guard and costly to show by mistake.
    */
   unauthorizedStatuses?: readonly number[];
 }
@@ -112,9 +117,10 @@ export interface FetchTransportConfig {
  *                  same 401. With `X-Requested-With: XMLHttpRequest`
  *                  on the request the same ended session answered 403,
  *                  and a write refused so was not applied either. No
- *                  redirect was seen. What is not known: a 403 for a
- *                  permission denial, other releases, and other ways of
- *                  signing in. The SDK's own tests run where every
+ *                  redirect was seen. A permission denial, on that
+ *                  release, was never a 401 or a 403. What is not known:
+ *                  administration endpoints, other releases, and other
+ *                  ways of signing in. The SDK's own tests run where every
  *                  request is authenticated and check none of it, so
  *                  beyond those cases it remains your assertion. Answer it
  *                  only where it holds (a missing or lapsed sign-in; not a
@@ -128,6 +134,8 @@ export interface UnauthorizedContext {
   request: RequestOptions;
   /** Whether a "retry" will be honoured: false for any write, guarded or plain (which only "retry-write" resends). */
   retryable: boolean;
+  /** The refusal's response headers: `headers.get("www-authenticate")` is the challenge, when the server sent one. */
+  headers: { get(name: string): string | null };
 }
 
 /** The ApiError a caller's abort turns into. */
@@ -268,7 +276,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           // An answer, not a failure to get one. 5xx may be retried when
           // idempotent; anything else is final.
           const data = await readBody(response, responseType === "bytes" ? "text" : responseType === "json" ? "auto" : responseType);
-          lastError = apiErrorFromResponse(response.status, data);
+          lastError = apiErrorFromResponse(response.status, data, response.headers);
         } catch (error) {
           if (callerSignal?.aborted) throw abortedError(callerSignal);
           // The deadline passed while the body was still arriving: a timeout like any other.
@@ -278,10 +286,10 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           settle();
         }
 
-        if (config.onUnauthorized && options.reauthorize !== false && !reauthorized && unauthorizedStatuses.includes(response.status)) {
+        if (config.onUnauthorized && options.reauthorize !== false && !reauthorized && (unauthorizedStatuses.includes(response.status) || (lastError as ApiError).kind === "auth")) {
           // One re-authentication per request: a second refusal is final.
           reauthorized = true;
-          const decision = await config.onUnauthorized({ error: lastError as ApiError, request: options, retryable: idempotent });
+          const decision = await config.onUnauthorized({ error: lastError as ApiError, request: options, retryable: idempotent, headers: response.headers });
           if (callerSignal?.aborted) throw abortedError(callerSignal);
           if ((decision === "retry" && idempotent) || decision === "retry-write") {
             // Not counted against `retries`: those are for failures to get an answer.

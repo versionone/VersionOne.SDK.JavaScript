@@ -365,6 +365,13 @@ Everything the SDK throws is an `ApiError` (`src/core/errors.ts`), and
 every `ApiError` has a `kind`: `auth`, `forbidden`, `notFound`, `invalid`,
 `transient`, `aborted`, `commandFailure`, `conflict`, `protocol`, `usage` or
 `unknown`. `status` and `code` say what happened; `kind` says what to do.
+The status decides the kind except where the server's answer says more
+than its status does, and then `apiErrorFromResponse` reads the answer:
+a 403 that carries a `WWW-Authenticate` challenge is `auth` (an ended
+session, to a request sent with `X-Requested-With`), so a transport passes
+it the response's headers; a 400 whose first exception begins
+`Violation'Security` is `forbidden` (rest-1 refusing a write the member has
+no right to); a server-side SQL timeout is `SERVER_TIMEOUT`.
 A mistake the SDK catches before any request (an unpaged read, an empty
 batch, a bad OID token, a config object with a key its factory does not
 know: named in the message, never with its value) is a `UsageError` (`kind: "usage"`, `status: 0`),
