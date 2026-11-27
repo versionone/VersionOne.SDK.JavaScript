@@ -41,6 +41,67 @@
     releases, other ways of signing in. So a hook that prompts a person
     should still check that the session is gone before it prompts.
 
+- **`client.lists` rows are translated like any other row.** The
+  endpoint sends every value as a string, and alpha.12 passed that on:
+  a status's `Order` was `"115"` from `client.lists` and `115` from
+  `client.query`. Now a number is a number, a Boolean a Boolean and a
+  relation a Ref or `null`, by the list type's schema (spec 000 §2: one
+  shape for a row on every read). A multi-value relation can no longer
+  be selected (it never arrived in a readable form); a date is still
+  refused. Migration: drop a `Number(row.Order)` or a comparison with
+  `"True"`; a sort on `Order` now sorts numbers.
+- **`/wire`'s `validValues` takes `sort` as one attribute name**, not a
+  list: the endpoint sorts by one attribute, ascending, and ignores
+  without an error a name the list type does not have. Migration:
+  `sort: "Order"` in place of `sort: ["Order"]`.
+
+### Fixed
+
+- **What `client.lists` documents was wrong in three places**, now
+  corrected in the README, the doc comments and the module headers, and
+  each proved against an instance:
+  - A team's own values replace the scheme's for **any** list the team
+    owns values of, not for Status only. alpha.12 said "for Status
+    only", which was true of the fixture and not of the rule.
+  - "The project's scheme decides" holds for work items, issues,
+    requests, goals, strategic themes, retrospectives, environments,
+    regression tests and regression plans. For members, budgets,
+    projects, iterations, change sets, attachments and build runs every
+    active value is valid, with no scheme involved.
+  - The team step exists only on an instance with team workspaces
+    enabled.
+  - What a write enforces is narrower than alpha.12 implied, and is now
+    stated and tested: only the Status of a story or defect, and only
+    against its team. Any other list value, an inactive status and a
+    status outside the scheme are accepted. Moving a story or defect to
+    another project or team clears a status that is not valid there,
+    without a failure, unless the same write sets one. A team's
+    workflow rules can still refuse a status the list offers. This is
+    what one release does, not a contract: the product has added
+    enforcement over time, so follow the list and do not rely on a
+    value outside it being accepted.
+- **An empty answer could be the server giving up.** When the server
+  cannot work out its rule for lack of context it answers no values and
+  no error. `client.lists` always sends the project; for a new
+  regression suite, whose rule goes through its regression plan, it now
+  refuses the call without `context: { RegressionPlan }` instead of
+  answering `[]`.
+- **A list type is told from its own definition.** alpha.12 walked up
+  the type's ancestors (`StoryStatus`, then `Status`) to reach `List`,
+  which cost a type load and made a test serving captured meta.v1 types
+  serve `Status` too. Each inherited attribute already names the
+  ancestor that defines it, so the list type's own definition is
+  enough; nothing above it is loaded. (alpha.12's notes also named
+  `List` among the types loaded; it never was.)
+
+### Added
+
+- `client.lists`: `context` on the type-and-scope form (any attribute
+  of the asset to be), and `team: null` on the asset form (as if the
+  asset were on no team).
+- The requests for several attributes, and the type loads before them,
+  go out together instead of one after another, as on every other read.
+
 ### Changed
 
 - **A write the member has no right to make is said so, to a person, on

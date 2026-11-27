@@ -150,7 +150,7 @@ function translate(value: unknown, resolution: PathResolution, lookup: Attribute
 }
 
 /** A scalar as the model carries it, from the string the endpoint sent. A value that does not parse is left as sent. */
-function scalar(value: unknown, type: AttributeType): unknown {
+export function scalar(value: unknown, type: AttributeType): unknown {
   if (value == null) return null;
   switch (type) {
     case "Numeric":

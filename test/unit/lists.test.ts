@@ -29,7 +29,7 @@ const client = (t: Transport) => new AgilityApiClient({ baseUrl: "https://x" }, 
 describe("validValues wire", () => {
   it("forNew asks the relation form: a trailing slash, one context joined by a comma, the values as they are", async () => {
     const t = fake(statuses);
-    const rows = await forNew(t, "Story", "Status", "Scope:5:99", { select: ["Name", "Order"], sort: ["Order"], team: "Team:9" });
+    const rows = await forNew(t, "Story", "Status", "Scope:5:99", { select: ["Name", "Order"], sort: "Order", team: "Team:9" });
     expect(t.calls[0]).toMatchObject({ method: "GET", path: "/api/ValidValues/Story.Status/?context=Scope=Scope:5,Team=Team:9&sel=Name,Order&sort=Order" });
     // The keys selected and no others; a value is the string the endpoint sent.
     expect(rows).toEqual([{ _oid: "StoryStatus:133", Name: "Future", Order: "115" }, { _oid: "StoryStatus:134", Name: "In Progress", Order: "116" }, { _oid: "StoryStatus:135", Name: "Done", Order: "117" }]);
@@ -47,7 +47,7 @@ describe("validValues wire", () => {
     const refusing = fake(() => { throw apiErrorFromResponse(400, { Exceptions: ["Bad Request", "Reference: 00000000-0000-0000-0000-000000000000"] }); });
     await expect(forNew(refusing, "Story", "Nmae", "Scope:5")).rejects.toMatchObject({ status: 400, kind: "invalid" });
     await expect(forNew(fake(() => ({ nope: 1 })), "Story", "Status", "Scope:5")).rejects.toMatchObject({ code: "BAD_RESPONSE" });
-    // An instance without the endpoint: its 404, never an empty list.
+    // A 404 from the endpoint is thrown as it is, never read as an empty list.
     await expect(forNew(fake(() => { throw new ApiError("Not Found", 404); }), "Story", "Status", "Scope:5")).rejects.toMatchObject({ status: 404 });
   });
 });
@@ -57,7 +57,8 @@ describe("client.lists", () => {
     const t = fake(statuses);
     const answer = await client(t).lists.values({ asset: "Story:1077", attributes: ["Status", "Priority"], select: ["Order"] });
     expect(t.calls.map((c) => c.path)).toEqual(["/api/ValidValues/Story/1077/Status?sel=Name,Order&sort=Order", "/api/ValidValues/Story/1077/Priority?sel=Name,Order&sort=Order"]);
-    expect(answer.Status).toEqual([{ _oid: "StoryStatus:133", Name: "Future", Order: "115" }, { _oid: "StoryStatus:134", Name: "In Progress", Order: "116" }, { _oid: "StoryStatus:135", Name: "Done", Order: "117" }]);
+    // The endpoint sends every value as a string; the row has them as any read has them: Order (a Rank) is a number.
+    expect(answer.Status).toEqual([{ _oid: "StoryStatus:133", Name: "Future", Order: 115 }, { _oid: "StoryStatus:134", Name: "In Progress", Order: 116 }, { _oid: "StoryStatus:135", Name: "Done", Order: 117 }]);
     // What is selected must be an attribute of every list asked for: a status has a RollupState, a priority has not.
     await expect(client(t).lists.values({ asset: "Story:1077", attributes: ["Status", "Priority"], select: ["RollupState"] })).rejects.toMatchObject({ kind: "usage", message: expect.stringContaining("WorkitemPriority has no attribute RollupState") });
     expect(t.calls).toHaveLength(2);
@@ -119,16 +120,61 @@ describe("client.lists", () => {
     await expect(client(fake(() => ({ ...all, total: 0, Assets: [] }))).lists.value({ asset: "Story:1", attribute: "Status", name: "Done" })).rejects.toMatchObject({ code: "NO_SUCH_VALUE", message: 'Story.Status has no value "Done" here. No value is valid here.' });
   });
 
-  it("a type in the chain to List that cannot be loaded is said as that, not as 'not a list' with advice to use another read (a chat-bot consumer finding)", async () => {
-    // A schema that has Story and StoryStatus and nothing above them, as a test serving captured types may.
+  it("a list type is told from its own definition: nothing above it is loaded, so a schema with Story and StoryStatus alone is enough (a chat-bot and a CLI consumer finding)", async () => {
     const whole = JSON.parse(readFileSync(join(__dirname, "..", "..", "metamodel.json"), "utf8")) as MetamodelDocument;
-    const partial = new FakeAgilityClient({ metamodel: { AssetTypes: Object.fromEntries(Object.entries(whole.AssetTypes).filter(([name]) => name !== "Status" && name !== "List")) as MetamodelDocument["AssetTypes"] } });
-    const error = await partial.lists.values({ asset: "Story:1", attributes: ["Status"] }).catch((e: unknown) => e as ApiError);
-    expect(error).toMatchObject({ code: "NOT_FOUND", kind: "notFound", message: "could not load the asset type Status to tell whether StoryStatus is a list type" });
+    const only = (keep: (name: string) => boolean) => new FakeAgilityClient({ metamodel: { AssetTypes: Object.fromEntries(Object.entries(whole.AssetTypes).filter(([name]) => keep(name))) as MetamodelDocument["AssetTypes"] } });
+    // StoryStatus sits two levels below List (through Status); neither ancestor is needed or asked for.
+    const lean = only((name) => name === "Story" || name === "StoryStatus").onValues({ Status: [{ _oid: "StoryStatus:135", Name: "Done", Order: "117" }] });
+    expect(await lean.lists.values({ asset: "Story:1", attributes: ["Status"], select: ["Order"] })).toEqual({ Status: [{ _oid: "StoryStatus:135", Name: "Done", Order: 117 }] });
+    expect(lean.schema.loaded.sort()).toEqual(["Story", "StoryStatus"]);
+    // Every type under List in the metamodel is recognised by that mark, and no other type is.
+    const base = (name: string): string | undefined => whole.AssetTypes[name]?.Base?.nameref;
+    const underList = (name: string): boolean => { for (let t: string | undefined = name, i = 0; t && i < 20; t = base(t), i += 1) if (t === "List") return true; return false; };
+    const marked = (name: string) => Object.values(whole.AssetTypes[name]!.Attributes).some((a) => a.Base?.tokenref.startsWith("List."));
+    for (const name of Object.keys(whole.AssetTypes)) if (name !== "List") expect([name, marked(name)]).toEqual([name, underList(name)]);
+    // The list type itself missing is said as that, never as "not a list" with advice to use another read.
+    const error = await only((name) => name !== "StoryStatus").lists.values({ asset: "Story:1", attributes: ["Status"] }).catch((e: unknown) => e as ApiError);
+    expect(error).toMatchObject({ code: "NOT_FOUND", kind: "notFound", message: "could not load the asset type StoryStatus to tell whether it is a list type" });
     expect(error.message).not.toContain("client.query");
   });
 
-  it("a failure is never an empty list: the endpoint's error is thrown, also when it is absent from the instance", async () => {
+  it("values come out as on any read: a number, a Boolean, a relation as a Ref or null; a multi-value relation cannot be selected", async () => {
+    // As the endpoint sends them: every value a string, an empty relation as "NULL".
+    const doc = { _type: "Assets", total: 2, pageSize: 2147483647, pageStart: 0, Assets: [
+      { _type: "Asset", href: "", id: "StoryStatus:135", Attributes: { Name: { _type: "Attribute", name: "Name", value: "Done" }, Order: { _type: "Attribute", name: "Order", value: "117" }, Inactive: { _type: "Attribute", name: "Inactive", value: "False" }, RollupState: { _type: "Attribute", name: "RollupState", value: "Closed" }, Team: { _type: "Attribute", name: "Team", value: "Team:9" } } },
+      { _type: "Asset", href: "", id: "StoryStatus:136", Attributes: { Name: { _type: "Attribute", name: "Name", value: "Held" }, Order: { _type: "Attribute", name: "Order", value: "118" }, Inactive: { _type: "Attribute", name: "Inactive", value: "True" }, RollupState: { _type: "Attribute", name: "RollupState", value: "Active" }, Team: { _type: "Attribute", name: "Team", value: "NULL" } } }
+    ] };
+    const answer = await client(fake(() => doc)).lists.values({ asset: "Story:1", attributes: ["Status"], select: ["Order", "Inactive", "RollupState", "Team"] });
+    expect(answer.Status).toEqual([
+      { _oid: "StoryStatus:135", Name: "Done", Order: 117, Inactive: false, RollupState: "Closed", Team: { _oid: "Team:9" } },
+      { _oid: "StoryStatus:136", Name: "Held", Order: 118, Inactive: true, RollupState: "Active", Team: null }
+    ]);
+    await expect(client(fake(() => doc)).lists.values({ asset: "Story:1", attributes: ["Status"], select: ["SelectedInSchemes"] })).rejects.toMatchObject({ kind: "usage", message: expect.stringContaining("multi-value relation") });
+  });
+
+  it("the requests for several attributes go out together, like the type loads; the context can carry more of the asset to be, and a type whose rule needs it is refused without it", async () => {
+    let open = 0, most = 0;
+    const slow: Transport & { calls: RequestOptions[] } = fake(() => all);
+    const inner = slow.request;
+    slow.request = (async (o: RequestOptions) => { open += 1; most = Math.max(most, open); await new Promise((r) => setTimeout(r, 5)); open -= 1; return inner(o); }) as Transport["request"];
+    const answer = await client(slow).lists.values({ asset: "Story:1077", attributes: ["Status", "Priority", "Source"] });
+    expect(Object.keys(answer)).toEqual(["Status", "Priority", "Source"]);
+    expect(most).toBe(3);
+    // More context: a regression suite's valid values depend on its plan. Without it the server answers nothing and no error, so the service says so first.
+    // (The product gives a regression suite no list attribute; a custom dropdown on one is the case. The fake has it as scripted.)
+    const suites = new FakeAgilityClient().onValues({ Custom_Tier: [{ _oid: "Custom_Tier:1", Name: "Gold" }] });
+    await expect(suites.lists.values({ type: "RegressionSuite", scope: "Scope:5", attributes: ["Custom_Tier"] })).rejects.toMatchObject({ kind: "usage", message: expect.stringContaining('context: { RegressionPlan: "<oid>" }') });
+    expect(suites.valuesAsked).toHaveLength(0);
+    expect(await suites.lists.values({ type: "RegressionSuite", scope: "Scope:5", context: { RegressionPlan: "RegressionPlan:7" }, attributes: ["Custom_Tier"] })).toEqual({ Custom_Tier: [{ _oid: "Custom_Tier:1", Name: "Gold" }] });
+    expect(suites.requests.at(-1)!.path).toBe("/api/ValidValues/RegressionSuite.Custom_Tier/?context=Scope=Scope:5,RegressionPlan=RegressionPlan:7&sel=Name&sort=Order");
+    const t = fake(() => ({ ...all, total: 0, Assets: [] }));
+    await expect(client(t).lists.values({ type: "Story", scope: "Scope:5", context: { "Bad Key": "x" }, attributes: ["Status"] })).rejects.toMatchObject({ kind: "usage" });
+    // team: null on an asset says "as if on no team": the team's own values are not considered.
+    await client(t).lists.values({ asset: "Story:1077", team: null, attributes: ["Status"] });
+    expect(t.calls.at(-1)!.path).toBe("/api/ValidValues/Story/1077/Status?teamoid=NULL&sel=Name&sort=Order");
+  });
+
+  it("a failure is never an empty list: an error from the endpoint is thrown", async () => {
     const gone = fake(() => { throw new ApiError("Not Found", 404); });
     await expect(client(gone).lists.values({ asset: "Story:1", attributes: ["Status"] })).rejects.toMatchObject({ status: 404 });
     await expect(client(gone).lists.value({ asset: "Story:1", attribute: "Status", name: "Done" })).rejects.toMatchObject({ status: 404 });
