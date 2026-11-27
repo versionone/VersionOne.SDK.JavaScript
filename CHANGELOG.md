@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (to be 1.0.0-alpha.14)
+## 1.0.0-alpha.14
 
 ### Fixed
 
