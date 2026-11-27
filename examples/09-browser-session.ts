@@ -37,6 +37,11 @@ async function signInAgain(): Promise<boolean> {
 const client = new AgilityApiClient({
   baseUrl: "https://agility.example.com/MyInstance",
   credentials: "include",                     // send the session cookie; no accessToken
+  // No `X-Requested-With` header here, so an ended session answers 401 and
+  // the hook below runs. An app that sends `X-Requested-With:
+  // XMLHttpRequest` was seen to get a 403 for an ended session instead: it
+  // adds `unauthorizedStatuses: [401, 403]`, and its hook first checks that
+  // the session is really gone, since a 403 may also be a permission denial.
   onUnauthorized: async ({ retryable }) => {
     if (!(await signInAgain())) return "fail";
     // "retry" resends what is safe to send twice: a GET, a read. Never a
