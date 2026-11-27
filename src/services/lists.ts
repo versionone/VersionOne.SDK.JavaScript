@@ -202,10 +202,12 @@ const named = (rows: readonly ListValue[]): string => rows.map((r) => r.Name).jo
  * valid values, or the ones that matched), so a caller can offer them.
  *
  * This is the check to make before writing a name a person gave. On a
- * write the server enforces a team's process (a status outside it is the
- * command failure `Violation'PrimaryWorkitemCannotHaveInvalidStatus`) and
- * does not enforce a scheme's selection (a status the scope's scheme does
- * not select is accepted, with no violation). The team's own values are
+ * write the server checks one thing, the Status of a story or defect
+ * against its team (a team's status on a work item not on that team, or
+ * a status no team owns on a work item whose team has its own, is the
+ * command failure `Violation'PrimaryWorkitemCannotHaveInvalidStatus`).
+ * A status the scope's scheme does not select, an inactive one, and any
+ * other list value from anywhere are accepted. The team's own values are
  * offered only on an instance that has team workspaces enabled.
  */
 export async function value(transport: Transport, schema: Schema, input: ValueInput): Promise<ListValue> {

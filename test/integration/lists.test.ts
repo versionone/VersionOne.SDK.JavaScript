@@ -159,6 +159,37 @@ describeInstance("valid values (live)", () => {
     await client.send([{ from: o["noTeam"]!, update: { Status: null } }], { throwOnFailure: true });
   });
 
+  it("on a write, only a story's or defect's Status is checked, and only against the team: any other list value is accepted wherever it comes from", async () => {
+    const set = async (story: string, update: Record<string, string | null>) => { const done = await client.send([{ from: story, update }]); return done.failures.length ? done.failures[0]!.message : "accepted"; };
+    // Priority, three ways the list says are not valid: the scheme's on a story whose team owns a priority, a team's on a story on no team, one in no scheme.
+    expect(await set(o["onPriorityTeam"]!, { Priority: o["priority"]! })).toBe("accepted");
+    expect(await set(o["noTeam"]!, { Priority: o["teamPriority"]! })).toBe("accepted");
+    expect(await set(o["noTeam"]!, { Priority: o["otherPriority"]! })).toBe("accepted");
+    // Status against the team, both ways round: a team's status on a story not on that team, and a global one on a story whose team has its own.
+    expect(await set(o["noTeam"]!, { Status: o["teamFirst"]! })).toBe("Violation'PrimaryWorkitemCannotHaveInvalidStatus");
+    expect(await set(o["onPlainTeam"]!, { Status: o["teamFirst"]! })).toBe("Violation'PrimaryWorkitemCannotHaveInvalidStatus");
+    expect(await set(o["onTeam"]!, { Status: o["notInScheme"]! })).toBe("Violation'PrimaryWorkitemCannotHaveInvalidStatus");
+    // An inactive status of the story's own team is not offered, and is accepted.
+    expect(await set(o["onTeam"]!, { Status: o["teamInactive"]! })).toBe("accepted");
+    await client.send([{ from: o["onTeam"]!, update: { Status: null } }, { from: o["noTeam"]!, update: { Priority: null } }, { from: o["onPriorityTeam"]!, update: { Priority: null } }], { throwOnFailure: true });
+  });
+
+  it("a status that stops being valid when a story moves is cleared without a word: the scheme is applied on a move, not on setting a status", async () => {
+    const status = async (story: string) => (await client.get<{ _oid: string; Status: { _oid: string } | null }>(story, ["Status"]))!.Status?._oid ?? null;
+    // On no team, with a status the scheme does not select (accepted, as above).
+    await client.send([{ from: o["noTeam"]!, update: { Status: o["notInScheme"]! } }], { throwOnFailure: true });
+    expect(await status(o["noTeam"]!)).toBe(o["notInScheme"]!);
+    // Moved onto a team (one that owns no status): the write succeeds, and the status is gone.
+    const moved = await client.send([{ from: o["noTeam"]!, update: { Team: o["plainTeam"]! } }]);
+    expect(moved).toMatchObject({ modified: [o["noTeam"]!], failures: [] });
+    expect(await status(o["noTeam"]!)).toBeNull();
+    // Control: a status the scheme selects survives the same kind of move.
+    await client.send([{ from: o["noTeam"]!, update: { Status: o["inScheme"]! } }], { throwOnFailure: true });
+    await client.send([{ from: o["noTeam"]!, update: { Team: null } }], { throwOnFailure: true });
+    expect(await status(o["noTeam"]!)).toBe(o["inScheme"]!);
+    await client.send([{ from: o["noTeam"]!, update: { Status: null } }], { throwOnFailure: true });
+  });
+
   it("what the service refuses to ask, and why: the endpoint answers any relation whole. The raw module shows it on a relation this suite can bound", async () => {
     await expect(client.lists.values({ asset: o["onTeam"]!, attributes: ["Team"] })).rejects.toMatchObject({ kind: "usage" });
     // An attribute the type does not have: the server's answer is a bare 400, so the service says it first.

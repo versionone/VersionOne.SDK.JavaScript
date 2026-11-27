@@ -70,6 +70,13 @@
     active value is valid, with no scheme involved.
   - The team step exists only on an instance with team workspaces
     enabled.
+  - What a write enforces is narrower than alpha.12 implied, and is now
+    stated and tested: only the Status of a story or defect, and only
+    against its team. Any other list value, an inactive status and a
+    status outside the scheme are accepted. Moving a story or defect to
+    another project or team clears a status that is not valid there,
+    without a failure, unless the same write sets one. A team's
+    workflow rules can still refuse a status the list offers.
 - **An empty answer could be the server giving up.** When the server
   cannot work out its rule for lack of context it answers no values and
   no error. `client.lists` always sends the project; for a new
