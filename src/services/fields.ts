@@ -71,9 +71,11 @@ export async function describe(transport: Transport, schema: Schema, type: Asset
   const types = await lineage(schema, type);
   const definition = await schema.load(type);
   const required = definition ? Object.values(definition.Attributes).filter((a) => a.IsRequired && !a.IsReadOnly).map((a) => a.Name).sort() : [];
+  const schemeOf = { from: "Scope", select: [{ from: "Scheme", select: ["ImportantFields", "IsRequiredAtClose"] }], filter: ["ID=$scope"], with: { $scope: scopeOid }, page: { size: 1, start: 0 } };
+  // The row is translated by the schema, and only by types already loaded: without Scope, its Scheme stays the endpoint's array and nothing below reads it.
   const [visible, [row]] = await Promise.all([
     fields.visibleFields(transport, [type], [scopeOid]),
-    assetApi.query<SchemeRow>(transport, { from: "Scope", select: [{ from: "Scheme", select: ["ImportantFields", "IsRequiredAtClose"] }], filter: ["ID=$scope"], with: { $scope: scopeOid }, page: { size: 1, start: 0 } }, { lookup: schema })
+    schema.ensureFor([schemeOf]).then(() => assetApi.query<SchemeRow>(transport, schemeOf, { lookup: schema }))
   ]);
   const scheme = row?.Scheme ?? null;
   const tokens = Array.isArray(scheme?.ImportantFields) ? scheme.ImportantFields.filter((t): t is string => typeof t === "string") : [];

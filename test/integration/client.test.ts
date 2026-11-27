@@ -234,6 +234,10 @@ describeInstance("rest-1 operate, template and fields (live)", () => {
     expect(f.visible).toEqual(expect.arrayContaining(["Name", "Number", "Scope", "Status"]));
     expect(f.visible).toEqual([...f.visible].sort());
     expect(Array.isArray(f.important)).toBe(true);
+    // A client that has loaded no type answers the same the first time (the scheme was once lost on it).
+    const cold = await new AgilityApiClient({ baseUrl: instance!.url }, { transport: instance!.transport }).fields.describe("Story", "Scope:0");
+    expect(cold).toEqual(f);
+    expect(cold.scheme).toMatch(/^Scheme:\d+$/);
     const both = await client.fields.visible(["Story", "Defect"], ["Scope:0"]);
     expect(Object.keys(both).sort()).toEqual(["Defect", "Story"]);
   }, 60_000);

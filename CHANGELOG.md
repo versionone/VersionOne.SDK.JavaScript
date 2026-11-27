@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased (to be 1.0.0-alpha.14)
+
+### Fixed
+
+- **`client.fields.describe` answers the scope's scheme on its first
+  call.** On a client that had not yet loaded the Scope type, the first
+  `describe(type, scope)` answered `scheme: undefined`, `important: []`
+  and `requiredAtClose: false` whatever the scope's scheme said; a
+  second call, or any earlier read of a Scope, got it right. It now
+  loads the types its scheme query needs before reading the answer.
+  *Migration:* none; a `client.schema.load("Scope")` added before the
+  call as a workaround can be removed.
+
 ## 1.0.0-alpha.13
 
 ### Breaking
